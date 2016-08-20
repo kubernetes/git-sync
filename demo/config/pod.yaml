@@ -27,7 +27,7 @@ spec:
       mountPath: /dest
     env:
     - name: HUGO_SRC
-      value: /src/contrib/git-sync/demo/blog
+      value: /src/git-sync/demo/blog
     - name: HUGO_BUILD_DRAFT
       value: "true"
     - name: HUGO_BASE_URL

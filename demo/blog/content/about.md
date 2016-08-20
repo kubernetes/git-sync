@@ -9,4 +9,4 @@ title = "about"
 Some content about the blog.
 
 
-[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/contrib/git-sync/demo/blog/content/about.md?pixel)]()
+[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/demo/blog/content/about.md?pixel)]()

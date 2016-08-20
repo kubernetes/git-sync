@@ -19,4 +19,4 @@ docker run -d GIT_SYNC_REPO=https://github.com/GoogleCloudPlatform/kubernetes GI
 docker run -d -p 8080:80 -v /git-data:/usr/share/nginx/html nginx 
 ```
 
-[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/contrib/git-sync/README.md?pixel)]()
+[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
