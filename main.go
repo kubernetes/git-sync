@@ -194,22 +194,20 @@ func updateSymlink(gitRoot, link, newDir string) error {
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	// fetch branch
-	output, err := runCommand(gitRoot, "git", "fetch", "origin", branch)
+	_, err := runCommand(gitRoot, "git", "fetch", "origin", branch)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("fetch %q: %s", branch, output)
+	log.Printf("fetched origin/%s", branch)
 
 	// add worktree in subdir
 	rand.Seed(time.Now().UnixNano())
 	worktreePath := path.Join(gitRoot, "rev-"+strconv.Itoa(rand.Int()))
-	output, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
+	_, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("add worktree origin/%q: %v", branch, output)
+	log.Printf("added worktree %s for origin/%s", worktreePath, branch)
 
 	// .git file in worktree directory holds a reference to /git/.git/worktrees/<worktree-dir-name>
 	// Replace it with a reference using relative paths, so that other containers can use a different volume mount name
@@ -223,12 +221,11 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	}
 
 	// reset working copy
-	output, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
+	_, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("reset %q: %v", rev, output)
+	log.Printf("reset worktree %s to %s", worktreePath, rev)
 
 	if *flChmod != 0 {
 		// set file permissions
@@ -241,21 +238,17 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	return updateSymlink(gitRoot, dest, worktreePath)
 }
 
-func initRepo(repo, branch, rev string, depth int, gitRoot string) error {
-	// clone repo
+func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
-		args = append(args, "-depth")
-		args = append(args, string(depth))
+		args = append(args, "-depth", strconv.Itoa(depth))
 	}
-	args = append(args, repo)
-	args = append(args, gitRoot)
-	output, err := runCommand("", "git", args...)
+	args = append(args, repo, gitRoot)
+	_, err := runCommand("", "git", args...)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("clone %q: %s", repo, output)
+	log.Printf("cloned %s", repo)
 
 	return nil
 }
@@ -267,7 +260,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
-		err = initRepo(repo, branch, rev, depth, gitRoot)
+		err = cloneRepo(repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return err
 		}
