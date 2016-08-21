@@ -160,13 +160,13 @@ func updateSymlink(gitRoot, link, newDir string) error {
 		return fmt.Errorf("error converting to relative path: %v", err)
 	}
 
-	if _, err := runCommand("ln", gitRoot, []string{"-snf", newDirRelative, "tmp-link"}); err != nil {
+	if _, err := runCommand(gitRoot, "ln", "-snf", newDirRelative, "tmp-link"); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	log.Printf("create symlink %v->%v", "tmp-link", newDirRelative)
 
-	if _, err := runCommand("mv", gitRoot, []string{"-T", "tmp-link", link}); err != nil {
+	if _, err := runCommand(gitRoot, "mv", "-T", "tmp-link", link); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -180,12 +180,12 @@ func updateSymlink(gitRoot, link, newDir string) error {
 
 		log.Printf("remove %v", currentDir)
 
-		output, err := runCommand("git", gitRoot, []string{"worktree", "prune"})
+		output, err := runCommand(gitRoot, "git", "worktree", "prune")
 		if err != nil {
 			return err
 		}
 
-		log.Printf("worktree prune %v", string(output))
+		log.Printf("worktree prune %v", output)
 	}
 
 	return nil
@@ -194,22 +194,22 @@ func updateSymlink(gitRoot, link, newDir string) error {
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	// fetch branch
-	output, err := runCommand("git", gitRoot, []string{"fetch", "origin", branch})
+	output, err := runCommand(gitRoot, "git", "fetch", "origin", branch)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("fetch %q: %s", branch, string(output))
+	log.Printf("fetch %q: %s", branch, output)
 
 	// add worktree in subdir
 	rand.Seed(time.Now().UnixNano())
 	worktreePath := path.Join(gitRoot, "rev-"+strconv.Itoa(rand.Int()))
-	output, err = runCommand("git", gitRoot, []string{"worktree", "add", worktreePath, "origin/" + branch})
+	output, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("add worktree origin/%q: %v", branch, string(output))
+	log.Printf("add worktree origin/%q: %v", branch, output)
 
 	// .git file in worktree directory holds a reference to /git/.git/worktrees/<worktree-dir-name>
 	// Replace it with a reference using relative paths, so that other containers can use a different volume mount name
@@ -223,16 +223,16 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	}
 
 	// reset working copy
-	output, err = runCommand("git", worktreePath, []string{"reset", "--hard", rev})
+	output, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("reset %q: %v", rev, string(output))
+	log.Printf("reset %q: %v", rev, output)
 
 	if *flChmod != 0 {
 		// set file permissions
-		_, err = runCommand("chmod", "", []string{"-R", string(*flChmod), worktreePath})
+		_, err = runCommand("", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
 		if err != nil {
 			return err
 		}
@@ -250,12 +250,12 @@ func initRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	}
 	args = append(args, repo)
 	args = append(args, gitRoot)
-	output, err := runCommand("git", "", args)
+	output, err := runCommand("", "git", args...)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("clone %q: %s", repo, string(output))
+	log.Printf("clone %q: %s", repo, output)
 
 	return nil
 }
@@ -289,32 +289,46 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 
 // gitRemoteChanged returns true if the remote HEAD is different from the local HEAD, false otherwise
 func gitRemoteChanged(localDir, branch string) (bool, error) {
-	_, err := runCommand("git", localDir, []string{"remote", "update"})
+	_, err := runCommand(localDir, "git", "remote", "update")
 	if err != nil {
 		return false, err
 	}
-	localHead, err := runCommand("git", localDir, []string{"rev-parse", "HEAD"})
+	localHead, err := runCommand(localDir, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return false, err
 	}
-	remoteHead, err := runCommand("git", localDir, []string{"rev-parse", fmt.Sprintf("origin/%v", branch)})
+	remoteHead, err := runCommand(localDir, "git", "rev-parse", fmt.Sprintf("origin/%v", branch))
 	if err != nil {
 		return false, err
 	}
-	return (strings.Compare(string(localHead), string(remoteHead)) != 0), nil
+	return (localHead != remoteHead), nil
 }
 
-func runCommand(command, cwd string, args []string) ([]byte, error) {
+func cmdForLog(command string, args ...string) string {
+	if strings.ContainsAny(command, " \t\n") {
+		command = fmt.Sprintf("%q", command)
+	}
+	for i := range args {
+		if strings.ContainsAny(args[i], " \t\n") {
+			args[i] = fmt.Sprintf("%q", args[i])
+		}
+	}
+	return command + " " + strings.Join(args, " ")
+}
+
+func runCommand(cwd, command string, args ...string) (string, error) {
+	log.Printf("run(%q): %s", cwd, cmdForLog(command, args...))
+
 	cmd := exec.Command(command, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return []byte{}, fmt.Errorf("error running command %q : %v: %s", strings.Join(cmd.Args, " "), err, string(output))
+		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
 	}
 
-	return output, nil
+	return string(output), nil
 }
 
 func setupGitAuth(username, password, gitURL string) error {
