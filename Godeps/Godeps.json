@@ -1,8 +1,0 @@
-{
-	"ImportPath": "k8s.io/git-sync",
-	"GoVersion": "go1.5",
-	"Packages": [
-		"./..."
-	],
-	"Deps": []
-}
