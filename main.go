@@ -35,11 +35,10 @@ import (
 	"time"
 )
 
-const volMount = "/git"
-
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""), "git repo url")
 var flBranch = flag.String("branch", envString("GIT_SYNC_BRANCH", "master"), "git branch")
 var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"), "git rev")
+var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"), "root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""), "destination subdirectory path within volume")
 var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0), "number of seconds to wait before next sync")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false), "exit after the initial checkout")
@@ -114,7 +113,7 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
-		if err := syncRepo(*flRepo, *flDest, *flBranch, *flRev, *flDepth); err != nil {
+		if err := syncRepo(*flRepo, *flRoot, *flDest, *flBranch, *flRev, *flDepth); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
 				log.Fatalf("error syncing repo: %v", err)
 			}
@@ -140,27 +139,27 @@ func main() {
 }
 
 // updateSymlink atomically swaps the symlink to point at the specified directory and cleans up the previous worktree.
-func updateSymlink(link, newDir string) error {
+func updateSymlink(gitRoot, link, newDir string) error {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	currentDir, err := filepath.EvalSymlinks(path.Join(volMount, link))
+	currentDir, err := filepath.EvalSymlinks(path.Join(gitRoot, link))
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error accessing symlink: %v", err)
 	}
 
 	// newDir is /git/rev-..., we need to change it to relative path.
 	// Volume in other container may not be mounted at /git, so the symlink can't point to /git.
-	newDirRelative, err := filepath.Rel(volMount, newDir)
+	newDirRelative, err := filepath.Rel(gitRoot, newDir)
 	if err != nil {
 		return fmt.Errorf("error converting to relative path: %v", err)
 	}
 
-	if _, err := runCommand("ln", volMount, []string{"-snf", newDirRelative, "tmp-link"}); err != nil {
+	if _, err := runCommand("ln", gitRoot, []string{"-snf", newDirRelative, "tmp-link"}); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	log.Printf("create symlink %v->%v", "tmp-link", newDirRelative)
 
-	if _, err := runCommand("mv", volMount, []string{"-T", "tmp-link", link}); err != nil {
+	if _, err := runCommand("mv", gitRoot, []string{"-T", "tmp-link", link}); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -174,7 +173,7 @@ func updateSymlink(link, newDir string) error {
 
 		log.Printf("remove %v", currentDir)
 
-		output, err := runCommand("git", volMount, []string{"worktree", "prune"})
+		output, err := runCommand("git", gitRoot, []string{"worktree", "prune"})
 		if err != nil {
 			return err
 		}
@@ -186,9 +185,9 @@ func updateSymlink(link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(dest, branch, rev string) error {
+func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	// fetch branch
-	output, err := runCommand("git", volMount, []string{"fetch", "origin", branch})
+	output, err := runCommand("git", gitRoot, []string{"fetch", "origin", branch})
 	if err != nil {
 		return err
 	}
@@ -197,8 +196,8 @@ func addWorktreeAndSwap(dest, branch, rev string) error {
 
 	// add worktree in subdir
 	rand.Seed(time.Now().UnixNano())
-	worktreePath := path.Join(volMount, "rev-"+strconv.Itoa(rand.Int()))
-	output, err = runCommand("git", volMount, []string{"worktree", "add", worktreePath, "origin/" + branch})
+	worktreePath := path.Join(gitRoot, "rev-"+strconv.Itoa(rand.Int()))
+	output, err = runCommand("git", gitRoot, []string{"worktree", "add", worktreePath, "origin/" + branch})
 	if err != nil {
 		return err
 	}
@@ -207,7 +206,7 @@ func addWorktreeAndSwap(dest, branch, rev string) error {
 
 	// .git file in worktree directory holds a reference to /git/.git/worktrees/<worktree-dir-name>
 	// Replace it with a reference using relative paths, so that other containers can use a different volume mount name
-	worktreePathRelative, err := filepath.Rel(volMount, worktreePath)
+	worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -232,10 +231,10 @@ func addWorktreeAndSwap(dest, branch, rev string) error {
 		}
 	}
 
-	return updateSymlink(dest, worktreePath)
+	return updateSymlink(gitRoot, dest, worktreePath)
 }
 
-func initRepo(repo, dest, branch, rev string, depth int) error {
+func initRepo(repo, dest, branch, rev string, depth int, gitRoot string) error {
 	// clone repo
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
@@ -243,7 +242,7 @@ func initRepo(repo, dest, branch, rev string, depth int) error {
 		args = append(args, string(depth))
 	}
 	args = append(args, repo)
-	args = append(args, volMount)
+	args = append(args, gitRoot)
 	output, err := runCommand("git", "", args)
 	if err != nil {
 		return err
@@ -255,13 +254,13 @@ func initRepo(repo, dest, branch, rev string, depth int) error {
 }
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-func syncRepo(repo, dest, branch, rev string, depth int) error {
-	target := path.Join(volMount, dest)
+func syncRepo(repo, gitRoot, dest, branch, rev string, depth int) error {
+	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
-		err = initRepo(repo, target, branch, rev, depth)
+		err = initRepo(repo, target, branch, rev, depth, gitRoot)
 		if err != nil {
 			return err
 		}
@@ -278,7 +277,7 @@ func syncRepo(repo, dest, branch, rev string, depth int) error {
 		}
 	}
 
-	return addWorktreeAndSwap(dest, branch, rev)
+	return addWorktreeAndSwap(gitRoot, dest, branch, rev)
 }
 
 // gitRemoteChanged returns true if the remote HEAD is different from the local HEAD, false otherwise
