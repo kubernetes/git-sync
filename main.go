@@ -200,6 +200,16 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	}
 	log.Printf("fetched origin/%s", branch)
 
+	// find the real commit for the rev
+	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	if err != nil {
+		return err
+	}
+	revhash := strings.Trim(string(output), "\n")
+	if revhash != rev {
+		log.Printf("rev %s resolves to %s", rev, revhash)
+	}
+
 	// add worktree in subdir
 	rand.Seed(time.Now().UnixNano())
 	worktreePath := path.Join(gitRoot, "rev-"+strconv.Itoa(rand.Int()))
