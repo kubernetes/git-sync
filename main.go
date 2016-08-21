@@ -96,21 +96,24 @@ func main() {
 	flag.Parse()
 	if *flRepo == "" || *flDest == "" {
 		flag.Usage()
-		log.Fatal(usage)
+		os.Exit(1)
 	}
 	if _, err := exec.LookPath("git"); err != nil {
-		log.Fatalf("required git executable not found: %v", err)
+		log.Printf("required git executable not found: %v", err)
+		os.Exit(1)
 	}
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
-			log.Fatalf("error creating .netrc file: %v", err)
+			log.Printf("error creating .netrc file: %v", err)
+			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(); err != nil {
-			log.Fatalf("error configuring SSH: %v", err)
+			log.Printf("error configuring SSH: %v", err)
+			os.Exit(1)
 		}
 	}
 
@@ -119,7 +122,8 @@ func main() {
 	for {
 		if err := syncRepo(*flRepo, *flRoot, *flDest, *flBranch, *flRev, *flDepth); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
-				log.Fatalf("error syncing repo: %v", err)
+				log.Printf("error syncing repo: %v", err)
+				os.Exit(1)
 			}
 
 			failCount++
@@ -138,7 +142,6 @@ func main() {
 
 		log.Printf("waiting %d seconds", *flWait)
 		time.Sleep(time.Duration(*flWait) * time.Second)
-		log.Println("done")
 	}
 }
 
@@ -276,7 +279,7 @@ func syncRepo(repo, gitRoot, dest, branch, rev string, depth int) error {
 			return err
 		}
 		if !needUpdate {
-			log.Printf("No change")
+			log.Printf("no change")
 			return nil
 		}
 	}
