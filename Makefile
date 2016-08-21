@@ -60,7 +60,7 @@ bin/$(BIN)-$(ARCH): $(SRCS)
 	    $(KUBE_CROSS_IMAGE):$(KUBE_CROSS_VERSION)   \
 	    /bin/bash -c "                              \
 	        cd /go/src/$(GO_PKG) &&                 \
-	        CGO_ENABLED=0 godep go build            \
+	        CGO_ENABLED=0 go build                  \
 	        -installsuffix cgo                      \
 	        -ldflags '-w'                           \
 	        -o $@"
