@@ -38,22 +38,26 @@ import (
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""), "git repo url")
 var flBranch = flag.String("branch", envString("GIT_SYNC_BRANCH", "master"), "git branch")
 var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"), "git rev")
-var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"), "root directory for git operations")
-var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""), "destination subdirectory path within volume")
-var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0), "number of seconds to wait before next sync")
-var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false), "exit after the initial checkout")
-var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0), "shallow clone with a history truncated to the specified number of commits")
+var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
+	"shallow clone with a history truncated to the specified number of commits")
 
+var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
+	"root directory for git operations")
+var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
+	"path at which to publish the checked-out files (a subdirectory under --root)")
+var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0),
+	"number of seconds between syncs")
+var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
+	"exit after the initial checkout")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
-	`number of consecutive failures allowed before aborting (the first pull must succeed)`)
+	"number of consecutive failures allowed before aborting (the first pull must succeed)")
+var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
+	"change the permissions of the checked-out files to this")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""), "username")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""), "password")
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false), "use SSH protocol")
-
-var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0), `If set it will change the permissions of the directory
-		that contains the git repository. Example: 744`)
 
 func envString(key, def string) string {
 	if env := os.Getenv(key); env != "" {
