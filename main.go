@@ -120,7 +120,7 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
-		if err := syncRepo(*flRepo, *flRoot, *flDest, *flBranch, *flRev, *flDepth); err != nil {
+		if err := syncRepo(*flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
 				log.Printf("error syncing repo: %v", err)
 				os.Exit(1)
@@ -241,7 +241,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	return updateSymlink(gitRoot, dest, worktreePath)
 }
 
-func initRepo(repo, dest, branch, rev string, depth int, gitRoot string) error {
+func initRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	// clone repo
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
@@ -261,13 +261,13 @@ func initRepo(repo, dest, branch, rev string, depth int, gitRoot string) error {
 }
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-func syncRepo(repo, gitRoot, dest, branch, rev string, depth int) error {
+func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
-		err = initRepo(repo, target, branch, rev, depth, gitRoot)
+		err = initRepo(repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return err
 		}
