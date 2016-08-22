@@ -25,9 +25,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -132,17 +132,33 @@ func main() {
 			time.Sleep(time.Duration(*flWait) * time.Second)
 			continue
 		}
-
-		initialSync = false
-		failCount = 0
-
-		if *flOneTime {
-			os.Exit(0)
+		if initialSync {
+			if isHash, err := revIsHash(*flRev, *flRoot); err != nil {
+				log.Printf("can't tell if rev %s is a git hash, exiting", *flRev)
+				os.Exit(1)
+			} else if isHash {
+				log.Printf("rev %s appears to be a git hash, no further sync needed", *flRev)
+				sleepForever()
+			}
+			if *flOneTime {
+				os.Exit(0)
+			}
+			initialSync = false
 		}
 
-		log.Printf("waiting %d seconds", *flWait)
+		failCount = 0
+		log.Printf("next sync in %d seconds", *flWait)
 		time.Sleep(time.Duration(*flWait) * time.Second)
 	}
+}
+
+// Do no work, but don't do something that triggers go's runtime into thinking
+// it is deadlocked.
+func sleepForever() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+	<-c
+	os.Exit(0)
 }
 
 // updateSymlink atomically swaps the symlink to point at the specified directory and cleans up the previous worktree.
@@ -163,14 +179,12 @@ func updateSymlink(gitRoot, link, newDir string) error {
 	if _, err := runCommand(gitRoot, "ln", "-snf", newDirRelative, "tmp-link"); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
-
-	log.Printf("create symlink %v->%v", "tmp-link", newDirRelative)
+	log.Printf("created symlink %s -> %s", "tmp-link", newDirRelative)
 
 	if _, err := runCommand(gitRoot, "mv", "-T", "tmp-link", link); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
-
-	log.Printf("rename symlink %v to %v", "tmp-link", link)
+	log.Printf("renamed symlink %s to %s", "tmp-link", link)
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
@@ -178,14 +192,14 @@ func updateSymlink(gitRoot, link, newDir string) error {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
 
-		log.Printf("remove %v", currentDir)
+		log.Printf("removed %s", currentDir)
 
-		output, err := runCommand(gitRoot, "git", "worktree", "prune")
+		_, err := runCommand(gitRoot, "git", "worktree", "prune")
 		if err != nil {
 			return err
 		}
 
-		log.Printf("worktree prune %v", output)
+		log.Printf("pruned old worktrees")
 	}
 
 	return nil
@@ -193,14 +207,15 @@ func updateSymlink(gitRoot, link, newDir string) error {
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
-	// fetch branch
-	_, err := runCommand(gitRoot, "git", "fetch", "origin", branch)
+	// Fetch the branch.  This is required for the worktree to be based on the
+	// current rev.
+	_, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch)
 	if err != nil {
 		return err
 	}
 	log.Printf("fetched origin/%s", branch)
 
-	// find the real commit for the rev
+	// Find the real commit for the rev.
 	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
 	if err != nil {
 		return err
@@ -210,17 +225,18 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 		log.Printf("rev %s resolves to %s", rev, revhash)
 	}
 
-	// add worktree in subdir
-	rand.Seed(time.Now().UnixNano())
-	worktreePath := path.Join(gitRoot, "rev-"+strconv.Itoa(rand.Int()))
+	// Make a worktree for this exact git hash.
+	worktreePath := path.Join(gitRoot, "rev-"+revhash)
 	_, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
 	if err != nil {
 		return err
 	}
 	log.Printf("added worktree %s for origin/%s", worktreePath, branch)
 
-	// .git file in worktree directory holds a reference to /git/.git/worktrees/<worktree-dir-name>
-	// Replace it with a reference using relative paths, so that other containers can use a different volume mount name
+	// The .git file in the worktree directory holds a reference to
+	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
+	// using relative paths, so that other containers can use a different volume
+	// mount name.
 	worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
 	if err != nil {
 		return err
@@ -230,7 +246,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 		return err
 	}
 
-	// reset working copy
+	// Reset the worktree's working copy to the specific rev.
 	_, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
 	if err != nil {
 		return err
@@ -263,6 +279,18 @@ func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	return nil
 }
 
+func revIsHash(rev, gitRoot string) (bool, error) {
+	// If a rev is a tag name or HEAD, rev-list will produce the git hash.  If
+	// it is already a git hash, the output will be the same hash.  Of course, a
+	// user could specify "abc" and match "abcdef12345678", so we just do a
+	// prefix match.
+	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	if err != nil {
+		return false, err
+	}
+	return strings.HasPrefix(output, rev), nil
+}
+
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	target := path.Join(gitRoot, dest)
@@ -277,12 +305,14 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	case err != nil:
 		return fmt.Errorf("error checking if repo exist %q: %v", gitRepoPath, err)
 	default:
-		needUpdate, err := gitRemoteChanged(target, branch)
+		needed, err := needResync(target, rev)
 		if err != nil {
 			return err
 		}
-		if !needUpdate {
-			log.Printf("no change")
+		if needed {
+			log.Printf("update required")
+		} else {
+			log.Printf("no update required")
 			return nil
 		}
 	}
@@ -290,21 +320,31 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	return addWorktreeAndSwap(gitRoot, dest, branch, rev)
 }
 
-// gitRemoteChanged returns true if the remote HEAD is different from the local HEAD, false otherwise
-func gitRemoteChanged(localDir, branch string) (bool, error) {
-	_, err := runCommand(localDir, "git", "remote", "update")
+// needResync returns true if the upstream hash for rev is different from the local one.
+func needResync(localDir, rev string) (bool, error) {
+	// Ask git what the exact hash is for rev.
+	local, err := runCommand(localDir, "git", "rev-list", "-n1", rev)
 	if err != nil {
 		return false, err
 	}
-	localHead, err := runCommand(localDir, "git", "rev-parse", "HEAD")
+	local = strings.Trim(local, "\n")
+
+	// Fetch rev from upstream.
+	_, err := runCommand(localDir, "git", "fetch", "origin", rev)
 	if err != nil {
 		return false, err
 	}
-	remoteHead, err := runCommand(localDir, "git", "rev-parse", fmt.Sprintf("origin/%v", branch))
+
+	// Ask git what the exact hash is for upstream rev.
+	remote, err := runCommand(localDir, "git", "rev-list", "-n1", "FETCH_HEAD")
 	if err != nil {
 		return false, err
 	}
-	return (localHead != remoteHead), nil
+	remote = strings.Trim(remote, "\n")
+
+	log.Printf("local hash:  %s", local)
+	log.Printf("remote hash: %s", remote)
+	return (local != remote), nil
 }
 
 func cmdForLog(command string, args ...string) string {
