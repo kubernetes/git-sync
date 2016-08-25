@@ -1,30 +1,35 @@
 # git-sync
 
-git-sync is a command that pull a git repository to a local directory.
+git-sync is a simple command that pulls a git repository into a local directory.
+It is a perfect "sidecar" container in Kubernetes - it can periodically pull
+files down from a repository so that an application can consume them.
 
-It can be used to source a container volume with the content of a git repo.
-
-In order to ensure that the git repository content is cloned and updated atomically, you cannot use a volume root directory as the directory for your local repository.
-
-The local repository is created in a subdirectory of /git, with the subdirectory name specified by GIT_SYNC_DEST.
+git-sync can pull one time, or on a regular inteval.  It can pull from the HEAD
+of a branch, or from a git tag, or from a specific git hash.  It will only
+re-pull if the target of the run has changed in the upstream repository.  When
+it re-pulls, it updates the destination directory atomically.  In order to do
+this, it uses a git worktree in a subdirectory of the `--root` and flips a
+symlink.
 
 ## Usage
 
 ```
 # build the container
-docker build -t yourname/git-sync .
-# or
-make container
+make container REGISTRY=registry TAG=tag
 
-# run the git-sync container
+# run the container
 docker run -d \
-    -e GIT_SYNC_REPO=https://github.com/kubernetes/kubernetes \
-    -e GIT_SYNC_DEST=/git \
-    -e GIT_SYNC_BRANCH=gh-pages \
-    -v /git-data:/git \
-    git-sync
-# run a nginx container to serve sync'ed content
-docker run -d -p 8080:80 -v /git-data:/usr/share/nginx/html nginx
+    -v /tmp/git-data:/git \
+    registry/git-sync:tag \
+        --repo=https://github.com/kubernetes/git-sync
+        --branch=master
+        --wait=30
+
+# run an nginx container to serve the content
+docker run -d \
+    -p 8080:80 \
+    -v /tmp/git-data:/usr/share/nginx/html \
+    nginx
 ```
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
