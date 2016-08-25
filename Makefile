@@ -32,7 +32,6 @@ KUBE_CROSS_VERSION ?= v1.6.3-2
 
 GO_PKG = k8s.io/git-sync
 BIN = git-sync
-SRCS = main.go
 
 # If you want to build all containers, see the 'all-container' rule.
 # If you want to build AND push all containers, see the 'all-push' rule.
@@ -52,7 +51,7 @@ all-push: $(addprefix sub-push-,$(ALL_ARCH))
 
 build: bin/$(BIN)-$(ARCH)
 
-bin/$(BIN)-$(ARCH): $(SRCS)
+bin/$(BIN)-$(ARCH): FORCE
 	mkdir -p bin
 	docker run                                      \
 	    -u $$(id -u):$$(id -g)                      \
@@ -87,3 +86,5 @@ endif
 
 clean:
 	rm -rf .container-* .push-* bin/
+
+FORCE:

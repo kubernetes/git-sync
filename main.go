@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -33,6 +32,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thockin/glogr"
+	"github.com/thockin/logr"
 )
 
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""), "git repo url")
@@ -59,6 +61,17 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""), "pa
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false), "use SSH protocol")
 
+var log = newLoggerOrDie()
+
+func newLoggerOrDie() logr.Logger {
+	g, err := glogr.New()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failind to initialize logging: %v", err)
+		os.Exit(1)
+	}
+	return g
+}
+
 func envString(key, def string) string {
 	if env := os.Getenv(key); env != "" {
 		return env
@@ -82,7 +95,7 @@ func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.Atoi(env)
 		if err != nil {
-			log.Printf("invalid value for %q: using default: %q", key, def)
+			log.Errorf("invalid value for %q: using default: %q", key, def)
 			return def
 		}
 		return val
@@ -90,29 +103,29 @@ func envInt(key string, def int) int {
 	return def
 }
 
-const usage = "usage: GIT_SYNC_REPO= GIT_SYNC_DEST= [GIT_SYNC_BRANCH= GIT_SYNC_WAIT= GIT_SYNC_DEPTH= GIT_SYNC_USERNAME= GIT_SYNC_PASSWORD= GIT_SYNC_SSH= GIT_SYNC_ONE_TIME= GIT_SYNC_MAX_SYNC_FAILURES=] git-sync -repo GIT_REPO_URL -dest PATH [-branch -wait -username -password -ssh -depth -one-time -max-sync-failures]"
-
 func main() {
+	setFlagDefaults()
+
 	flag.Parse()
 	if *flRepo == "" || *flDest == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
 	if _, err := exec.LookPath("git"); err != nil {
-		log.Printf("required git executable not found: %v", err)
+		log.Errorf("required git executable not found: %v", err)
 		os.Exit(1)
 	}
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
-			log.Printf("error creating .netrc file: %v", err)
+			log.Errorf("error creating .netrc file: %v", err)
 			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(); err != nil {
-			log.Printf("error configuring SSH: %v", err)
+			log.Errorf("error configuring SSH: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -122,22 +135,22 @@ func main() {
 	for {
 		if err := syncRepo(*flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
-				log.Printf("error syncing repo: %v", err)
+				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
 			}
 
 			failCount++
-			log.Printf("unexpected error syncing repo: %v", err)
-			log.Printf("waiting %d seconds before retryng", *flWait)
+			log.Errorf("unexpected error syncing repo: %v", err)
+			log.V(0).Infof("waiting %d seconds before retryng", *flWait)
 			time.Sleep(time.Duration(*flWait) * time.Second)
 			continue
 		}
 		if initialSync {
 			if isHash, err := revIsHash(*flRev, *flRoot); err != nil {
-				log.Printf("can't tell if rev %s is a git hash, exiting", *flRev)
+				log.Errorf("can't tell if rev %s is a git hash, exiting", *flRev)
 				os.Exit(1)
 			} else if isHash {
-				log.Printf("rev %s appears to be a git hash, no further sync needed", *flRev)
+				log.V(0).Infof("rev %s appears to be a git hash, no further sync needed", *flRev)
 				sleepForever()
 			}
 			if *flOneTime {
@@ -147,9 +160,19 @@ func main() {
 		}
 
 		failCount = 0
-		log.Printf("next sync in %d seconds", *flWait)
+		log.V(0).Infof("next sync in %d seconds", *flWait)
 		time.Sleep(time.Duration(*flWait) * time.Second)
 	}
+}
+
+func setFlagDefaults() {
+	// Force logging to stderr.
+	stderrFlag := flag.Lookup("logtostderr")
+	if stderrFlag == nil {
+		fmt.Fprintf(os.Stderr, "can't find flag 'logtostderr'")
+		os.Exit(1)
+	}
+	stderrFlag.Value.Set("true")
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
@@ -179,12 +202,12 @@ func updateSymlink(gitRoot, link, newDir string) error {
 	if _, err := runCommand(gitRoot, "ln", "-snf", newDirRelative, "tmp-link"); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
-	log.Printf("created symlink %s -> %s", "tmp-link", newDirRelative)
+	log.V(1).Infof("created symlink %s -> %s", "tmp-link", newDirRelative)
 
 	if _, err := runCommand(gitRoot, "mv", "-T", "tmp-link", link); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
-	log.Printf("renamed symlink %s to %s", "tmp-link", link)
+	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
@@ -192,14 +215,14 @@ func updateSymlink(gitRoot, link, newDir string) error {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
 
-		log.Printf("removed %s", currentDir)
+		log.V(1).Infof("removed %s", currentDir)
 
 		_, err := runCommand(gitRoot, "git", "worktree", "prune")
 		if err != nil {
 			return err
 		}
 
-		log.Printf("pruned old worktrees")
+		log.V(1).Infof("pruned old worktrees")
 	}
 
 	return nil
@@ -213,7 +236,6 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("fetched origin/%s", branch)
 
 	// Find the real commit for the rev.
 	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
@@ -222,7 +244,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	}
 	revhash := strings.Trim(string(output), "\n")
 	if revhash != rev {
-		log.Printf("rev %s resolves to %s", rev, revhash)
+		log.V(0).Infof("rev %s resolves to %s", rev, revhash)
 	}
 
 	// Make a worktree for this exact git hash.
@@ -231,7 +253,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("added worktree %s for origin/%s", worktreePath, branch)
+	log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
 
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
@@ -251,7 +273,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("reset worktree %s to %s", worktreePath, rev)
+	log.V(0).Infof("reset worktree %s to %s", worktreePath, rev)
 
 	if *flChmod != 0 {
 		// set file permissions
@@ -274,7 +296,7 @@ func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("cloned %s", repo)
+	log.V(0).Infof("cloned %s", repo)
 
 	return nil
 }
@@ -310,9 +332,9 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 			return err
 		}
 		if needed {
-			log.Printf("update required")
+			log.V(0).Infof("update required")
 		} else {
-			log.Printf("no update required")
+			log.V(0).Infof("no update required")
 			return nil
 		}
 	}
@@ -330,7 +352,7 @@ func needResync(localDir, rev string) (bool, error) {
 	local = strings.Trim(local, "\n")
 
 	// Fetch rev from upstream.
-	_, err := runCommand(localDir, "git", "fetch", "origin", rev)
+	_, err = runCommand(localDir, "git", "fetch", "origin", rev)
 	if err != nil {
 		return false, err
 	}
@@ -342,8 +364,8 @@ func needResync(localDir, rev string) (bool, error) {
 	}
 	remote = strings.Trim(remote, "\n")
 
-	log.Printf("local hash:  %s", local)
-	log.Printf("remote hash: %s", remote)
+	log.V(2).Infof("local hash:  %s", local)
+	log.V(2).Infof("remote hash: %s", remote)
 	return (local != remote), nil
 }
 
@@ -360,7 +382,7 @@ func cmdForLog(command string, args ...string) string {
 }
 
 func runCommand(cwd, command string, args ...string) (string, error) {
-	log.Printf("run(%q): %s", cwd, cmdForLog(command, args...))
+	log.V(5).Infof("run(%q): %s", cwd, cmdForLog(command, args...))
 
 	cmd := exec.Command(command, args...)
 	if cwd != "" {
@@ -375,7 +397,7 @@ func runCommand(cwd, command string, args ...string) (string, error) {
 }
 
 func setupGitAuth(username, password, gitURL string) error {
-	log.Println("setting up the git credential cache")
+	log.V(1).Infof("setting up the git credential cache")
 	cmd := exec.Command("git", "config", "--global", "credential.helper", "cache")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -399,7 +421,7 @@ func setupGitAuth(username, password, gitURL string) error {
 }
 
 func setupGitSSH() error {
-	log.Println("setting up git SSH credentials")
+	log.V(1).Infof("setting up git SSH credentials")
 
 	if _, err := os.Stat("/etc/git-secret/ssh"); err != nil {
 		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
