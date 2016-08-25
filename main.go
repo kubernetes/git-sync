@@ -46,7 +46,7 @@ var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
 	"root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"path at which to publish the checked-out files (a subdirectory under --root)")
+	"path at which to publish the checked-out files (a subdirectory under --root, defaults to leaf dir of --root)")
 var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0),
 	"number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
@@ -107,9 +107,13 @@ func main() {
 	setFlagDefaults()
 
 	flag.Parse()
-	if *flRepo == "" || *flDest == "" {
+	if *flRepo == "" {
 		flag.Usage()
 		os.Exit(1)
+	}
+	if *flDest == "" {
+		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		*flDest = parts[len(parts)-1]
 	}
 	if _, err := exec.LookPath("git"); err != nil {
 		log.Errorf("required git executable not found: %v", err)
