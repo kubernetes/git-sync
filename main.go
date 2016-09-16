@@ -24,37 +24,53 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
-	"math/rand"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-)
 
-const volMount = "/git"
+	"github.com/thockin/glogr"
+	"github.com/thockin/logr"
+)
 
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""), "git repo url")
 var flBranch = flag.String("branch", envString("GIT_SYNC_BRANCH", "master"), "git branch")
 var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"), "git rev")
-var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""), "destination subdirectory path within volume")
-var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0), "number of seconds to wait before next sync")
-var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false), "exit after the initial checkout")
-var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0), "shallow clone with a history truncated to the specified number of commits")
+var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
+	"shallow clone with a history truncated to the specified number of commits")
 
+var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
+	"root directory for git operations")
+var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
+	"path at which to publish the checked-out files (a subdirectory under --root, defaults to leaf dir of --root)")
+var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0),
+	"number of seconds between syncs")
+var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
+	"exit after the initial checkout")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
-	`number of consecutive failures allowed before aborting (the first pull must succeed)`)
+	"number of consecutive failures allowed before aborting (the first pull must succeed)")
+var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
+	"change the permissions of the checked-out files to this")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""), "username")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""), "password")
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false), "use SSH protocol")
 
-var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0), `If set it will change the permissions of the directory
-		that contains the git repository. Example: 744`)
+var log = newLoggerOrDie()
+
+func newLoggerOrDie() logr.Logger {
+	g, err := glogr.New()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failind to initialize logging: %v", err)
+		os.Exit(1)
+	}
+	return g
+}
 
 func envString(key, def string) string {
 	if env := os.Getenv(key); env != "" {
@@ -79,7 +95,7 @@ func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.Atoi(env)
 		if err != nil {
-			log.Printf("invalid value for %q: using default: %q", key, def)
+			log.Errorf("invalid value for %q: using default: %q", key, def)
 			return def
 		}
 		return val
@@ -87,84 +103,115 @@ func envInt(key string, def int) int {
 	return def
 }
 
-const usage = "usage: GIT_SYNC_REPO= GIT_SYNC_DEST= [GIT_SYNC_BRANCH= GIT_SYNC_WAIT= GIT_SYNC_DEPTH= GIT_SYNC_USERNAME= GIT_SYNC_PASSWORD= GIT_SYNC_SSH= GIT_SYNC_ONE_TIME= GIT_SYNC_MAX_SYNC_FAILURES=] git-sync -repo GIT_REPO_URL -dest PATH [-branch -wait -username -password -ssh -depth -one-time -max-sync-failures]"
-
 func main() {
+	setFlagDefaults()
+
 	flag.Parse()
-	if *flRepo == "" || *flDest == "" {
+	if *flRepo == "" {
 		flag.Usage()
-		log.Fatal(usage)
+		os.Exit(1)
+	}
+	if *flDest == "" {
+		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		*flDest = parts[len(parts)-1]
 	}
 	if _, err := exec.LookPath("git"); err != nil {
-		log.Fatalf("required git executable not found: %v", err)
+		log.Errorf("required git executable not found: %v", err)
+		os.Exit(1)
 	}
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
-			log.Fatalf("error creating .netrc file: %v", err)
+			log.Errorf("error creating .netrc file: %v", err)
+			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(); err != nil {
-			log.Fatalf("error configuring SSH: %v", err)
+			log.Errorf("error configuring SSH: %v", err)
+			os.Exit(1)
 		}
 	}
 
 	initialSync := true
 	failCount := 0
 	for {
-		if err := syncRepo(*flRepo, *flDest, *flBranch, *flRev, *flDepth); err != nil {
+		if err := syncRepo(*flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
-				log.Fatalf("error syncing repo: %v", err)
+				log.Errorf("error syncing repo: %v", err)
+				os.Exit(1)
 			}
 
 			failCount++
-			log.Printf("unexpected error syncing repo: %v", err)
-			log.Printf("waiting %d seconds before retryng", *flWait)
+			log.Errorf("unexpected error syncing repo: %v", err)
+			log.V(0).Infof("waiting %d seconds before retryng", *flWait)
 			time.Sleep(time.Duration(*flWait) * time.Second)
 			continue
 		}
-
-		initialSync = false
-		failCount = 0
-
-		if *flOneTime {
-			os.Exit(0)
+		if initialSync {
+			if isHash, err := revIsHash(*flRev, *flRoot); err != nil {
+				log.Errorf("can't tell if rev %s is a git hash, exiting", *flRev)
+				os.Exit(1)
+			} else if isHash {
+				log.V(0).Infof("rev %s appears to be a git hash, no further sync needed", *flRev)
+				sleepForever()
+			}
+			if *flOneTime {
+				os.Exit(0)
+			}
+			initialSync = false
 		}
 
-		log.Printf("waiting %d seconds", *flWait)
+		failCount = 0
+		log.V(0).Infof("next sync in %d seconds", *flWait)
 		time.Sleep(time.Duration(*flWait) * time.Second)
-		log.Println("done")
 	}
 }
 
+func setFlagDefaults() {
+	// Force logging to stderr.
+	stderrFlag := flag.Lookup("logtostderr")
+	if stderrFlag == nil {
+		fmt.Fprintf(os.Stderr, "can't find flag 'logtostderr'")
+		os.Exit(1)
+	}
+	stderrFlag.Value.Set("true")
+}
+
+// Do no work, but don't do something that triggers go's runtime into thinking
+// it is deadlocked.
+func sleepForever() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+	<-c
+	os.Exit(0)
+}
+
 // updateSymlink atomically swaps the symlink to point at the specified directory and cleans up the previous worktree.
-func updateSymlink(link, newDir string) error {
+func updateSymlink(gitRoot, link, newDir string) error {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	currentDir, err := filepath.EvalSymlinks(path.Join(volMount, link))
+	currentDir, err := filepath.EvalSymlinks(path.Join(gitRoot, link))
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error accessing symlink: %v", err)
 	}
 
 	// newDir is /git/rev-..., we need to change it to relative path.
 	// Volume in other container may not be mounted at /git, so the symlink can't point to /git.
-	newDirRelative, err := filepath.Rel(volMount, newDir)
+	newDirRelative, err := filepath.Rel(gitRoot, newDir)
 	if err != nil {
 		return fmt.Errorf("error converting to relative path: %v", err)
 	}
 
-	if _, err := runCommand("ln", volMount, []string{"-snf", newDirRelative, "tmp-link"}); err != nil {
+	if _, err := runCommand(gitRoot, "ln", "-snf", newDirRelative, "tmp-link"); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
+	log.V(1).Infof("created symlink %s -> %s", "tmp-link", newDirRelative)
 
-	log.Printf("create symlink %v->%v", "tmp-link", newDirRelative)
-
-	if _, err := runCommand("mv", volMount, []string{"-T", "tmp-link", link}); err != nil {
+	if _, err := runCommand(gitRoot, "mv", "-T", "tmp-link", link); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
-
-	log.Printf("rename symlink %v to %v", "tmp-link", link)
+	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
@@ -172,42 +219,51 @@ func updateSymlink(link, newDir string) error {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
 
-		log.Printf("remove %v", currentDir)
+		log.V(1).Infof("removed %s", currentDir)
 
-		output, err := runCommand("git", volMount, []string{"worktree", "prune"})
+		_, err := runCommand(gitRoot, "git", "worktree", "prune")
 		if err != nil {
 			return err
 		}
 
-		log.Printf("worktree prune %v", string(output))
+		log.V(1).Infof("pruned old worktrees")
 	}
 
 	return nil
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(dest, branch, rev string) error {
-	// fetch branch
-	output, err := runCommand("git", volMount, []string{"fetch", "origin", branch})
+func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
+	// Fetch the branch.  This is required for the worktree to be based on the
+	// current rev.
+	_, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("fetch %q: %s", branch, string(output))
-
-	// add worktree in subdir
-	rand.Seed(time.Now().UnixNano())
-	worktreePath := path.Join(volMount, "rev-"+strconv.Itoa(rand.Int()))
-	output, err = runCommand("git", volMount, []string{"worktree", "add", worktreePath, "origin/" + branch})
+	// Find the real commit for the rev.
+	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
 	if err != nil {
 		return err
 	}
+	revhash := strings.Trim(string(output), "\n")
+	if revhash != rev {
+		log.V(0).Infof("rev %s resolves to %s", rev, revhash)
+	}
 
-	log.Printf("add worktree origin/%q: %v", branch, string(output))
+	// Make a worktree for this exact git hash.
+	worktreePath := path.Join(gitRoot, "rev-"+revhash)
+	_, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
+	if err != nil {
+		return err
+	}
+	log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
 
-	// .git file in worktree directory holds a reference to /git/.git/worktrees/<worktree-dir-name>
-	// Replace it with a reference using relative paths, so that other containers can use a different volume mount name
-	worktreePathRelative, err := filepath.Rel(volMount, worktreePath)
+	// The .git file in the worktree directory holds a reference to
+	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
+	// using relative paths, so that other containers can use a different volume
+	// mount name.
+	worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -216,103 +272,136 @@ func addWorktreeAndSwap(dest, branch, rev string) error {
 		return err
 	}
 
-	// reset working copy
-	output, err = runCommand("git", worktreePath, []string{"reset", "--hard", rev})
+	// Reset the worktree's working copy to the specific rev.
+	_, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("reset %q: %v", rev, string(output))
+	log.V(0).Infof("reset worktree %s to %s", worktreePath, rev)
 
 	if *flChmod != 0 {
 		// set file permissions
-		_, err = runCommand("chmod", "", []string{"-R", string(*flChmod), worktreePath})
+		_, err = runCommand("", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
 		if err != nil {
 			return err
 		}
 	}
 
-	return updateSymlink(dest, worktreePath)
+	return updateSymlink(gitRoot, dest, worktreePath)
 }
 
-func initRepo(repo, dest, branch, rev string, depth int) error {
-	// clone repo
+func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
-		args = append(args, "-depth")
-		args = append(args, string(depth))
+		args = append(args, "-depth", strconv.Itoa(depth))
 	}
-	args = append(args, repo)
-	args = append(args, volMount)
-	output, err := runCommand("git", "", args)
+	args = append(args, repo, gitRoot)
+	_, err := runCommand("", "git", args...)
 	if err != nil {
 		return err
 	}
-
-	log.Printf("clone %q: %s", repo, string(output))
+	log.V(0).Infof("cloned %s", repo)
 
 	return nil
 }
 
+func revIsHash(rev, gitRoot string) (bool, error) {
+	// If a rev is a tag name or HEAD, rev-list will produce the git hash.  If
+	// it is already a git hash, the output will be the same hash.  Of course, a
+	// user could specify "abc" and match "abcdef12345678", so we just do a
+	// prefix match.
+	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	if err != nil {
+		return false, err
+	}
+	return strings.HasPrefix(output, rev), nil
+}
+
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-func syncRepo(repo, dest, branch, rev string, depth int) error {
-	target := path.Join(volMount, dest)
+func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
+	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
-		err = initRepo(repo, target, branch, rev, depth)
+		err = cloneRepo(repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return err
 		}
 	case err != nil:
 		return fmt.Errorf("error checking if repo exist %q: %v", gitRepoPath, err)
 	default:
-		needUpdate, err := gitRemoteChanged(target, branch)
+		needed, err := needResync(target, rev)
 		if err != nil {
 			return err
 		}
-		if !needUpdate {
-			log.Printf("No change")
+		if needed {
+			log.V(0).Infof("update required")
+		} else {
+			log.V(0).Infof("no update required")
 			return nil
 		}
 	}
 
-	return addWorktreeAndSwap(dest, branch, rev)
+	return addWorktreeAndSwap(gitRoot, dest, branch, rev)
 }
 
-// gitRemoteChanged returns true if the remote HEAD is different from the local HEAD, false otherwise
-func gitRemoteChanged(localDir, branch string) (bool, error) {
-	_, err := runCommand("git", localDir, []string{"remote", "update"})
+// needResync returns true if the upstream hash for rev is different from the local one.
+func needResync(localDir, rev string) (bool, error) {
+	// Ask git what the exact hash is for rev.
+	local, err := runCommand(localDir, "git", "rev-list", "-n1", rev)
 	if err != nil {
 		return false, err
 	}
-	localHead, err := runCommand("git", localDir, []string{"rev-parse", "HEAD"})
+	local = strings.Trim(local, "\n")
+
+	// Fetch rev from upstream.
+	_, err = runCommand(localDir, "git", "fetch", "origin", rev)
 	if err != nil {
 		return false, err
 	}
-	remoteHead, err := runCommand("git", localDir, []string{"rev-parse", fmt.Sprintf("origin/%v", branch)})
+
+	// Ask git what the exact hash is for upstream rev.
+	remote, err := runCommand(localDir, "git", "rev-list", "-n1", "FETCH_HEAD")
 	if err != nil {
 		return false, err
 	}
-	return (strings.Compare(string(localHead), string(remoteHead)) != 0), nil
+	remote = strings.Trim(remote, "\n")
+
+	log.V(2).Infof("local hash:  %s", local)
+	log.V(2).Infof("remote hash: %s", remote)
+	return (local != remote), nil
 }
 
-func runCommand(command, cwd string, args []string) ([]byte, error) {
+func cmdForLog(command string, args ...string) string {
+	if strings.ContainsAny(command, " \t\n") {
+		command = fmt.Sprintf("%q", command)
+	}
+	for i := range args {
+		if strings.ContainsAny(args[i], " \t\n") {
+			args[i] = fmt.Sprintf("%q", args[i])
+		}
+	}
+	return command + " " + strings.Join(args, " ")
+}
+
+func runCommand(cwd, command string, args ...string) (string, error) {
+	log.V(5).Infof("run(%q): %s", cwd, cmdForLog(command, args...))
+
 	cmd := exec.Command(command, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return []byte{}, fmt.Errorf("error running command %q : %v: %s", strings.Join(cmd.Args, " "), err, string(output))
+		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
 	}
 
-	return output, nil
+	return string(output), nil
 }
 
 func setupGitAuth(username, password, gitURL string) error {
-	log.Println("setting up the git credential cache")
+	log.V(1).Infof("setting up the git credential cache")
 	cmd := exec.Command("git", "config", "--global", "credential.helper", "cache")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -336,7 +425,7 @@ func setupGitAuth(username, password, gitURL string) error {
 }
 
 func setupGitSSH() error {
-	log.Println("setting up git SSH credentials")
+	log.V(1).Infof("setting up git SSH credentials")
 
 	if _, err := os.Stat("/etc/git-secret/ssh"); err != nil {
 		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
