@@ -37,36 +37,42 @@ import (
 	"github.com/thockin/logr"
 )
 
-var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""), "git repo url")
-var flBranch = flag.String("branch", envString("GIT_SYNC_BRANCH", "master"), "git branch")
-var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"), "git rev")
+var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""),
+	"the git repository to clone")
+var flBranch = flag.String("branch", envString("GIT_SYNC_BRANCH", "master"),
+	"the git branch to check out")
+var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
+	"the git revision (tag or hash) to check out")
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
-	"shallow clone with a history truncated to the specified number of commits")
+	"use a shallow clone with a history truncated to the specified number of commits")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
-	"root directory for git operations")
+	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"path at which to publish the checked-out files (a subdirectory under --root, defaults to leaf dir of --root)")
+	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --root)")
 var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0),
-	"number of seconds between syncs")
+	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
-	"number of consecutive failures allowed before aborting (the first pull must succeed)")
+	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
-	"change the permissions of the checked-out files to this")
+	"the file permissions to apply to the checked-out files")
 
-var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""), "username")
-var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""), "password")
+var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
+	"the username to use")
+var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
+	"the password to use")
 
-var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false), "use SSH protocol")
+var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
+	"use SSH for git operations")
 
 var log = newLoggerOrDie()
 
 func newLoggerOrDie() logr.Logger {
 	g, err := glogr.New()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failind to initialize logging: %v", err)
+		fmt.Fprintf(os.Stderr, "failind to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
 	return g
@@ -108,6 +114,7 @@ func main() {
 
 	flag.Parse()
 	if *flRepo == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --repo or $GIT_SYNC_REPO must be provided\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -115,24 +122,31 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flDest = parts[len(parts)-1]
 	}
+	if strings.Contains(*flDest, "/") {
+		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a bare name\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 	if _, err := exec.LookPath("git"); err != nil {
-		log.Errorf("required git executable not found: %v", err)
+		fmt.Fprintf(os.Stderr, "ERROR: git executable not found: %v\n", err)
 		os.Exit(1)
 	}
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
-			log.Errorf("error creating .netrc file: %v", err)
+			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(); err != nil {
-			log.Errorf("error configuring SSH: %v", err)
+			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
 			os.Exit(1)
 		}
 	}
+
+	// From here on, output goes through logging.
 
 	initialSync := true
 	failCount := 0
@@ -173,7 +187,7 @@ func setFlagDefaults() {
 	// Force logging to stderr.
 	stderrFlag := flag.Lookup("logtostderr")
 	if stderrFlag == nil {
-		fmt.Fprintf(os.Stderr, "can't find flag 'logtostderr'")
+		fmt.Fprintf(os.Stderr, "can't find flag 'logtostderr'\n")
 		os.Exit(1)
 	}
 	stderrFlag.Value.Set("true")

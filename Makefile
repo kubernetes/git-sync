@@ -18,7 +18,7 @@ REGISTRY ?= gcr.io/google_containers
 IMAGE = $(REGISTRY)/git-sync-$(ARCH)
 LEGACY_AMD64_IMAGE = $(REGISTRY)/git-sync
 
-TAG = v2.0.0
+TAG = v2.0.1
 
 # Architectures supported: amd64, arm, arm64 and ppc64le
 ARCH ?= amd64
