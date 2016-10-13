@@ -178,7 +178,7 @@ func main() {
 		}
 
 		failCount = 0
-		log.V(0).Infof("next sync in %d seconds", *flWait)
+		log.V(1).Infof("next sync in %d seconds", *flWait)
 		time.Sleep(time.Duration(*flWait) * time.Second)
 	}
 }
@@ -247,27 +247,12 @@ func updateSymlink(gitRoot, link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
-	// Fetch the branch.  This is required for the worktree to be based on the
-	// current rev.
-	_, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch)
-	if err != nil {
-		return err
-	}
-
-	// Find the real commit for the rev.
-	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
-	if err != nil {
-		return err
-	}
-	revhash := strings.Trim(string(output), "\n")
-	if revhash != rev {
-		log.V(0).Infof("rev %s resolves to %s", rev, revhash)
-	}
+func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
+	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
 	// Make a worktree for this exact git hash.
-	worktreePath := path.Join(gitRoot, "rev-"+revhash)
-	_, err = runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
+	worktreePath := path.Join(gitRoot, "rev-"+hash)
+	_, err := runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
 	if err != nil {
 		return err
 	}
@@ -287,11 +272,11 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev string) error {
 	}
 
 	// Reset the worktree's working copy to the specific rev.
-	_, err = runCommand(worktreePath, "git", "reset", "--hard", rev)
+	_, err = runCommand(worktreePath, "git", "reset", "--hard", hash)
 	if err != nil {
 		return err
 	}
-	log.V(0).Infof("reset worktree %s to %s", worktreePath, rev)
+	log.V(0).Infof("reset worktree %s to %s", worktreePath, hash)
 
 	if *flChmod != 0 {
 		// set file permissions
@@ -319,12 +304,20 @@ func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	return nil
 }
 
+func hashForRev(rev, gitRoot string) (string, error) {
+	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	if err != nil {
+		return "", err
+	}
+	return strings.Trim(string(output), "\n"), nil
+}
+
 func revIsHash(rev, gitRoot string) (bool, error) {
 	// If a rev is a tag name or HEAD, rev-list will produce the git hash.  If
 	// it is already a git hash, the output will be the same hash.  Of course, a
 	// user could specify "abc" and match "abcdef12345678", so we just do a
 	// prefix match.
-	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	output, err := hashForRev(rev, gitRoot)
 	if err != nil {
 		return false, err
 	}
@@ -335,6 +328,7 @@ func revIsHash(rev, gitRoot string) (bool, error) {
 func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
+	hash := rev
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
@@ -342,49 +336,52 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 		if err != nil {
 			return err
 		}
-	case err != nil:
-		return fmt.Errorf("error checking if repo exist %q: %v", gitRepoPath, err)
-	default:
-		needed, err := needResync(target, rev)
+		hash, err = hashForRev(rev, gitRoot)
 		if err != nil {
 			return err
 		}
-		if needed {
+	case err != nil:
+		return fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
+	default:
+		local, remote, err := getRevs(target, rev)
+		if err != nil {
+			return err
+		}
+		log.V(2).Infof("local hash:  %s", local)
+		log.V(2).Infof("remote hash: %s", remote)
+		if local != remote {
 			log.V(0).Infof("update required")
+			hash = remote
 		} else {
-			log.V(0).Infof("no update required")
+			log.V(1).Infof("no update required")
 			return nil
 		}
 	}
 
-	return addWorktreeAndSwap(gitRoot, dest, branch, rev)
+	return addWorktreeAndSwap(gitRoot, dest, branch, rev, hash)
 }
 
-// needResync returns true if the upstream hash for rev is different from the local one.
-func needResync(localDir, rev string) (bool, error) {
+// getRevs returns the local and upstream hashes for rev.
+func getRevs(localDir, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := runCommand(localDir, "git", "rev-list", "-n1", rev)
+	local, err := hashForRev(rev, localDir)
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
-	local = strings.Trim(local, "\n")
 
 	// Fetch rev from upstream.
-	_, err = runCommand(localDir, "git", "fetch", "origin", rev)
+	_, err = runCommand(localDir, "git", "fetch", "--tags", "origin", rev)
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
 
 	// Ask git what the exact hash is for upstream rev.
-	remote, err := runCommand(localDir, "git", "rev-list", "-n1", "FETCH_HEAD")
+	remote, err := hashForRev("FETCH_HEAD", localDir)
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
-	remote = strings.Trim(remote, "\n")
 
-	log.V(2).Infof("local hash:  %s", local)
-	log.V(2).Infof("remote hash: %s", remote)
-	return (local != remote), nil
+	return local, remote, nil
 }
 
 func cmdForLog(command string, args ...string) string {
