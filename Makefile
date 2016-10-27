@@ -84,6 +84,9 @@ ifeq ($(ARCH),amd64)
 endif
 	touch $@
 
+test:
+	@./test.sh
+
 clean:
 	rm -rf .container-* .push-* bin/
 
