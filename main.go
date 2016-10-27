@@ -343,7 +343,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	case err != nil:
 		return fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
-		local, remote, err := getRevs(target, rev)
+		local, remote, err := getRevs(target, branch, rev)
 		if err != nil {
 			return err
 		}
@@ -362,7 +362,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 }
 
 // getRevs returns the local and upstream hashes for rev.
-func getRevs(localDir, rev string) (string, string, error) {
+func getRevs(localDir, branch string,  rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
 	local, err := hashForRev(rev, localDir)
 	if err != nil {
@@ -370,7 +370,7 @@ func getRevs(localDir, rev string) (string, string, error) {
 	}
 
 	// Fetch rev from upstream.
-	_, err = runCommand(localDir, "git", "fetch", "--tags", "origin", rev)
+	_, err = runCommand(localDir, "git", "fetch", "--tags", "origin", branch)
 	if err != nil {
 		return "", "", err
 	}
