@@ -250,6 +250,11 @@ func updateSymlink(gitRoot, link, newDir string) error {
 func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
+	// Update from the remote.
+	if _, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch); err != nil {
+		return err
+	}
+
 	// Make a worktree for this exact git hash.
 	worktreePath := path.Join(gitRoot, "rev-"+hash)
 	_, err := runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
@@ -343,7 +348,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 	case err != nil:
 		return fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
-		local, remote, err := getRevs(target, rev)
+		local, remote, err := getRevs(target, branch, rev)
 		if err != nil {
 			return err
 		}
@@ -362,26 +367,37 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 }
 
 // getRevs returns the local and upstream hashes for rev.
-func getRevs(localDir, rev string) (string, string, error) {
+func getRevs(localDir, branch, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
 	local, err := hashForRev(rev, localDir)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Fetch rev from upstream.
-	_, err = runCommand(localDir, "git", "fetch", "--tags", "origin", rev)
-	if err != nil {
-		return "", "", err
+	// Build a ref string, depending on whether the user asked to track HEAD or a tag.
+	ref := ""
+	if rev == "HEAD" {
+		ref = "refs/heads/" + branch
+	} else {
+		ref = "refs/tags/" + rev + "^{}"
 	}
 
-	// Ask git what the exact hash is for upstream rev.
-	remote, err := hashForRev("FETCH_HEAD", localDir)
+	// Figure out what hash the remote resolves ref to.
+	remote, err := remoteHashForRef(ref, localDir)
 	if err != nil {
 		return "", "", err
 	}
 
 	return local, remote, nil
+}
+
+func remoteHashForRef(ref, gitRoot string) (string, error) {
+	output, err := runCommand(gitRoot, "git", "ls-remote", "-q", "origin", ref)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(string(output), "\t")
+	return parts[0], nil
 }
 
 func cmdForLog(command string, args ...string) string {
