@@ -49,8 +49,15 @@ function assert_file_eq() {
 
 # Build it
 echo "Building..."
-make >/dev/null
-GIT_SYNC=./bin/git-sync-amd64
+make container REGISTRY=e2e TAG=$(make version) >/dev/null
+function GIT_SYNC() {
+    docker run \
+        -i \
+        -u $(id -u):$(id -g) \
+        -v "$DIR":"$DIR" \
+        e2e/git-sync-amd64:$(make version) \
+        "$@"
+}
 
 DIR=""
 for i in $(seq 1 10); do
@@ -84,7 +91,7 @@ testcase "head-once"
 # First sync
 echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -103,7 +110,7 @@ testcase "default-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -134,7 +141,7 @@ testcase "head-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -170,7 +177,7 @@ git -C "$REPO" checkout -q -b "$BRANCH"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" checkout -q master
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -208,7 +215,7 @@ TAG="$TESTCASE"--TAG
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -254,7 +261,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 git -C "$REPO" checkout -q master
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
@@ -310,7 +317,7 @@ testcase "rev-sync"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 REV=$(git -C "$REPO" rev-list -n1 HEAD)
-$GIT_SYNC \
+GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
