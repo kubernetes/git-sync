@@ -12,82 +12,150 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: all push push-legacy container clean
+# The binary to build (just the basename).
+BIN := git-sync
 
-REGISTRY ?= gcr.io/google_containers
-IMAGE = $(REGISTRY)/git-sync-$(ARCH)
-LEGACY_AMD64_IMAGE = $(REGISTRY)/git-sync
+# This repo's root import path (under GOPATH).
+PKG := k8s.io/git-sync
 
-TAG = v2.0.2
+# Where to push the docker image.
+REGISTRY ?= gcr.io/google-containers
 
-# Architectures supported: amd64, arm, arm64 and ppc64le
+# Which architecture to build - see $(ALL_ARCH) for options.
 ARCH ?= amd64
 
-# TODO: get a base image for non-x86 archs
-#       arm arm64 ppc64le
-ALL_ARCH = amd64
+# This version-strategy uses git tags to set the version string
+VERSION := $(shell git describe --tags --always --dirty)
+#
+# This version-strategy uses a manual value to set the version string
+#VERSION := 1.2.3
 
-KUBE_CROSS_IMAGE ?= gcr.io/google_containers/kube-cross
-KUBE_CROSS_VERSION ?= v1.6.3-2
+###
+### These variables should not need tweaking.
+###
 
-GO_PKG = k8s.io/git-sync
-BIN = git-sync
+SRC_DIRS := cmd pkg # directories which hold app source (not vendored)
 
+ALL_ARCH := amd64
+
+# TODO: get a baseimage that works for other architectures
+# arm arm64 ppc64le
+
+# Set default base image dynamically for each arch
+ifeq ($(ARCH),amd64)
+    BASEIMAGE?=alpine
+endif
+ifeq ($(ARCH),arm)
+    BASEIMAGE?=armel/busybox
+endif
+ifeq ($(ARCH),arm64)
+    BASEIMAGE?=aarch64/busybox
+endif
+ifeq ($(ARCH),ppc64le)
+    BASEIMAGE?=ppc64le/busybox
+endif
+
+IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
+LEGACY_IMAGE := $(REGISTRY)/$(BIN)
+
+BUILD_IMAGE ?= golang:1.7-alpine
+
+# If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
 # If you want to build AND push all containers, see the 'all-push' rule.
-all: all-build
+all: build
 
-sub-container-%:
-	$(MAKE) ARCH=$* container
+build-%:
+	@$(MAKE) --no-print-directory ARCH=$* build
 
-sub-push-%:
-	$(MAKE) ARCH=$* push
+container-%:
+	@$(MAKE) --no-print-directory ARCH=$* container
 
-all-build: $(addprefix bin/$(BIN)-,$(ALL_ARCH))
+push-%:
+	@$(MAKE) --no-print-directory ARCH=$* push
 
-all-container: $(addprefix sub-container-,$(ALL_ARCH))
+all-build: $(addprefix build-, $(ALL_ARCH))
 
-all-push: $(addprefix sub-push-,$(ALL_ARCH))
+all-container: $(addprefix container-, $(ALL_ARCH))
 
-build: bin/$(BIN)-$(ARCH)
+all-push: $(addprefix push-, $(ALL_ARCH))
 
-bin/$(BIN)-$(ARCH): FORCE
-	mkdir -p bin
-	docker run                                      \
-	    -u $$(id -u):$$(id -g)                      \
-	    -v $$(pwd):/go/src/$(GO_PKG)                \
-	    $(KUBE_CROSS_IMAGE):$(KUBE_CROSS_VERSION)   \
-	    /bin/bash -c "                              \
-	        cd /go/src/$(GO_PKG) &&                 \
-	        CGO_ENABLED=0 go build                  \
-	        -installsuffix cgo                      \
-	        -ldflags '-w'                           \
-	        -o $@"
+build: bin/$(ARCH)/$(BIN)
 
-container: .container-$(ARCH)
-.container-$(ARCH): bin/$(BIN)-$(ARCH)
-	docker build -t $(IMAGE):$(TAG) --build-arg ARCH=$(ARCH) .
-ifeq ($(ARCH),amd64)
-	docker tag $(IMAGE):$(TAG) $(LEGACY_AMD64_IMAGE):$(TAG)
-endif
-	touch $@
+bin/$(ARCH)/$(BIN): build-dirs
+	@echo "building: $@"
+	@docker run                                                            \
+	    -ti                                                                \
+	    -u $$(id -u):$$(id -g)                                             \
+	    -v $$(pwd)/.go:/go                                                 \
+	    -v $$(pwd):/go/src/$(PKG)                                          \
+	    -v $$(pwd)/bin/$(ARCH):/go/bin                                     \
+	    -v $$(pwd)/bin/$(ARCH):/go/bin/linux_$(ARCH)                       \
+	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static  \
+	    -w /go/src/$(PKG)                                                  \
+	    $(BUILD_IMAGE)                                                     \
+	    /bin/sh -c "                                                       \
+	        ARCH=$(ARCH)                                                   \
+	        VERSION=$(VERSION)                                             \
+	        PKG=$(PKG)                                                     \
+	        ./build/build.sh                                               \
+	    "
 
-push: .push-$(ARCH)
-.push-$(ARCH): .container-$(ARCH)
-	gcloud docker push $(IMAGE):$(TAG)
-	touch $@
+DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(VERSION)
 
-push-legacy: .push-legacy-$(ARCH)
-.push-legacy-$(ARCH): .container-$(ARCH)
-ifeq ($(ARCH),amd64)
-	gcloud docker push $(LEGACY_AMD64_IMAGE):$(TAG)
-endif
-	touch $@
+container: .container-$(DOTFILE_IMAGE) container-name
+.container-$(DOTFILE_IMAGE): bin/$(ARCH)/$(BIN) Dockerfile.in
+	@sed \
+	    -e 's|ARG_BIN|$(BIN)|g' \
+	    -e 's|ARG_ARCH|$(ARCH)|g' \
+	    -e 's|ARG_FROM|$(BASEIMAGE)|g' \
+	    Dockerfile.in > .dockerfile-$(ARCH)
+	@docker build -t $(IMAGE):$(VERSION) -f .dockerfile-$(ARCH) .
+	@docker images -q $(IMAGE):$(VERSION) > $@
+	@if [ "$(ARCH)" == "amd64" ]; then \
+	    docker tag -f $(IMAGE):$(VERSION) $(LEGACY_IMAGE):$(VERSION); \
+	fi
 
-test:
-	@./test.sh
+container-name:
+	@echo "container: $(IMAGE):$(VERSION)"
 
-clean:
-	rm -rf .container-* .push-* bin/
+push: .push-$(DOTFILE_IMAGE) push-name
+.push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
+	@gcloud docker push $(IMAGE):$(VERSION)
+	@docker images -q $(IMAGE):$(VERSION) > $@
+	@if [ "$(ARCH)" == "amd64" ]; then \
+	    gcloud docker push $(LEGACY_IMAGE):$(TAG); \
+	fi
 
-FORCE:
+push-name:
+	@echo "pushed: $(IMAGE):$(VERSION)"
+
+version:
+	@echo $(VERSION)
+
+test: build-dirs
+	@docker run                                                            \
+	    -ti                                                                \
+	    -u $$(id -u):$$(id -g)                                             \
+	    -v $$(pwd)/.go:/go                                                 \
+	    -v $$(pwd):/go/src/$(PKG)                                          \
+	    -v $$(pwd)/bin/$(ARCH):/go/bin                                     \
+	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static  \
+	    -w /go/src/$(PKG)                                                  \
+	    $(BUILD_IMAGE)                                                     \
+	    /bin/sh -c "                                                       \
+	        ./build/test.sh $(SRC_DIRS)                                    \
+	    "
+	@./test_e2e.sh
+
+build-dirs:
+	@mkdir -p bin/$(ARCH)
+	@mkdir -p .go/src/$(PKG) .go/pkg .go/bin .go/std/$(ARCH)
+
+clean: container-clean bin-clean
+
+container-clean:
+	rm -rf .container-* .dockerfile-* .push-*
+
+bin-clean:
+	rm -rf .go bin

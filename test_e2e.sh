@@ -50,7 +50,7 @@ function assert_file_eq() {
 # Build it
 echo "Building..."
 make >/dev/null
-GIT_SYNC=./bin/git-sync-amd64
+GIT_SYNC=./bin/amd64/git-sync
 
 DIR=""
 for i in $(seq 1 10); do

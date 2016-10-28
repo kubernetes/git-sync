@@ -16,7 +16,7 @@ limitations under the License.
 
 // git-sync is a command that pull a git repository to a local directory.
 
-package main // import "k8s.io/git-sync"
+package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"bytes"
