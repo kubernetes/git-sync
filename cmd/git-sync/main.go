@@ -16,7 +16,7 @@ limitations under the License.
 
 // git-sync is a command that pull a git repository to a local directory.
 
-package main // import "k8s.io/git-sync"
+package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"bytes"
@@ -50,7 +50,7 @@ var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
 	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --root)")
-var flWait = flag.Int("wait", envInt("GIT_SYNC_WAIT", 0),
+var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
@@ -101,7 +101,19 @@ func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.Atoi(env)
 		if err != nil {
-			log.Errorf("invalid value for %q: using default: %q", key, def)
+			log.Errorf("invalid value for %q: using default: %v", key, def)
+			return def
+		}
+		return val
+	}
+	return def
+}
+
+func envFloat(key string, def float64) float64 {
+	if env := os.Getenv(key); env != "" {
+		val, err := strconv.ParseFloat(env, 64)
+		if err != nil {
+			log.Errorf("invalid value for %q: using default: %v", key, def)
 			return def
 		}
 		return val
@@ -147,6 +159,7 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
+	log.V(0).Infof("starting up: %q", os.Args)
 
 	initialSync := true
 	failCount := 0
@@ -159,8 +172,8 @@ func main() {
 
 			failCount++
 			log.Errorf("unexpected error syncing repo: %v", err)
-			log.V(0).Infof("waiting %d seconds before retryng", *flWait)
-			time.Sleep(time.Duration(*flWait) * time.Second)
+			log.V(0).Infof("waiting %v before retrying", waitTime(*flWait))
+			time.Sleep(waitTime(*flWait))
 			continue
 		}
 		if initialSync {
@@ -178,9 +191,13 @@ func main() {
 		}
 
 		failCount = 0
-		log.V(1).Infof("next sync in %d seconds", *flWait)
-		time.Sleep(time.Duration(*flWait) * time.Second)
+		log.V(1).Infof("next sync in %v", waitTime(*flWait))
+		time.Sleep(waitTime(*flWait))
 	}
+}
+
+func waitTime(seconds float64) time.Duration {
+	return time.Duration(int(seconds*1000)) * time.Millisecond
 }
 
 func setFlagDefaults() {
