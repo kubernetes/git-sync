@@ -314,7 +314,7 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
 func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
-		args = append(args, "-depth", strconv.Itoa(depth))
+		args = append(args, "--depth", strconv.Itoa(depth))
 	}
 	args = append(args, repo, gitRoot)
 	_, err := runCommand("", "git", args...)
