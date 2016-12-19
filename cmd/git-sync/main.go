@@ -471,17 +471,13 @@ func setupGitAuth(username, password, gitURL string) error {
 func setupGitSSH() error {
 	log.V(1).Infof("setting up git SSH credentials")
 
-	if _, err := os.Stat("/etc/git-secret/ssh"); err != nil {
+	fileInfo, err := os.Stat("/etc/git-secret/ssh")
+	if err != nil {
 		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
 	}
 
-	// Kubernetes mounts Secret as 0444 by default, which is not restrictive enough to use as an SSH key.
-	// TODO: Remove this command once Kubernetes allows for specifying permissions for a Secret Volume.
-	// See https://github.com/kubernetes/kubernetes/pull/28936.
-	if err := os.Chmod("/etc/git-secret/ssh", 0400); err != nil {
-
-		// If the Secret Volume is mounted as readOnly, the read-only filesystem nature prevents the necessary chmod.
-		return fmt.Errorf("error running chmod on Secret (make sure Secret Volume is NOT mounted with readOnly=true): %v", err)
+	if fileInfo.Mode() != 0400 {
+		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommeded to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
 	}
 
 	return nil
