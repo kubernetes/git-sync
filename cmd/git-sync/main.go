@@ -477,7 +477,7 @@ func setupGitSSH() error {
 	}
 
 	if fileInfo.Mode() != 0400 {
-		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommeded to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
+		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
 	}
 
 	return nil
