@@ -471,13 +471,21 @@ func setupGitAuth(username, password, gitURL string) error {
 func setupGitSSH() error {
 	log.V(1).Infof("setting up git SSH credentials")
 
-	fileInfo, err := os.Stat("/etc/git-secret/ssh")
+	var pathToSSHSecret = "/etc/git-secret/ssh"
+
+	fileInfo, err := os.Stat(pathToSSHSecret)
 	if err != nil {
 		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
 	}
 
 	if fileInfo.Mode() != 0400 {
 		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
+	}
+
+	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
+	err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
+	if err != nil {
+		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
 	}
 
 	return nil
