@@ -13,7 +13,7 @@ function testcase() {
 
 function fail() {
     echo "FAIL: " "$@"
-    sleep 1
+    sleep 2
     pkill git-sync || true
     ps auxw | grep git-sync
     exit 1
@@ -26,17 +26,18 @@ function pass() {
 }
 
 function assert_link_exists() {
-    if [[ -L "$1" ]]; then
-        return
+    if ! [[ -e "$1" ]]; then
+        fail "$1 does not exist"
     fi
-    fail "$1 does not exist or is not a symlink"
+    if ! [[ -L "$1" ]]; then
+        fail "$1 is not a symlink"
+    fi
 }
 
 function assert_file_exists() {
-    if [[ -f "$1" ]]; then
-        return
+    if ! [[ -f "$1" ]]; then
+        fail "$1 does not exist"
     fi
-    fail "$1 does not exist"
 }
 
 function assert_file_eq() {
@@ -123,20 +124,20 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move backward
 git -C "$REPO" reset -q --hard HEAD^
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -159,20 +160,20 @@ GIT_SYNC \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Move HEAD forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move HEAD backward
 git -C "$REPO" reset -q --hard HEAD^
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -197,7 +198,7 @@ GIT_SYNC \
     --branch="$BRANCH" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -206,7 +207,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
@@ -214,7 +215,7 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -238,7 +239,7 @@ GIT_SYNC \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -246,21 +247,21 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 2" >/dev/null
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move the tag backward
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 3" >/dev/null
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Add something after the tag
 echo "$TESTCASE 3" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 3"
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -287,7 +288,7 @@ GIT_SYNC \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -297,7 +298,7 @@ echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
@@ -306,7 +307,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -315,7 +316,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 echo "$TESTCASE 3" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 3"
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -323,7 +324,7 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 3" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 3"
@@ -346,20 +347,20 @@ GIT_SYNC \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Commit something new
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Revert the last change
 git -C "$REPO" reset -q --hard HEAD^
-sleep 1
+sleep 2
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
