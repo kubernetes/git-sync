@@ -16,7 +16,7 @@ spec:
     - name: GIT_SYNC_REPO
       value: https://github.com/GoogleCloudPlatform/kubernetes.git
     - name: GIT_SYNC_DEST
-      value: /git
+      value: git
   - name: hugo
     image: gcr.io/google_containers/hugo
     imagePullPolicy: Always
