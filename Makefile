@@ -112,7 +112,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    Dockerfile.in > .dockerfile-$(ARCH)
 	@docker build -t $(IMAGE):$(VERSION) -f .dockerfile-$(ARCH) .
 	@docker images -q $(IMAGE):$(VERSION) > $@
-	@if [ "$(ARCH)" == "amd64" ]; then \
+	@if [ "$(ARCH)" = "amd64" ]; then \
 	    docker tag $(IMAGE):$(VERSION) $(LEGACY_IMAGE):$(VERSION); \
 	fi
 
@@ -123,7 +123,7 @@ push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
 	@gcloud docker push $(IMAGE):$(VERSION)
 	@docker images -q $(IMAGE):$(VERSION) > $@
-	@if [ "$(ARCH)" == "amd64" ]; then \
+	@if [ "$(ARCH)" = "amd64" ]; then \
 	    gcloud docker push $(LEGACY_IMAGE):$(VERSION); \
 	fi
 
