@@ -40,7 +40,8 @@ volumes: [
     {
         "name": "git-secret",
         "secret": {
-          "secretName": "git-creds"
+          "secretName": "git-creds",
+          "defaultMode": 256
         }
     },
     ...
@@ -71,6 +72,9 @@ In your git-sync container configuration, mount the Secret Volume at "/etc/git-s
         },
         ...
     ],
+    securityContext: {
+        "runAsUser": 0
+    }
 }
 ```
-**Note:** Kubernetes mounts the Secret with permissions 0444 by default (not restrictive enough to be used as an SSH key), so make sure you use secret volume with `defaultMode: 256` (decimal number for octal 0400).
+**Note:** Kubernetes mounts the Secret with permissions 0444 by default (not restrictive enough to be used as an SSH key), so make sure you use secret volume with `defaultMode: 256` (decimal number for octal 0400) and run the container as root.
