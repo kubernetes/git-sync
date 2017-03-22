@@ -11,6 +11,12 @@ it re-pulls, it updates the destination directory atomically.  In order to do
 this, it uses a git worktree in a subdirectory of the `--root` and flips a
 symlink.
 
+## Interoperability
+By design git-sync uses symlinks to atomically switch git content between versions.
+Various applications might not work well with symlinks.
+
+[Details](/docs/atomic.md)
+
 ## Usage
 
 ```
