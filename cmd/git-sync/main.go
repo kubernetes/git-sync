@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	goreap "github.com/hashicorp/go-reap"
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
 )
@@ -157,6 +158,8 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	go goreap.ReapChildren(nil, nil, nil, nil)
 
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)

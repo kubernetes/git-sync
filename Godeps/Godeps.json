@@ -11,12 +11,20 @@
 			"Rev": "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 		},
 		{
+			"ImportPath": "github.com/hashicorp/go-reap",
+			"Rev": "04ce4d0638f3b39b8a8030e2a22c4c90771fa5d6"
+		},
+		{
 			"ImportPath": "github.com/thockin/glogr",
 			"Rev": "7a7f3ced4f9f52e96710761820bd85ed6c400aa5"
 		},
 		{
 			"ImportPath": "github.com/thockin/logr",
 			"Rev": "103d90809f342ce8b186c0bc903a34bc1c8007be"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9"
 		}
 	]
 }
