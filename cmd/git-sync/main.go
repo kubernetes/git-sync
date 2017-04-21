@@ -472,6 +472,7 @@ func setupGitSSH() error {
 	log.V(1).Infof("setting up git SSH credentials")
 
 	var pathToSSHSecret = "/etc/git-secret/ssh"
+	var pathToSSHKnownHosts = "/etc/git-secret/known_hosts"
 
 	fileInfo, err := os.Stat(pathToSSHSecret)
 	if err != nil {
@@ -483,7 +484,7 @@ func setupGitSSH() error {
 	}
 
 	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
-	err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
+	err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
 	if err != nil {
 		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
 	}
