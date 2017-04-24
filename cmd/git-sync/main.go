@@ -66,6 +66,8 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
+var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", false),
+	"enable SSH known_hosts verification")
 
 var log = newLoggerOrDie()
 
@@ -152,7 +154,7 @@ func main() {
 	}
 
 	if *flSSH {
-		if err := setupGitSSH(); err != nil {
+		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
 			os.Exit(1)
 		}
@@ -468,7 +470,7 @@ func setupGitAuth(username, password, gitURL string) error {
 	return nil
 }
 
-func setupGitSSH() error {
+func setupGitSSH(setupKnownHosts bool) error {
 	log.V(1).Infof("setting up git SSH credentials")
 
 	var pathToSSHSecret = "/etc/git-secret/ssh"
@@ -483,8 +485,18 @@ func setupGitSSH() error {
 		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
 	}
 
+	if setupKnownHosts {
+		_, err := os.Stat(pathToSSHKnownHosts)
+		if err != nil {
+			return fmt.Errorf("error: could not find SSH known_hosts file: %v", err)
+		}
+
+		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
+	} else {
+		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
+	}
+
 	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
-	err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
 	if err != nil {
 		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
 	}

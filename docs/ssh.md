@@ -39,6 +39,8 @@ Create the Secret using ``kubectl create -f``.
 kubectl create -f /path/to/secret-config.json
 ```
 
+Invoke the `git-sync` binary with the `-ssh-known-hosts` parameter to enforce `known_hosts` checking. This will be enabled by default in a future release.
+
 ## Step 2: Configure Pod/Deployment Volume
 
 In your Pod or Deployment configuration, specify a Volume for mounting the Secret. Ensure that secretName matches the name you used when creating the Secret (e.g. "git-creds" used in both above examples).
