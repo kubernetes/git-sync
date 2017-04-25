@@ -6,15 +6,21 @@ Git-sync supports using the SSH protocol for pulling git content.
 Create a Secret to store your SSH private key, with the Secret keyed as "ssh". This can be done one of two ways:
 
 ***Method 1:***
+Obtain the host keys for your git server:
+
+```
+ssh-keyscan $YOUR_GIT_HOST > /tmp/known_hosts
+```
 
 Use the ``kubectl create secret`` command and point to the file on your filesystem that stores the key. Ensure that the file is mapped to "ssh" as shown (the file can be located anywhere).
+
 ```
-kubectl create secret generic git-creds --from-file=ssh=~/.ssh/id_rsa
+kubectl create secret generic git-creds --from-file=ssh=~/.ssh/id_rsa --from-file=known_hosts=/tmp/known_hosts
 ```
 
 ***Method 2:***
 
-Write a config file for a Secret that holds your SSH private key, with the key (pasted as plaintext) mapped to the "ssh" field.
+Write a config file for a Secret that holds your SSH private key, with the key (pasted in base64 encoded plaintext) mapped to the "ssh" field.
 ```
 {
   "kind": "Secret",
@@ -23,7 +29,8 @@ Write a config file for a Secret that holds your SSH private key, with the key (
     "name": "git-creds"
   },
   "data": {
-    "ssh": <private-key>
+    "ssh": <base64 encoded private-key>
+    "known_hosts": <base64 encoded known_hosts>
 }
 ```
 
@@ -31,6 +38,8 @@ Create the Secret using ``kubectl create -f``.
 ```
 kubectl create -f /path/to/secret-config.json
 ```
+
+Invoke the `git-sync` binary with the `-ssh-known-hosts` parameter to enforce `known_hosts` checking. This will be enabled by default in a future release.
 
 ## Step 2: Configure Pod/Deployment Volume
 
