@@ -23,7 +23,13 @@ RUN apk update --no-cache && apk add \
     ca-certificates \
     coreutils \
     git \
-    openssh-client
+    openssh-client \
+    wget
+
+RUN wget -O /sbin/tini https://github.com/krallin/tini/releases/download/v0.14.0/tini-static-ARG_ARCH && \
+  chmod +x /sbin/tini
 
 USER nobody:nobody
-ENTRYPOINT ["/ARG_BIN"]
+ENTRYPOINT ["/sbin/tini", "--"]
+
+CMD ["/ARG_BIN"]
