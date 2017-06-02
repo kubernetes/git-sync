@@ -54,6 +54,8 @@ var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
+var flSubmodule = flag.Bool("submodule", envBool("GIT_SYNC_SUBMODULE", false),
+	"init and update submodule")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
@@ -166,7 +168,7 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
-		if err := syncRepo(*flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+		if err := syncRepo(*flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flSubmodule); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
 				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
@@ -266,7 +268,7 @@ func updateSymlink(gitRoot, link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
+func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string, submodule bool, depth int) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
 	// Update from the remote.
@@ -301,6 +303,18 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
 		return err
 	}
 	log.V(0).Infof("reset worktree %s to %s", worktreePath, hash)
+
+	if submodule {
+		args := []string{"submodule", "update", "--init"}
+		if depth != 0 {
+			args = append(args, "--depth", strconv.Itoa(depth))
+		}
+		_, err := runCommand(worktreePath, "git", args...)
+		if err != nil {
+			return err
+		}
+		log.V(0).Infof("updated submodules")
+	}
 
 	if *flChmod != 0 {
 		// set file permissions
@@ -349,7 +363,7 @@ func revIsHash(rev, gitRoot string) (bool, error) {
 }
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
+func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string, submodule bool) error {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	hash := rev
@@ -364,6 +378,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 		if err != nil {
 			return err
 		}
+
 	case err != nil:
 		return fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
@@ -382,7 +397,7 @@ func syncRepo(repo, branch, rev string, depth int, gitRoot, dest string) error {
 		}
 	}
 
-	return addWorktreeAndSwap(gitRoot, dest, branch, rev, hash)
+	return addWorktreeAndSwap(gitRoot, dest, branch, rev, hash, submodule, depth)
 }
 
 // getRevs returns the local and upstream hashes for rev.
