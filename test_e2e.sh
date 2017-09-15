@@ -369,5 +369,27 @@ pkill git-sync
 wait
 pass
 
+# Test rev-sync one-time
+testcase "rev-once"
+# First sync
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+REV=$(git -C "$REPO" rev-list -n1 HEAD)
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --rev="$REV" \
+    --root="$ROOT" \
+    --dest="link" \
+    --one-time > "$DIR"/log."$TESTCASE" 2>&1
+sleep 2
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
 echo "cleaning up $DIR"
 rm -rf "$DIR"
