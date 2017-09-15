@@ -179,15 +179,15 @@ func main() {
 			continue
 		}
 		if initialSync {
+			if *flOneTime {
+				os.Exit(0)
+			}
 			if isHash, err := revIsHash(*flRev, *flRoot); err != nil {
 				log.Errorf("can't tell if rev %s is a git hash, exiting", *flRev)
 				os.Exit(1)
 			} else if isHash {
 				log.V(0).Infof("rev %s appears to be a git hash, no further sync needed", *flRev)
 				sleepForever()
-			}
-			if *flOneTime {
-				os.Exit(0)
 			}
 			initialSync = false
 		}
