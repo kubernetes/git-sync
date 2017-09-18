@@ -66,7 +66,7 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
-var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", false),
+var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
 
 var log = newLoggerOrDie()
