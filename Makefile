@@ -19,7 +19,7 @@ BIN := git-sync
 PKG := k8s.io/git-sync
 
 # Where to push the docker image.
-REGISTRY ?= gcr.io/google-containers
+REGISTRY ?= staging-k8s.gcr.io
 
 # Which architecture to build - see $(ALL_ARCH) for options.
 ARCH ?= amd64
@@ -93,6 +93,7 @@ bin/$(ARCH)/$(BIN): build-dirs
 	    -v $$(pwd)/bin/$(ARCH):/go/bin/linux_$(ARCH)                       \
 	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static  \
 	    -w /go/src/$(PKG)                                                  \
+	    --rm                                                               \
 	    $(BUILD_IMAGE)                                                     \
 	    /bin/sh -c "                                                       \
 	        ARCH=$(ARCH)                                                   \

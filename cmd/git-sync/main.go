@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -68,6 +69,15 @@ var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
+
+var doWebhook = flag.Bool("webhook", envBool("WEBHOOK_ENABLED", false),
+	"trigger webhook on sucessfull git sync")
+var webhook = flag.String("webhook-url", envString("WEBHOOK_URL", ""),
+	"the url to send a request to when git synced")
+var webhookMethod = flag.String("webhook-method", envString("WEBHOOK_METHOD", "POST"),
+	"the HTTP method url to use to send the webhook")
+var webhookStatusCode = flag.Int("webhook-status-code", envInt("WEBHOOK_CODE", 200),
+	"the HTTP status code indicating successful triggering of reload")
 
 var log = newLoggerOrDie()
 
@@ -121,6 +131,26 @@ func envFloat(key string, def float64) float64 {
 		return val
 	}
 	return def
+}
+
+func WebHookCall(url string, method string, statusCode int) bool {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		log.Errorf("Error calling webhook %q:", err)
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Errorf("Error calling webhook %q:", err)
+		return false
+	}
+	resp.Body.Close()
+	if resp.StatusCode != statusCode {
+		log.Errorf("Received response code %q expected %q:", resp.StatusCode, statusCode)
+		return false
+	}
+	log.V(0).Infof("Webhook been sucessful")
+	return true
 }
 
 func main() {
@@ -178,6 +208,11 @@ func main() {
 			time.Sleep(waitTime(*flWait))
 			continue
 		}
+
+		if *doWebhook {
+			WebHookCall(*webhook, *webhookMethod, *webhookStatusCode)
+		}
+
 		if initialSync {
 			if *flOneTime {
 				os.Exit(0)
