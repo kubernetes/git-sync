@@ -13,9 +13,8 @@ function testcase() {
 
 function fail() {
     echo "FAIL: " "$@"
-    sleep 2
-    pkill git-sync || true
-    ps auxw | grep git-sync
+    sleep 3
+    remove_sync_container || true
     exit 1
 }
 
@@ -47,6 +46,16 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
+function finish() {
+  if [ $? -ne 0 ]; then
+    echo "The directory $DIR was not removed as it contains"\
+         "log files useful for debugging"
+    remove_sync_container
+  fi
+}
+
+trap finish INT EXIT
+
 #########################
 # main
 #########################
@@ -65,14 +74,22 @@ if [[ -z "$DIR" ]]; then
 fi
 echo "test root is $DIR"
 
+CONTAINER_NAME=git-sync-$RANDOM
 function GIT_SYNC() {
     #./bin/amd64/git-sync "$@"
     docker run \
+        --name $CONTAINER_NAME \
         -i \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
+        --rm \
         e2e/git-sync-amd64:$(make -s version) \
         "$@"
+}
+
+function remove_sync_container() {
+    # Verify the container is running using 'docker top' before removing
+    docker top $CONTAINER_NAME >/dev/null 2>&1 && docker rm -f $CONTAINER_NAME
 }
 
 REPO="$DIR/repo"
@@ -124,25 +141,25 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move backward
 git -C "$REPO" reset -q --hard HEAD^
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -160,25 +177,25 @@ GIT_SYNC \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Move HEAD forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move HEAD backward
 git -C "$REPO" reset -q --hard HEAD^
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -198,7 +215,7 @@ GIT_SYNC \
     --branch="$BRANCH" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -207,7 +224,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
@@ -215,12 +232,12 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -239,7 +256,7 @@ GIT_SYNC \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -247,26 +264,26 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 2" >/dev/null
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move the tag backward
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 3" >/dev/null
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Add something after the tag
 echo "$TESTCASE 3" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 3"
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -288,7 +305,7 @@ GIT_SYNC \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -298,7 +315,7 @@ echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
@@ -307,7 +324,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -316,7 +333,7 @@ git -C "$REPO" checkout -q "$BRANCH"
 echo "$TESTCASE 3" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 3"
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -324,12 +341,12 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 3" >/dev/null
 git -C "$REPO" checkout -q master
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 3"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -347,25 +364,25 @@ GIT_SYNC \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Commit something new
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Revert the last change
 git -C "$REPO" reset -q --hard HEAD^
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-pkill git-sync
+remove_sync_container
 wait
 pass
 
@@ -384,7 +401,7 @@ GIT_SYNC \
     --root="$ROOT" \
     --dest="link" \
     --one-time > "$DIR"/log."$TESTCASE" 2>&1
-sleep 2
+sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
