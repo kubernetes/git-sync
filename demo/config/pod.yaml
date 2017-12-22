@@ -7,7 +7,7 @@ metadata:
 spec:
   containers:
   - name: git-sync
-    image: gcr.io/google_containers/git-sync:v2.0.4
+    image: k8s.gcr.io/git-sync:v2.0.4
     imagePullPolicy: Always
     volumeMounts:
     - name: markdown
@@ -18,7 +18,7 @@ spec:
     - name: GIT_SYNC_DEST
       value: git
   - name: hugo
-    image: gcr.io/google_containers/hugo
+    image: k8s.gcr.io/hugo
     imagePullPolicy: Always
     securityContext:
       runAsUser: 0
