@@ -19,7 +19,7 @@ BIN := git-sync
 PKG := k8s.io/git-sync
 
 # Where to push the docker image.
-REGISTRY ?= gcr.io/google-containers
+REGISTRY ?= staging-k8s.gcr.io
 
 # Which architecture to build - see $(ALL_ARCH) for options.
 ARCH ?= amd64
