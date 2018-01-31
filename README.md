@@ -11,6 +11,7 @@ it re-pulls, it updates the destination directory atomically.  In order to do
 this, it uses a git worktree in a subdirectory of the `--root` and flips a
 symlink.
 
+Webhook call added on sucessful git repo syncronisation. 
 ## Usage
 
 ```
@@ -21,8 +22,8 @@ make container REGISTRY=registry TAG=tag
 docker run -d \
     -v /tmp/git-data:/git \
     registry/git-sync:tag \
-        --repo=https://github.com/kubernetes/git-sync
-        --branch=master
+        --repo=https://github.com/kubernetes/git-sync \
+        --branch=master \
         --wait=30
 
 # run an nginx container to serve the content
@@ -30,6 +31,20 @@ docker run -d \
     -p 8080:80 \
     -v /tmp/git-data:/usr/share/nginx/html \
     nginx
+```
+
+Example of webhook usage
+
+```
+# run the container
+docker run -d \
+    -v /tmp/git-data:/git \
+    registry/git-sync:tag \
+        --repo=https://github.com/kubernetes/git-sync
+        --branch=master
+        --wait=30
+        --webhook=true \
+        --webhook-url=http://localhost:8080/reload
 ```
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
