@@ -17,7 +17,6 @@ FROM ARG_FROM
 MAINTAINER Tim Hockin <thockin@google.com>
 
 ADD bin/ARG_ARCH/ARG_BIN /ARG_BIN
-ENV GIT_SYNC_DEST /git
 
 RUN apk update --no-cache && apk add \
     ca-certificates \
