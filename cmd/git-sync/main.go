@@ -20,10 +20,12 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -68,6 +70,19 @@ var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
+
+var webhooks = flag.String("webhooks", envString("WEBHOOKS", "[]"),
+	"the JSON formatted array of webhooks to be send a request to when git synced")
+
+// WebHook structure
+type WebHook struct {
+	URL     string `json:"url"`
+	Method  string `json:"method"`
+	Success int    `json:"success"`
+}
+
+// WebHookCollection structure
+type WebHookCollection []WebHook
 
 var log = newLoggerOrDie()
 
@@ -160,6 +175,14 @@ func main() {
 		}
 	}
 
+	// Parse webhooks
+	WebhookArray := new(WebHookCollection)
+
+	if err := json.Unmarshal([]byte(*webhooks), &WebhookArray); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing webhooks JSON: %v\n", err)
+		os.Exit(1)
+	}
+
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)
 
@@ -178,7 +201,17 @@ func main() {
 			time.Sleep(waitTime(*flWait))
 			continue
 		}
+
 		if initialSync {
+			// Call webhooks one after another
+			for _, v := range *WebhookArray {
+				log.V(0).Infof("calling webhook %v\n", v.URL)
+				if err := WebHookCall(v.URL, v.Method, v.Success); err != nil {
+					log.Errorf("error calling webhook %v: %v", v.URL, err)
+				} else {
+					log.V(0).Infof("calling webhook %v was: OK\n", v.URL)
+				}
+			}
 			if *flOneTime {
 				os.Exit(0)
 			}
@@ -196,6 +229,23 @@ func main() {
 		log.V(1).Infof("next sync in %v", waitTime(*flWait))
 		time.Sleep(waitTime(*flWait))
 	}
+}
+
+// WebHookCall Do webhook call
+func WebHookCall(url string, method string, statusCode int) error {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode != statusCode {
+		return fmt.Errorf("received response code %q expected %q", resp.StatusCode, statusCode)
+	}
+	return nil
 }
 
 func waitTime(seconds float64) time.Duration {
@@ -482,7 +532,7 @@ func setupGitSSH(setupKnownHosts bool) error {
 	}
 
 	if fileInfo.Mode() != 0400 {
-		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
+		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400). ", fileInfo.Mode())
 	}
 
 	if setupKnownHosts {
