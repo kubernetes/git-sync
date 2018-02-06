@@ -49,7 +49,7 @@ var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
 	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --root)")
+	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
