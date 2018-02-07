@@ -122,10 +122,10 @@ container-name:
 
 push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
-	@gcloud docker push $(IMAGE):$(VERSION)
+	@gcloud docker -- push $(IMAGE):$(VERSION)
 	@docker images -q $(IMAGE):$(VERSION) > $@
 	@if [ "$(ARCH)" = "amd64" ]; then \
-	    gcloud docker push $(LEGACY_IMAGE):$(VERSION); \
+	    gcloud docker -- push $(LEGACY_IMAGE):$(VERSION); \
 	fi
 
 push-name:
