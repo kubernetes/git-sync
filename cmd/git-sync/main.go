@@ -67,7 +67,7 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
-var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", false),
+var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
 
 var doWebhook = flag.Bool("webhook", envBool("WEBHOOK_ENABLED", false),
@@ -214,15 +214,15 @@ func main() {
 		}
 
 		if initialSync {
+			if *flOneTime {
+				os.Exit(0)
+			}
 			if isHash, err := revIsHash(*flRev, *flRoot); err != nil {
 				log.Errorf("can't tell if rev %s is a git hash, exiting", *flRev)
 				os.Exit(1)
 			} else if isHash {
 				log.V(0).Infof("rev %s appears to be a git hash, no further sync needed", *flRev)
 				sleepForever()
-			}
-			if *flOneTime {
-				os.Exit(0)
 			}
 			initialSync = false
 		}
