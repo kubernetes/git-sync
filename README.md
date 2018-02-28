@@ -51,7 +51,7 @@ docker run -d \
         --repo=https://github.com/kubernetes/git-sync
         --branch=master
         --wait=30
-        --webhook='[{"url": "http://localhost:9090/-/reload", "method": "POST", "success": 200}]'
+        --webhooks='[{"url": "http://localhost:9090/-/reload", "method": "POST", "success": 200}]'
 ```
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
