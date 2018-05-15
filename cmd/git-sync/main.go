@@ -69,6 +69,9 @@ var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
 
+var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
+	"use git cookiefile")
+
 var log = newLoggerOrDie()
 
 func newLoggerOrDie() logr.Logger {
@@ -156,6 +159,13 @@ func main() {
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *flCookieFile {
+		if err := setupGitCookieFile(); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -499,6 +509,25 @@ func setupGitSSH(setupKnownHosts bool) error {
 	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
 	if err != nil {
 		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
+	}
+
+	return nil
+}
+
+func setupGitCookieFile() error {
+	log.V(1).Infof("configuring git cookie file")
+
+	var pathToCookieFile = "/etc/git-secret/cookie_file"
+
+	_, err := os.Stat(pathToCookieFile)
+	if err != nil {
+		return fmt.Errorf("error: could not find git cookie file: %v", err)
+	}
+
+	cmd := exec.Command("git", "config", "--global", "http.cookiefile", pathToCookieFile)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error configuring git cookie file %v: %s", err, string(output))
 	}
 
 	return nil
