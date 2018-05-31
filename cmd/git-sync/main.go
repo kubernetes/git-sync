@@ -149,6 +149,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if (*flUsername != "" || *flPassword != "" || *flCookieFile) && *flSSH {
+		fmt.Fprintf(os.Stderr, "ERROR: GIT_SYNC_SSH set but HTTP parameters provided. These cannot be used together.")
+		os.Exit(1)
+	}
+
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
