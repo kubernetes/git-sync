@@ -58,6 +58,8 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
+var flChown = flag.String("change-ownership", envString("GIT_SYNC_OWNER", ""),
+	"the owner of the checked-out files (user:group)")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
@@ -320,6 +322,14 @@ func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
 	if *flChmod != 0 {
 		// set file permissions
 		_, err = runCommand("", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if *flChown != "" {
+		// set file owner
+		_, err = runCommand("", "chown", "-R", *flChown, worktreePath)
 		if err != nil {
 			return err
 		}
