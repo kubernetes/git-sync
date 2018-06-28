@@ -1,0 +1,57 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: blog
+  labels:
+    name: blog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: blog
+  template:
+    metadata:
+      labels:
+        name: blog
+    spec:
+      containers:
+      - name: git-sync
+        image: staging-k8s.gcr.io/git-sync-amd64:v2.0.6
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: markdown
+          mountPath: /git
+        env:
+        - name: GIT_SYNC_REPO
+          value: https://github.com/kubernetes/git-sync.git
+        - name: GIT_SYNC_DEST
+          value: git-sync
+      - name: hugo
+        image: k8s.gcr.io/hugo
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: markdown
+          mountPath: /src
+        - name: html
+          mountPath: /dest
+        env:
+        - name: HUGO_SRC
+          value: /src/git-sync/demo/blog
+        - name: HUGO_BUILD_DRAFT
+          value: "true"
+        - name: HUGO_BASE_URL
+          value: example.com
+      - name: nginx
+        image: nginx
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+        ports:
+        - containerPort: 80
+      volumes:
+      - name: markdown
+        emptyDir: {}
+      - name: html
+        emptyDir: {}
