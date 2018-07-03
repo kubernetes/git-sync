@@ -43,7 +43,7 @@ ALL_ARCH := amd64
 
 # Set default base image dynamically for each arch
 ifeq ($(ARCH),amd64)
-    BASEIMAGE?=alpine:3.4
+    BASEIMAGE?=alpine:3.7
 endif
 ifeq ($(ARCH),arm)
     BASEIMAGE?=armel/busybox
@@ -58,7 +58,7 @@ endif
 IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 LEGACY_IMAGE := $(REGISTRY)/$(BIN)
 
-BUILD_IMAGE ?= golang:1.9-alpine
+BUILD_IMAGE ?= golang:1.10-alpine
 
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
@@ -92,6 +92,7 @@ bin/$(ARCH)/$(BIN): build-dirs
 	    -v $$(pwd)/bin/$(ARCH):/go/bin                                     \
 	    -v $$(pwd)/bin/$(ARCH):/go/bin/linux_$(ARCH)                       \
 	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static  \
+	    -v $$(pwd)/.go/cache:/.cache                                       \
 	    -w /go/src/$(PKG)                                                  \
 	    --rm                                                               \
 	    $(BUILD_IMAGE)                                                     \
@@ -142,6 +143,7 @@ test: build-dirs
 	    -v $$(pwd):/go/src/$(PKG)                                          \
 	    -v $$(pwd)/bin/$(ARCH):/go/bin                                     \
 	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static  \
+	    -v $$(pwd)/.go/cache:/.cache                                       \
 	    -w /go/src/$(PKG)                                                  \
 	    $(BUILD_IMAGE)                                                     \
 	    /bin/sh -c "                                                       \
@@ -151,7 +153,7 @@ test: build-dirs
 
 build-dirs:
 	@mkdir -p bin/$(ARCH)
-	@mkdir -p .go/src/$(PKG) .go/pkg .go/bin .go/std/$(ARCH)
+	@mkdir -p .go/src/$(PKG) .go/pkg .go/bin .go/std/$(ARCH) .go/cache
 
 clean: container-clean bin-clean
 
