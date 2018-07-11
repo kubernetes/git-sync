@@ -23,7 +23,7 @@ docker run -d \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync
         --branch=master
-        --wait=30
+        --interval=30
 
 # run an nginx container to serve the content
 docker run -d \
