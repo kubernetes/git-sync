@@ -116,7 +116,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --branch=master \
     --rev=HEAD \
@@ -137,7 +137,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -160,7 +160,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test HEAD syncing
@@ -171,7 +171,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --branch=master \
     --rev=HEAD \
@@ -196,7 +196,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test branch syncing
@@ -210,7 +210,7 @@ git -C "$REPO" checkout -q master
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
@@ -238,7 +238,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test tag syncing
@@ -251,7 +251,7 @@ git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -284,7 +284,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test cross-branch tag syncing
@@ -300,7 +300,7 @@ git -C "$REPO" checkout -q master
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -347,7 +347,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 3"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test rev syncing
@@ -359,7 +359,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
@@ -383,7 +383,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-wait
+interval
 pass
 
 # Test rev-sync one-time
@@ -395,7 +395,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --interval=0.1 \
     --repo="$REPO" \
     --rev="$REV" \
     --root="$ROOT" \

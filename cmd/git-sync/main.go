@@ -50,7 +50,7 @@ var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
 	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
-var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
+var flInterval = flag.Float64("interval", envFloat("GIT_SYNC_INTERVAL", 0),
 	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
@@ -189,8 +189,8 @@ func main() {
 
 			failCount++
 			log.Errorf("unexpected error syncing repo: %v", err)
-			log.V(0).Infof("waiting %v before retrying", waitTime(*flWait))
-			time.Sleep(waitTime(*flWait))
+			log.V(0).Infof("intervaling %v before retrying", intervalTime(*flInterval))
+			time.Sleep(intervalTime(*flInterval))
 			continue
 		}
 		if initialSync {
@@ -208,12 +208,12 @@ func main() {
 		}
 
 		failCount = 0
-		log.V(1).Infof("next sync in %v", waitTime(*flWait))
-		time.Sleep(waitTime(*flWait))
+		log.V(1).Infof("next sync in %v", intervalTime(*flInterval))
+		time.Sleep(intervalTime(*flInterval))
 	}
 }
 
-func waitTime(seconds float64) time.Duration {
+func intervalTime(seconds float64) time.Duration {
 	return time.Duration(int(seconds*1000)) * time.Millisecond
 }
 
