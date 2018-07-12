@@ -147,6 +147,16 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+	if *flOneTime == false && *flWait != 0 {
+		if *flInterval == 0 {
+			log.Errorf("wait is deprecated. use interval instead")
+			*flInterval = *flWait
+		} else {
+			fmt.Fprintf(os.Stderr, "ERROR: use only one --interval or --wait. These cannot be used together.\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: git executable not found: %v\n", err)
 		os.Exit(1)
