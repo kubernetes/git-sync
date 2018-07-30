@@ -269,42 +269,50 @@ func updateSymlink(gitRoot, link, newDir string) error {
 func addWorktreeAndSwap(gitRoot, dest, branch, rev, hash string) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
-	// Update from the remote.
-	if _, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch); err != nil {
-		return err
-	}
-
 	// Make a worktree for this exact git hash.
 	worktreePath := path.Join(gitRoot, "rev-"+hash)
-	_, err := runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
-	if err != nil {
-		return err
-	}
-	log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
+	if *flOneTime {
+		_, err := runCommand(gitRoot, "git", "worktree", "add", worktreePath, hash)
+		if err != nil {
+			return err
+		}
+		log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
+	} else {
+		// Update from the remote.
+		if _, err := runCommand(gitRoot, "git", "fetch", "--tags", "origin", branch); err != nil {
+			return err
+		}
 
-	// The .git file in the worktree directory holds a reference to
-	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
-	// using relative paths, so that other containers can use a different volume
-	// mount name.
-	worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
-	if err != nil {
-		return err
-	}
-	gitDirRef := []byte(path.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
-	if err = ioutil.WriteFile(path.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
-		return err
-	}
+		_, err := runCommand(gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
+		if err != nil {
+			return err
+		}
+		log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
 
-	// Reset the worktree's working copy to the specific rev.
-	_, err = runCommand(worktreePath, "git", "reset", "--hard", hash)
-	if err != nil {
-		return err
+		// The .git file in the worktree directory holds a reference to
+		// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
+		// using relative paths, so that other containers can use a different volume
+		// mount name.
+		worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
+		if err != nil {
+			return err
+		}
+		gitDirRef := []byte(path.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
+		if err = ioutil.WriteFile(path.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+			return err
+		}
+
+		// Reset the worktree's working copy to the specific rev.
+		_, err = runCommand(worktreePath, "git", "reset", "--hard", hash)
+		if err != nil {
+			return err
+		}
+		log.V(0).Infof("reset worktree %s to %s", worktreePath, hash)
 	}
-	log.V(0).Infof("reset worktree %s to %s", worktreePath, hash)
 
 	if *flChmod != 0 {
 		// set file permissions
-		_, err = runCommand("", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
+		_, err := runCommand("", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
 		if err != nil {
 			return err
 		}
