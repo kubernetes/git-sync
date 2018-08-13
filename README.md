@@ -15,7 +15,7 @@ symlink.
 
 ```
 # build the container
-make container REGISTRY=registry TAG=tag
+make container REGISTRY=registry VERSION=tag
 
 # run the container
 docker run -d \

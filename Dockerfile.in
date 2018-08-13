@@ -24,5 +24,8 @@ RUN apk update --no-cache && apk add \
     git \
     openssh-client
 
+# Set $HOME so git can create things like .gitconfig
+ENV HOME /tmp
+
 USER nobody:nobody
 ENTRYPOINT ["/ARG_BIN"]

@@ -31,6 +31,7 @@ Write a config file for a Secret that holds your SSH private key, with the key (
   "data": {
     "ssh": <base64 encoded private-key>
     "known_hosts": <base64 encoded known_hosts>
+  }
 }
 ```
 

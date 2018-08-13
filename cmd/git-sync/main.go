@@ -46,7 +46,7 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
 
-var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
+var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
@@ -68,6 +68,9 @@ var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
+
+var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
+	"use git cookiefile")
 
 var log = newLoggerOrDie()
 
@@ -146,6 +149,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if (*flUsername != "" || *flPassword != "" || *flCookieFile) && *flSSH {
+		fmt.Fprintf(os.Stderr, "ERROR: GIT_SYNC_SSH set but HTTP parameters provided. These cannot be used together.")
+		os.Exit(1)
+	}
+
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
@@ -156,6 +164,13 @@ func main() {
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *flCookieFile {
+		if err := setupGitCookieFile(); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -507,6 +522,25 @@ func setupGitSSH(setupKnownHosts bool) error {
 	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
 	if err != nil {
 		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
+	}
+
+	return nil
+}
+
+func setupGitCookieFile() error {
+	log.V(1).Infof("configuring git cookie file")
+
+	var pathToCookieFile = "/etc/git-secret/cookie_file"
+
+	_, err := os.Stat(pathToCookieFile)
+	if err != nil {
+		return fmt.Errorf("error: could not find git cookie file: %v", err)
+	}
+
+	cmd := exec.Command("git", "config", "--global", "http.cookiefile", pathToCookieFile)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error configuring git cookie file %v: %s", err, string(output))
 	}
 
 	return nil

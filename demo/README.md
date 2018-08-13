@@ -12,6 +12,8 @@ The pod is composed of 3 containers that share directories using 2 volumes:
 
 ## Usage
 
+### Build demo containers (Optional)
+
 Build the demo containers, and push them to a registry
 
 ```
@@ -20,11 +22,14 @@ docker build -t <some-registry>/hugo hugo/
 docker push <some-registry>/hugo <some-registry>/git-sync
 ```
 
+If you end up using a different registry, be sure to update `config/deployment.yaml`.
+
+###
+
 Create the pod and the service for the blog
 
 ```
-kubectl pods create config/pod.yaml
-kubectl services create config/service.yaml
+kubectl create -f config
 ```
 
 Open the service external ip in your browser
