@@ -129,6 +129,29 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+# Test tag syncing one-time using the branch option
+testcase "tag-once"
+TAG="$TESTCASE"--TAG
+# First sync
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+git -C "$REPO" tag -af "$TAG" -m "$TESTCASE" >/dev/null
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --branch="$TAG" \
+    --root="$ROOT" \
+    --dest="link" \
+    --one-time > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+wait
+pass
+
 # Test default syncing
 testcase "default-sync"
 # First sync
