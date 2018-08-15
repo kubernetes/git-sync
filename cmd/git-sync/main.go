@@ -46,7 +46,7 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
 
-var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", "/git"),
+var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git operations")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
