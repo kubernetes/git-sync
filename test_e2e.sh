@@ -139,7 +139,6 @@ git -C "$REPO" tag -af "$TAG" -m "$TESTCASE" >/dev/null
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
     --repo="$REPO" \
     --branch="$TAG" \
     --root="$ROOT" \
