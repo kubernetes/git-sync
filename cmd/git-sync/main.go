@@ -72,6 +72,9 @@ var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", tr
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
+var flSSHExtraArgs = flag.String("ssh-extra-args", envString("SSH_EXTRA_ARGS", ""),
+	"extra arguments to be passed to ssh command used by git")
+
 var log = newLoggerOrDie()
 
 func newLoggerOrDie() logr.Logger {
@@ -162,7 +165,7 @@ func main() {
 	}
 
 	if *flSSH {
-		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
+		if err := setupGitSSH(*flSSHKnownHosts, *flSSHExtraArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
 			os.Exit(1)
 		}
@@ -498,7 +501,7 @@ func setupGitAuth(username, password, gitURL string) error {
 	return nil
 }
 
-func setupGitSSH(setupKnownHosts bool) error {
+func setupGitSSH(setupKnownHosts bool, extraArgs string) error {
 	log.V(1).Infof("setting up git SSH credentials")
 
 	var pathToSSHSecret = "/etc/git-secret/ssh"
@@ -513,18 +516,21 @@ func setupGitSSH(setupKnownHosts bool) error {
 		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
 	}
 
+	var cmd string
 	if setupKnownHosts {
 		_, err := os.Stat(pathToSSHKnownHosts)
 		if err != nil {
 			return fmt.Errorf("error: could not find SSH known_hosts file: %v", err)
 		}
 
-		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
+		cmd = fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s %s", pathToSSHKnownHosts, pathToSSHSecret, extraArgs)
 	} else {
-		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
+		cmd = fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s %s", pathToSSHSecret, extraArgs)
 	}
 
+	log.V(5).Infof("GIT_SSH_COMMAND set to \"%s\"", cmd)
 	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
+	err = os.Setenv("GIT_SSH_COMMAND", cmd)
 	if err != nil {
 		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
 	}
