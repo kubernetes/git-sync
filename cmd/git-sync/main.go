@@ -32,7 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"http"
+	"net/http"
 
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
@@ -264,6 +264,16 @@ func updateSymlink(gitRoot, link, newDir string) error {
 	}
 	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
 
+	// If there is a symlink update callback, call it
+	if len(*flSymlinkUpdatePostUrl) > 0 {
+		log.V(0).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
+		// Send the post request
+		_, err := http.NewRequest("POST", *flSymlinkUpdatePostUrl, nil)
+		if err != nil {
+			return fmt.Errorf("error sending symlink update callback post request: %v", err)
+		}
+	}
+
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
 		if err = os.RemoveAll(currentDir); err != nil {
@@ -278,15 +288,6 @@ func updateSymlink(gitRoot, link, newDir string) error {
 		}
 
 		log.V(1).Infof("pruned old worktrees")
-	}
-	
-	// If there is a symlink update callback, call it
-	if len(*flSymlinkUpdateCallback) > 0 {
-		// Send the post request
-		resp, err := http.NewRequest("POST", url, nil)
-		if err != nil {
-			return fmt.Errorf("error sending symlink update callback post request: %v", err)
-		}
 	}
 
 	return nil
