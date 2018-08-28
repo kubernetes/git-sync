@@ -266,7 +266,7 @@ func updateSymlink(gitRoot, link, newDir string) error {
 
 	// If there is a symlink update callback, call it
 	if len(*flSymlinkUpdatePostUrl) > 0 {
-		log.V(0).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
+		log.V(1).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
 		// Send the post request
 		req, err := http.NewRequest("POST", *flSymlinkUpdatePostUrl, nil)
 		if err != nil {
