@@ -33,3 +33,23 @@ docker run -d \
 ```
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
+
+## Env
+
+| Name | Desc |
+| --- | --- |
+| GIT_SYNC_REPO | the git repository to clone |
+| GIT_SYNC_BRANCH | the git branch to check out |
+| GIT_SYNC_REV | the git revision (tag or hash) to check out |
+| GIT_SYNC_DEPTH | use a shallow clone with a history truncated to the specified number of commits |
+| GIT_SYNC_ROOT | the root directory for git operations |
+| GIT_SYNC_DEST | the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo) |
+| GIT_SYNC_WAIT | the number of seconds between syncs |
+| GIT_SYNC_ONE_TIME | exit after the initial checkout |
+| GIT_SYNC_MAX_SYNC_FAILURES | the number of consecutive failures allowed before aborting (the first pull must succeed) |
+| GIT_SYNC_PERMISSIONS | the file permissions to apply to the checked-out files |
+| GIT_SYNC_USERNAME | the username to use |
+| GIT_SYNC_PASSWORD | the password to use |
+| GIT_SYNC_SSH | use SSH for git operations |
+| GIT_KNOWN_HOSTS | enable SSH known_hosts verification |
+| GIT_COOKIE_FILE | use git cookiefile |
