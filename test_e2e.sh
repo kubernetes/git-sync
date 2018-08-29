@@ -89,7 +89,8 @@ function GIT_SYNC() {
 
 function remove_sync_container() {
     # Verify the container is running using 'docker top' before removing
-    docker top $CONTAINER_NAME >/dev/null 2>&1 && docker rm -f $CONTAINER_NAME
+    docker top $CONTAINER_NAME >/dev/null 2>&1 && \
+    docker rm -f $CONTAINER_NAME >/dev/null 2>&1
 }
 
 REPO="$DIR/repo"
@@ -427,6 +428,39 @@ sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+# Test syncing after a crash
+testcase "crash-cleanup-retry"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Corrupt it
+rm -f "$ROOT"/link
+# Try again
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 pass
 

@@ -344,7 +344,20 @@ func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 	args = append(args, repo, gitRoot)
 	_, err := runCommand("", "git", args...)
 	if err != nil {
-		return err
+		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
+			// Maybe a previous run crashed?  Git won't use this dir.
+			log.V(0).Infof("%s exists and is not empty (previous crash?), cleaning up", gitRoot)
+			err := os.RemoveAll(gitRoot)
+			if err != nil {
+				return err
+			}
+			_, err = runCommand("", "git", args...)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	log.V(0).Infof("cloned %s", repo)
 
