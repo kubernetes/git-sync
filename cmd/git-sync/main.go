@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/http"
 
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
@@ -58,6 +59,8 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
+var flSymlinkUpdatePostUrl = flag.String("symlink-update-post-url", envString("GIT_SYNC_SYMLINK_UPDATE_POST_URL", ""),
+	"a command to run when the symlink is updated")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
@@ -260,6 +263,19 @@ func updateSymlink(gitRoot, link, newDir string) error {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
 	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
+
+	// If there is a symlink update callback, call it
+	if len(*flSymlinkUpdatePostUrl) > 0 {
+		log.V(1).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
+		// Send the post request
+		req, err := http.NewRequest("POST", *flSymlinkUpdatePostUrl, nil)
+		if err != nil {
+			fmt.Errorf("error sending post request (after symlink update): %v", err)
+		}
+		c := &http.Client{}
+		resp, err := c.Do(req)
+		resp.Body.Close()
+	}
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
