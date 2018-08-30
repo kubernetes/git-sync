@@ -11,6 +11,7 @@ it re-pulls, it updates the destination directory atomically.  In order to do
 this, it uses a git worktree in a subdirectory of the `--root` and flips a
 symlink.
 
+git-sync can also be configured to make webhook call upon sucessful git repo syncronisation. The call is made when right after the symlink is updated.
 ## Usage
 
 ```
@@ -32,4 +33,26 @@ docker run -d \
     nginx
 ```
 
+## Example of webhooks usage
+**Webhook config example**
+A webhook config must be valid JSON. If ```success``` is not specified in the config, git-sync will not wait for a response.
+```json
+{   
+    "url": "http://localhost:9090/-/reload", 
+    "method": "POST|GET",
+    "success": 200
+}
+```
+**Usage**
+
+```
+docker run -d \
+    -v /tmp/git-data:/git \
+    registry/git-sync:tag \
+        --repo=https://github.com/kubernetes/git-sync
+        --branch=master
+        --wait=30
+        --webhook='[{"url": "http://localhost:9090/-/reload", "method": "POST", "success": 200}]'
+        --webhook='[{"url": "http://1.2.3.4:9090/-/reload", "method": "POST"}]'
+```
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()

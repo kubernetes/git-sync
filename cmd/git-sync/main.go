@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 	"net/http"
+	"encoding/json"
 
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
@@ -59,8 +60,11 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
-var flSymlinkUpdatePostUrl = flag.String("symlink-update-post-url", envString("GIT_SYNC_SYMLINK_UPDATE_POST_URL", ""),
-	"a command to run when the symlink is updated")
+	
+var flWebhooks = flag.String("webhook", envString("GIT_SYNC_WEBHOOK", ""),
+	"the JSON formatted array of webhooks to be sent when git is synced")
+var flWebhookTimeout = flag.Int("webhook-timeout", envInt("GIT_SYNC_WEBHOOK_TIMEOUT", 60),
+	"timeout for webhook http/s requests")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
@@ -74,6 +78,25 @@ var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", tr
 
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
+
+// WebHook structure
+type Webhook struct {
+	// URL for the http/s request
+	URL     string `json:"url"`
+	// Method for the http/s request
+	Method  string `json:"method"`
+	// Code to look for when determining if the request was successful.
+	//   If this is not specified, request is sent and forgotten about.
+	Success int    `json:"success"`
+}
+
+// Create an http client that has our timeout by default
+var netClient = &http.Client{
+	Timeout: time.Duration(time.Second * time.Duration(*flWebhookTimeout) ),
+}
+
+// Webhook collection 
+var WebhookArray = []Webhook{}
 
 var log = newLoggerOrDie()
 
@@ -164,6 +187,13 @@ func main() {
 		}
 	}
 
+	if *flWebhooks != "" {
+		if err := json.Unmarshal([]byte(*flWebhooks), &WebhookArray); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing webhooks JSON: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
@@ -177,6 +207,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
 
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)
@@ -214,6 +245,24 @@ func main() {
 		log.V(1).Infof("next sync in %v", waitTime(*flWait))
 		time.Sleep(waitTime(*flWait))
 	}
+}
+
+// WebhookCall Do webhook call
+func WebHookCall(url string, method string, statusCode int) error {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return err
+	}
+	
+	resp, err := netClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode != statusCode {
+		return fmt.Errorf("received response code %q expected %q", resp.StatusCode, statusCode)
+	}
+	return nil
 }
 
 func waitTime(seconds float64) time.Duration {
@@ -264,18 +313,18 @@ func updateSymlink(gitRoot, link, newDir string) error {
 	}
 	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
 
-	// If there is a symlink update callback, call it
-	if len(*flSymlinkUpdatePostUrl) > 0 {
-		log.V(1).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
-		// Send the post request
-		req, err := http.NewRequest("POST", *flSymlinkUpdatePostUrl, nil)
-		if err != nil {
-			fmt.Errorf("error sending post request (after symlink update): %v", err)
-		}
-		c := &http.Client{}
-		resp, err := c.Do(req)
-		resp.Body.Close()
-	}
+	// // If there is a symlink update callback, call it
+	// if len(*flSymlinkUpdatePostUrl) > 0 {
+	// 	log.V(1).Infof("sending post request to %s", *flSymlinkUpdatePostUrl)
+	// 	// Send the post request
+	// 	req, err := http.NewRequest("POST", *flSymlinkUpdatePostUrl, nil)
+	// 	if err != nil {
+	// 		fmt.Errorf("error sending post request (after symlink update): %v", err)
+	// 	}
+	// 	c := &http.Client{}
+	// 	resp, err := c.Do(req)
+	// 	resp.Body.Close()
+	// }
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
@@ -291,6 +340,16 @@ func updateSymlink(gitRoot, link, newDir string) error {
 		}
 
 		log.V(1).Infof("pruned old worktrees")
+	}
+
+	// Calling webhook only after new symlink created - one after another
+	for _, v := range WebhookArray {
+		log.V(0).Infof("calling webhook %v\n", v.URL)
+		if err := WebHookCall(v.URL, v.Method, v.Success); err != nil {
+			log.Errorf("error calling webhook %v: %v", v.URL, err)
+		} else {
+			log.V(0).Infof("calling webhook %v was: OK\n", v.URL)
+		}
 	}
 
 	return nil
