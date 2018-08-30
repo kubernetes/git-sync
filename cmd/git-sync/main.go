@@ -295,7 +295,6 @@ func updateSymlink(gitRoot, link, newDir string) error {
 	}
 
 	// Trigger webhooks to be called
-	log.V(0).Infof("sending webhook trigger ...\n")
 	WebhookCallTriggerChannel <- struct{}{}
 
 	return nil

@@ -57,8 +57,6 @@ func ServeWebhooks() {
 		// Wait for trigger
 		<- WebhookCallTriggerChannel
 
-		log.V(0).Infof("webhook trigger received ...\n")
-
 		// Calling webhook - one after another
 		for _, v := range WebhookArray {
 			log.V(0).Infof("calling webhook %v\n", v.URL)
