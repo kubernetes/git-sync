@@ -149,7 +149,7 @@ func main() {
 	}
 	if *flOneTime == false && *flWait != 0 {
 		if *flInterval == 0 {
-			log.Errorf("The --wait flag is deprecated, please use --interval instead.")
+			log.V(0).Infof("wait is deprecated. use interval instead")
 			*flInterval = *flWait
 		} else {
 			fmt.Fprintf(os.Stderr, "ERROR: flags --wait and --interval are mutually exclusive.\n")
