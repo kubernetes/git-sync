@@ -52,7 +52,7 @@ var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
 // Deprecated: flWait is deprecated. Use flInterval instead.
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
-	"the number of seconds between syncs")
+	"the number of seconds between syncs (deprecated, see --interval)")
 var flInterval = flag.Float64("interval", envFloat("GIT_SYNC_INTERVAL", 0),
 	"the number of seconds between syncs")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
@@ -149,10 +149,10 @@ func main() {
 	}
 	if *flOneTime == false && *flWait != 0 {
 		if *flInterval == 0 {
-			log.Errorf("wait is deprecated. use interval instead")
+			log.Errorf("The --wait flag is deprecated, please use --interval instead.")
 			*flInterval = *flWait
 		} else {
-			fmt.Fprintf(os.Stderr, "ERROR: use only one --interval or --wait. These cannot be used together.\n")
+			fmt.Fprintf(os.Stderr, "ERROR: flags --wait and --interval are mutually exclusive.\n")
 			flag.Usage()
 			os.Exit(1)
 		}
