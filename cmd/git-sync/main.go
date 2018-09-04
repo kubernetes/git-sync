@@ -157,6 +157,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if *flOneTime && (*flWait != 0 || *flInterval != 0) {
+		log.V(0).Infof("Can't use --wait or --interval when using --one-time flag")
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: git executable not found: %v\n", err)
 		os.Exit(1)
