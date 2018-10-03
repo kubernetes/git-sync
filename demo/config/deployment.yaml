@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: git-sync
-        image: staging-k8s.gcr.io/git-sync-amd64:v2.0.6
+        image: k8s.gcr.io/git-sync-amd64:v2.0.6
         imagePullPolicy: Always
         volumeMounts:
         - name: markdown
