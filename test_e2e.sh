@@ -56,9 +56,9 @@ function finish() {
 
 trap finish INT EXIT
 
-#########################
+# #####################
 # main
-#########################
+# #####################
 
 # Build it
 make container REGISTRY=e2e TAG=$(make -s version)
@@ -244,6 +244,52 @@ pass
 
 # Test tag syncing
 testcase "tag-sync"
+TAG="$TESTCASE"--TAG
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+git -C "$REPO" tag -f "$TAG" >/dev/null
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --rev="$TAG" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Add something and move the tag forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+git -C "$REPO" tag -f "$TAG" >/dev/null
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
+# Move the tag backward
+git -C "$REPO" reset -q --hard HEAD^
+git -C "$REPO" tag -f "$TAG" >/dev/null
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Add something after the tag
+echo "$TESTCASE 3" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 3"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+remove_sync_container
+wait
+pass
+
+# Test tag syncing with annotated tags
+testcase "tag-sync-annotated"
 TAG="$TESTCASE"--TAG
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
