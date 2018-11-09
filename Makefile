@@ -58,7 +58,7 @@ endif
 IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 LEGACY_IMAGE := $(REGISTRY)/$(BIN)
 
-BUILD_IMAGE ?= golang:1.10-alpine
+BUILD_IMAGE ?= golang:1.11-alpine
 
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
