@@ -61,7 +61,7 @@ trap finish INT EXIT
 # #####################
 
 # Build it
-make container REGISTRY=e2e TAG=$(make -s version)
+make container REGISTRY=e2e VERSION=$(make -s version)
 
 DIR=""
 for i in $(seq 1 10); do
@@ -76,14 +76,14 @@ echo "test root is $DIR"
 
 CONTAINER_NAME=git-sync-$RANDOM
 function GIT_SYNC() {
-    #./bin/amd64/git-sync "$@"
+    #./bin/linux_amd64/git-sync "$@"
     docker run \
         --name $CONTAINER_NAME \
         -i \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
         --rm \
-        e2e/git-sync-amd64:$(make -s version) \
+        e2e/git-sync:$(make -s version) \
         "$@"
 }
 
