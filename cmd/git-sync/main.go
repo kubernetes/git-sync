@@ -357,7 +357,7 @@ func cloneRepo(repo, branch, rev string, depth int, gitRoot string) error {
 }
 
 func hashForRev(rev, gitRoot string) (string, error) {
-	output, err := runCommand(gitRoot, "git", "rev-list", "-n1", rev)
+	output, err := runCommand(gitRoot, "git", "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -365,8 +365,8 @@ func hashForRev(rev, gitRoot string) (string, error) {
 }
 
 func revIsHash(rev, gitRoot string) (bool, error) {
-	// If a rev is a tag name or HEAD, rev-list will produce the git hash.  If
-	// it is already a git hash, the output will be the same hash.  Of course, a
+	// If rev is a tag name or HEAD, rev-parse will produce the git hash.  If
+	// rev is already a git hash, the output will be the same hash.  Of course, a
 	// user could specify "abc" and match "abcdef12345678", so we just do a
 	// prefix match.
 	output, err := hashForRev(rev, gitRoot)
@@ -426,7 +426,7 @@ func getRevs(localDir, branch, rev string) (string, string, error) {
 	if rev == "HEAD" {
 		ref = "refs/heads/" + branch
 	} else {
-		ref = "refs/tags/" + rev + "^{}"
+		ref = "refs/tags/" + rev
 	}
 
 	// Figure out what hash the remote resolves ref to.
