@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: blog-service
 spec:
-  type: "LoadBalancer"
+  type: LoadBalancer
   ports:
   - port: 80
   selector:

@@ -1,9 +1,7 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: blog
-  labels:
-    name: blog
 spec:
   replicas: 1
   selector:
@@ -16,11 +14,10 @@ spec:
     spec:
       containers:
       - name: git-sync
-        image: k8s.gcr.io/git-sync-amd64:v2.0.6
-        imagePullPolicy: Always
+        image: k8s.gcr.io/git-sync:v3.0.1
         volumeMounts:
         - name: markdown
-          mountPath: /git
+          mountPath: /tmp/git
         env:
         - name: GIT_SYNC_REPO
           value: https://github.com/kubernetes/git-sync.git
@@ -28,9 +25,6 @@ spec:
           value: git-sync
       - name: hugo
         image: k8s.gcr.io/hugo
-        imagePullPolicy: Always
-        securityContext:
-          runAsUser: 0
         volumeMounts:
         - name: markdown
           mountPath: /src
@@ -48,8 +42,6 @@ spec:
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
-        ports:
-        - containerPort: 80
       volumes:
       - name: markdown
         emptyDir: {}
