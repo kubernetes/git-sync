@@ -17,6 +17,9 @@ symlink.
 # build the container
 make container REGISTRY=registry VERSION=tag
 
+# build the container behind a proxy
+make container REGISTRY=registry VERSION=tag HTTP_PROXY=http://<proxy_address>:<proxy_port> HTTPS_PROXY=https://<proxy_address>:<proxy_port>
+
 # run the container
 docker run -d \
     -v /tmp/git-data:/tmp/git \

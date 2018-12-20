@@ -98,6 +98,8 @@ bin/$(OS)_$(ARCH)/$(BIN): build-dirs
 	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                       \
 	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
+            --env HTTP_PROXY=$(HTTP_PROXY)                                 	     \
+            --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
 	    -w /go/src/$(PKG)                                                        \
 	    --rm                                                                     \
 	    $(BUILD_IMAGE)                                                           \
@@ -110,7 +112,6 @@ bin/$(OS)_$(ARCH)/$(BIN): build-dirs
 	    "
 
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
-
 container: .container-$(DOTFILE_IMAGE) container-name
 .container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) Dockerfile.in
 	@sed \
@@ -119,7 +120,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    -e 's|{ARG_OS}|$(OS)|g' \
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
-	@docker build -t $(IMAGE):$(TAG) -f .dockerfile-$(OS)_$(ARCH) .
+	@docker build --build-arg HTTP_PROXY=$(HTTP_PROXY) --build-arg=$(HTTPS_PROXY) -t $(IMAGE):$(TAG) -f .dockerfile-$(OS)_$(ARCH) .
 	@docker images -q $(IMAGE):$(TAG) > $@
 
 container-name:
@@ -155,6 +156,8 @@ test: build-dirs
 	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin                                     \
 	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
+            --env HTTP_PROXY=$(HTTP_PROXY)                                 	     \
+            --env HTTPS_PROXY=$(HTTPS_PROXY)                               	     \
 	    -w /go/src/$(PKG)                                                        \
 	    $(BUILD_IMAGE)                                                           \
 	    /bin/sh -c "                                                             \
