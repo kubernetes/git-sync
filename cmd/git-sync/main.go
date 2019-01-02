@@ -185,7 +185,6 @@ func main() {
 	failCount := 0
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		defer cancel()
 		err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest)
 		if err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
@@ -196,6 +195,7 @@ func main() {
 			failCount++
 			log.Errorf("unexpected error syncing repo: %v", err)
 			log.V(0).Infof("waiting %v before retrying", waitTime(*flWait))
+			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
 		}
@@ -215,6 +215,7 @@ func main() {
 
 		failCount = 0
 		log.V(1).Infof("next sync in %v", waitTime(*flWait))
+		cancel()
 		time.Sleep(waitTime(*flWait))
 	}
 }
