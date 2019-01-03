@@ -185,8 +185,7 @@ func main() {
 	failCount := 0
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest)
-		if err != nil {
+		if err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			if initialSync || failCount >= *flMaxSyncFailures {
 				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
