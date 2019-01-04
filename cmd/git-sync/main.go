@@ -75,6 +75,9 @@ var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", tr
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
+var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
+	"the git command to run (subject to PATH search)")
+
 var log = newLoggerOrDie()
 
 func newLoggerOrDie() logr.Logger {
@@ -147,8 +150,8 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	if _, err := exec.LookPath("git"); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: git executable not found: %v\n", err)
+	if _, err := exec.LookPath(*flGitCmd); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: git executable %q not found: %v\n", *flGitCmd, err)
 		os.Exit(1)
 	}
 
@@ -275,7 +278,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 
 		log.V(1).Infof("removed %s", currentDir)
 
-		_, err := runCommand(ctx, gitRoot, "git", "worktree", "prune")
+		_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune")
 		if err != nil {
 			return err
 		}
@@ -291,13 +294,13 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev, hash st
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
 	// Update from the remote.
-	if _, err := runCommand(ctx, gitRoot, "git", "fetch", "--tags", "origin", branch); err != nil {
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "fetch", "--tags", "origin", branch); err != nil {
 		return err
 	}
 
 	// Make a worktree for this exact git hash.
 	worktreePath := path.Join(gitRoot, "rev-"+hash)
-	_, err := runCommand(ctx, gitRoot, "git", "worktree", "add", worktreePath, "origin/"+branch)
+	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
 	if err != nil {
 		return err
 	}
@@ -317,7 +320,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev, hash st
 	}
 
 	// Reset the worktree's working copy to the specific rev.
-	_, err = runCommand(ctx, worktreePath, "git", "reset", "--hard", hash)
+	_, err = runCommand(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
 	if err != nil {
 		return err
 	}
@@ -340,7 +343,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
 	args = append(args, repo, gitRoot)
-	_, err := runCommand(ctx, "", "git", args...)
+	_, err := runCommand(ctx, "", *flGitCmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
@@ -349,7 +352,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 			if err != nil {
 				return err
 			}
-			_, err = runCommand(ctx, "", "git", args...)
+			_, err = runCommand(ctx, "", *flGitCmd, args...)
 			if err != nil {
 				return err
 			}
@@ -363,7 +366,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 }
 
 func hashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, "git", "rev-parse", rev)
+	output, err := runCommand(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -445,7 +448,7 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 }
 
 func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, "git", "ls-remote", "-q", "origin", ref)
+	output, err := runCommand(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
 	if err != nil {
 		return "", err
 	}
@@ -485,13 +488,13 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 
 func setupGitAuth(username, password, gitURL string) error {
 	log.V(1).Infof("setting up the git credential cache")
-	cmd := exec.Command("git", "config", "--global", "credential.helper", "cache")
+	cmd := exec.Command(*flGitCmd, "config", "--global", "credential.helper", "cache")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error setting up git credentials %v: %s", err, string(output))
 	}
 
-	cmd = exec.Command("git", "credential", "approve")
+	cmd = exec.Command(*flGitCmd, "credential", "approve")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -551,7 +554,7 @@ func setupGitCookieFile() error {
 		return fmt.Errorf("error: could not find git cookie file: %v", err)
 	}
 
-	cmd := exec.Command("git", "config", "--global", "http.cookiefile", pathToCookieFile)
+	cmd := exec.Command(*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error configuring git cookie file %v: %s", err, string(output))
