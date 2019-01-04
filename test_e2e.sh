@@ -83,7 +83,7 @@ function GIT_SYNC() {
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
         --rm \
-        e2e/git-sync:$(make -s version) \
+        e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         "$@"
 }
 
