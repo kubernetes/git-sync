@@ -161,7 +161,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test HEAD syncing
@@ -197,7 +197,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test branch syncing
@@ -239,7 +239,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test tag syncing
@@ -285,7 +285,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test cross-branch tag syncing
@@ -348,7 +348,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 3"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test rev syncing
@@ -384,7 +384,7 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 remove_sync_container
-interval
+wait
 pass
 
 # Test rev-sync one-time
