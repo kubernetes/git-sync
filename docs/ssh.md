@@ -61,6 +61,7 @@ volumes: [
 ## Step 3: Configure git-sync container
 
 In your git-sync container configuration, mount the Secret Volume at "/etc/git-secret". Ensure that the environment variable GIT_SYNC_REPO is set to use a URL with the SSH protocol, and set GIT_SYNC_SSH to true.
+
 ```
 {
     name: "git-sync",
@@ -82,9 +83,7 @@ In your git-sync container configuration, mount the Secret Volume at "/etc/git-s
         },
         ...
     ],
-    securityContext: {
-        "runAsUser": 0
-    }
 }
 ```
-**Note:** Kubernetes mounts the Secret with permissions 0444 by default (not restrictive enough to be used as an SSH key), so make sure you use secret volume with `defaultMode: 256` (decimal number for octal 0400) and run the container as root.
+
+**Note:** Kubernetes mounts the Secret with permissions 0444 by default (not restrictive enough to be used as an SSH key), so make sure you use secret volume with `defaultMode: 256` (decimal number for octal 0400).
