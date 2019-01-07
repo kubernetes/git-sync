@@ -19,7 +19,7 @@ make container REGISTRY=registry VERSION=tag
 
 # run the container
 docker run -d \
-    -v /tmp/git-data:/git \
+    -v /tmp/git-data:/tmp/git \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync
         --branch=master
