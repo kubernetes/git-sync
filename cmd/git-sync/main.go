@@ -136,7 +136,7 @@ func main() {
 		os.Exit(1)
 	}
 	if *flDest == "" {
-		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		parts := strings.Split(strings.TrimSuffix(strings.Trim(*flRepo, "/"), ".git"), "/")
 		*flDest = parts[len(parts)-1]
 	}
 	if strings.Contains(*flDest, "/") {
