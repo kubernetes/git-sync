@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -92,6 +94,9 @@ var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search)")
+
+var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
+	"the bind address for git-sync's HTTP endpoint")
 
 var log = newLoggerOrDie()
 
@@ -206,6 +211,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
 			os.Exit(1)
 		}
+	}
+
+	if *flHTTPBind != "" {
+		ln, err := net.Listen("tcp", *flHTTPBind)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: unable to bind HTTP endpoint: %v\n", err)
+			os.Exit(1)
+		}
+		go func() {
+			http.Serve(ln, http.DefaultServeMux)
+		}()
 	}
 
 	// From here on, output goes through logging.
