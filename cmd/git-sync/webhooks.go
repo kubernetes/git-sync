@@ -59,7 +59,7 @@ func (w *Webhook) Do() error {
 
 	// If the webhook has a success statusCode, check against it
 	if w.Success != nil && resp.StatusCode != *w.Success {
-		return fmt.Errorf("received response code %q expected %q", resp.StatusCode, w.Success)
+		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, *w.Success)
 	}
 
 	return nil
