@@ -21,6 +21,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -33,7 +34,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"encoding/json"
 
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
@@ -62,7 +62,7 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first pull must succeed, -1 disables aborting for any number of failures after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
-	
+
 var flWebhooks = flag.String("webhook", envString("GIT_SYNC_WEBHOOK", ""),
 	"the JSON formatted array of webhooks to be sent when git is synced")
 var flWebhookTimeout = flag.Int("webhook-timeout", envInt("GIT_SYNC_WEBHOOK_TIMEOUT", 60),
@@ -197,7 +197,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
 
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)

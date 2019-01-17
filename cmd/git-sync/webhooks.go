@@ -1,32 +1,32 @@
-
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
-	"fmt"
 )
+
 // Create an http client that has our timeout by default
 var netClient = &http.Client{
-	Timeout: time.Duration(time.Second * time.Duration(*flWebhookTimeout) ),
+	Timeout: time.Duration(time.Second * time.Duration(*flWebhookTimeout)),
 }
 
 // Trigger channel for webhook requests. If anything is received into this channel
 //   it triggers the webhook goroutine to send new requests.
 var WebhookCallTriggerChannel = make(chan struct{})
 
-// Webhook collection 
+// Webhook collection
 var WebhookArray = []Webhook{}
 
 // WebHook structure
 type Webhook struct {
 	// URL for the http/s request
-	URL     string `json:"url"`
+	URL string `json:"url"`
 	// Method for the http/s request
-	Method  string `json:"method"`
+	Method string `json:"method"`
 	// Code to look for when determining if the request was successful.
 	//   If this is not specified, request is sent and forgotten about.
-	Success *int    `json:"success"`
+	Success *int `json:"success"`
 }
 
 // WebhookCall Do webhook call
@@ -35,8 +35,8 @@ func WebHookCall(url string, method string, statusCode *int) error {
 	if err != nil {
 		return err
 	}
-	
-	// 
+
+	//
 	resp, err := netClient.Do(req)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func WebHookCall(url string, method string, statusCode *int) error {
 func ServeWebhooks() {
 	for {
 		// Wait for trigger
-		<- WebhookCallTriggerChannel
+		<-WebhookCallTriggerChannel
 
 		// Calling webhook - one after another
 		for _, v := range WebhookArray {
@@ -67,5 +67,5 @@ func ServeWebhooks() {
 			}
 		}
 	}
-	
+
 }
