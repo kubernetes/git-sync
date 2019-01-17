@@ -1,15 +1,12 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
-
-// Create an http client that has our timeout by default
-var netClient = &http.Client{
-	Timeout: time.Duration(time.Second * time.Duration(*flWebhookTimeout)),
-}
 
 // Trigger channel for webhook requests. If anything is received into this channel
 //   it triggers the webhook goroutine to send new requests.
@@ -27,25 +24,42 @@ type Webhook struct {
 	// Code to look for when determining if the request was successful.
 	//   If this is not specified, request is sent and forgotten about.
 	Success *int `json:"success"`
+	// Timeout for the http/s request
+	Timeout time.Duration `json:"timeout"`
 }
 
-// WebhookCall Do webhook call
-func WebHookCall(url string, method string, statusCode *int) error {
-	req, err := http.NewRequest(method, url, nil)
+func (w *Webhook) UnmarshalJSON(data []byte) error {
+	type testAlias Webhook
+	test := &testAlias{
+		Timeout: time.Second * 5,
+	}
+
+	_ = json.Unmarshal(data, test)
+
+	*w = Webhook(*test)
+	return nil
+}
+
+func (w *Webhook) Do() error {
+	req, err := http.NewRequest(w.Method, w.URL, nil)
 	if err != nil {
 		return err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), w.Timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+
 	//
-	resp, err := netClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	resp.Body.Close()
 
 	// If the webhook has a success statusCode, check against it
-	if statusCode != nil && resp.StatusCode != *statusCode {
-		return fmt.Errorf("received response code %q expected %q", resp.StatusCode, statusCode)
+	if w.Success != nil && resp.StatusCode != *w.Success {
+		return fmt.Errorf("received response code %q expected %q", resp.StatusCode, w.Success)
 	}
 
 	return nil
@@ -60,7 +74,7 @@ func ServeWebhooks() {
 		// Calling webhook - one after another
 		for _, v := range WebhookArray {
 			log.V(0).Infof("calling webhook %v\n", v.URL)
-			if err := WebHookCall(v.URL, v.Method, v.Success); err != nil {
+			if err := v.Do(); err != nil {
 				log.Errorf("error calling webhook %v: %v", v.URL, err)
 			} else {
 				log.V(0).Infof("calling webhook %v was: OK\n", v.URL)

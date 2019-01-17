@@ -65,8 +65,6 @@ var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 
 var flWebhooks = flag.String("webhook", envString("GIT_SYNC_WEBHOOK", ""),
 	"the JSON formatted array of webhooks to be sent when git is synced")
-var flWebhookTimeout = flag.Int("webhook-timeout", envInt("GIT_SYNC_WEBHOOK_TIMEOUT", 60),
-	"timeout for webhook http/s requests")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
