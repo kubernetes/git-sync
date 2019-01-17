@@ -12,6 +12,7 @@ this, it uses a git worktree in a subdirectory of the `--root` and flips a
 symlink.
 
 git-sync can also be configured to make webhook call upon sucessful git repo syncronisation. The call is made when right after the symlink is updated.
+
 ## Usage
 
 ```
@@ -35,11 +36,12 @@ docker run -d \
 
 ## Example of webhooks usage
 **Webhook config example**
-A webhook config must be valid JSON. If ```success``` is not specified in the config, git-sync will not wait for a response.
+A webhook config must be valid JSON. If `success` is not specified in the config, git-sync will continue regardless of response code (including errors).
+
 ```json
 {   
     "url": "http://localhost:9090/-/reload", 
-    "method": "POST|GET",
+    "method": "POST",
     "success": 200
 }
 ```
