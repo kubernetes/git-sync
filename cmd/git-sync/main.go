@@ -98,7 +98,9 @@ var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search)")
 
 var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
-	"the bind address for git-sync's HTTP endpoint")
+	"the bind address (including port) for git-sync's HTTP endpoint")
+var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", true),
+	"enable metrics on git-sync's HTTP endpoint")
 
 var log = newLoggerOrDie()
 
@@ -241,7 +243,9 @@ func main() {
 			os.Exit(1)
 		}
 		go func() {
-			http.Handle("/metrics", promhttp.Handler())
+			if *flHTTPMetrics {
+				http.Handle("/metrics", promhttp.Handler())
+			}
 			http.Serve(ln, http.DefaultServeMux)
 		}()
 	}
