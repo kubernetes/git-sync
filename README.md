@@ -36,15 +36,8 @@ docker run -d \
 
 ## Example of webhooks usage
 **Webhook config example**
-A webhook config must be valid JSON. If `success` is not specified in the config, git-sync will continue regardless of response code (including errors).
+A webhook is configured using a set of CLI flags. At its most basic only `webhook-url` needs to be set.
 
-```json
-{   
-    "url": "http://localhost:9090/-/reload", 
-    "method": "POST",
-    "success": 200
-}
-```
 **Usage**
 
 ```
@@ -54,7 +47,6 @@ docker run -d \
         --repo=https://github.com/kubernetes/git-sync
         --branch=master
         --wait=30
-        --webhook='[{"url": "http://localhost:9090/-/reload", "method": "POST", "success": 200}]'
-        --webhook='[{"url": "http://1.2.3.4:9090/-/reload", "method": "POST"}]'
+        --webhook-url="http://localhost:9090/-/reload"
 ```
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
