@@ -39,6 +39,12 @@ function assert_file_exists() {
     fi
 }
 
+function assert_file_absent() {
+    if [[ -f "$1" ]]; then
+        fail "$1 exists"
+    fi
+}
+
 function assert_file_eq() {
     if [[ $(cat "$1") == "$2" ]]; then
         return
@@ -82,8 +88,9 @@ function GIT_SYNC() {
         -i \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
+        -v "$(pwd)/slow_git.sh":"/slow_git.sh" \
         --rm \
-        e2e/git-sync:$(make -s version) \
+        e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         "$@"
 }
 
@@ -92,6 +99,8 @@ function remove_sync_container() {
     docker top $CONTAINER_NAME >/dev/null 2>&1 && \
     docker rm -f $CONTAINER_NAME >/dev/null 2>&1
 }
+
+SLOW_GIT=/slow_git.sh
 
 REPO="$DIR/repo"
 mkdir "$REPO"
@@ -485,6 +494,47 @@ sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+# Test sync loop timeout
+testcase "sync-loop-timeout"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --git=$SLOW_GIT \
+    --timeout=1 \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+# check for failure
+assert_file_absent "$ROOT"/link/file
+# run with slow_git but without timing out
+GIT_SYNC \
+    --git=$SLOW_GIT \
+    --timeout=16 \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 10
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Move forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 10
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Wrap up
 pass
 
