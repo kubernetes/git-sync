@@ -1,0 +1,6 @@
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b h1:VKtxabqXZkF25pY9ekfRL6a582T4P37/31XEstQ5p58=
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
+github.com/thockin/glogr v0.0.0-20160825042232-7a7f3ced4f9f h1:UQ/VqTtxN8EoIShWVbNR9b0/vyxKLwhV6ZGcIjZ5KB4=
+github.com/thockin/glogr v0.0.0-20160825042232-7a7f3ced4f9f/go.mod h1:HRvPbLXOCiSU8hpsTlLSX4Fw6l+yF2uziElIkThrlsI=
+github.com/thockin/logr v0.0.0-20160822044224-103d90809f34 h1:iVWjMSZyeDCd1D2XQkUjsAWPfvA3M4aPGGsEmxaXY1s=
+github.com/thockin/logr v0.0.0-20160822044224-103d90809f34/go.mod h1:GEqn6NzwaoUO+OS+z1oR6Ka9NXmRDe3NUF5KZUAoT+I=
