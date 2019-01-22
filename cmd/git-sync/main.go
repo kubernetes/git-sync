@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
 )
@@ -99,6 +101,25 @@ var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address for git-sync's HTTP endpoint")
 
 var log = newLoggerOrDie()
+
+// Total pull/error, summary on pull duration
+var (
+	// TODO: have a marker for "which" servergroup
+	syncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "git_sync_duration_seconds",
+		Help: "Summary of git_sync durations",
+	}, []string{"status"})
+
+	syncCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_count_total",
+		Help: "How many git syncs completed, partitioned by success",
+	}, []string{"status"})
+)
+
+func init() {
+	prometheus.MustRegister(syncDuration)
+	prometheus.MustRegister(syncCount)
+}
 
 func newLoggerOrDie() logr.Logger {
 	g, err := glogr.New()
@@ -220,6 +241,7 @@ func main() {
 			os.Exit(1)
 		}
 		go func() {
+			http.Handle("/metrics", promhttp.Handler())
 			http.Serve(ln, http.DefaultServeMux)
 		}()
 	}
@@ -243,8 +265,11 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
+		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
+			syncCount.WithLabelValues("error").Inc()
 			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
 				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
@@ -266,6 +291,9 @@ func main() {
 			default:
 			}
 		}
+		syncDuration.WithLabelValues("success").Observe(time.Now().Sub(start).Seconds())
+		syncCount.WithLabelValues("success").Inc()
+
 		if initialSync {
 			if *flOneTime {
 				os.Exit(0)
