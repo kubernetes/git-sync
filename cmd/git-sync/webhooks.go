@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// Trigger channel for webhook requests. If anything is received into this channel
-//   it triggers the webhook goroutine to send new requests.
-var WebhookCallTriggerChannel = make(chan struct{})
-
 // Webhook collection
 var WebhookArray = []Webhook{}
 
@@ -66,10 +62,10 @@ func (w *Webhook) Do() error {
 }
 
 // Wait for trigger events from the channel, and send webhooks when triggered
-func ServeWebhooks() {
+func ServeWebhooks(ch chan struct{}) {
 	for {
 		// Wait for trigger
-		<-WebhookCallTriggerChannel
+		<-ch
 
 		// Calling webhook - one after another
 		for _, v := range WebhookArray {
