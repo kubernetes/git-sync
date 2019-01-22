@@ -69,8 +69,12 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
+var flSSHKeyFile = flag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
+	"the ssh key to use")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
+var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH_KNOWN_HOSTS_FILE", "/etc/git-secret/known_hosts"),
+	"the known hosts file to use")
 
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
@@ -513,8 +517,8 @@ func setupGitAuth(username, password, gitURL string) error {
 func setupGitSSH(setupKnownHosts bool) error {
 	log.V(1).Infof("setting up git SSH credentials")
 
-	var pathToSSHSecret = "/etc/git-secret/ssh"
-	var pathToSSHKnownHosts = "/etc/git-secret/known_hosts"
+	var pathToSSHSecret = *flSSHKeyFile
+	var pathToSSHKnownHosts = *flSSHKnownHostsFile
 
 	fileInfo, err := os.Stat(pathToSSHSecret)
 	if err != nil {
