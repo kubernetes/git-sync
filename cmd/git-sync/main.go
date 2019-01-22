@@ -21,7 +21,6 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -63,8 +62,14 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
 
-var flWebhooks = flag.String("webhook", envString("GIT_SYNC_WEBHOOK", ""),
-	"the JSON formatted array of webhooks to be sent when git is synced")
+var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
+	"the URL for the webook to send to. Default is \"\" which disables the webook.")
+var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
+	"the method for the webook to send with")
+var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
+	"the status code which indicates a successful webhook call")
+var flWebhookTimeout = flag.Duration("webhook-timeout-duration", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT_DURATION", time.Second),
+	"the timeout used when communicating with the webhook target")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
@@ -140,6 +145,18 @@ func envFloat(key string, def float64) float64 {
 	return def
 }
 
+func envDuration(key string, def time.Duration) time.Duration {
+	if env := os.Getenv(key); env != "" {
+		val, err := time.ParseDuration(env)
+		if err != nil {
+			log.Errorf("invalid value for %q: using default: %v", key, def)
+			return def
+		}
+		return val
+	}
+	return def
+}
+
 func main() {
 	setFlagDefaults()
 
@@ -175,13 +192,6 @@ func main() {
 		}
 	}
 
-	if *flWebhooks != "" {
-		if err := json.Unmarshal([]byte(*flWebhooks), &WebhookArray); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhooks JSON: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
@@ -200,8 +210,16 @@ func main() {
 	log.V(0).Infof("starting up: %q", os.Args)
 
 	// Startup webhooks goroutine
-	webhookTriggerChan := make(chan struct{})
-	go ServeWebhooks(webhookTriggerChan)
+	webhookTriggerChan := make(chan struct{}, 1)
+	if *flWebhookURL != "" {
+		webhook := Webhook{
+			URL:     *flWebhookURL,
+			Method:  *flWebhookMethod,
+			Success: flWebhookStatusSuccess,
+			Timeout: *flWebhookTimeout,
+		}
+		go webhook.run(webhookTriggerChan)
+	}
 
 	initialSync := true
 	failCount := 0
@@ -220,8 +238,14 @@ func main() {
 			time.Sleep(waitTime(*flWait))
 			continue
 		} else if changed {
-			// Trigger webhooks to be called
-			webhookTriggerChan <- struct{}{}
+			// Trigger webhooks to be called. We do a non-blocking write to the channel as we
+			// don't want to backup the syncing locally because we can't complete a webhook call.
+			// Since the channel has a buffer of 1 we ensure that it is called for a change, but
+			// this allows us to de-dupe calls if they happen before the webhook call completes.
+			select {
+			case webhookTriggerChan <- struct{}{}:
+			default:
+			}
 		}
 		if initialSync {
 			if *flOneTime {

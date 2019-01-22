@@ -2,38 +2,22 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
 
-// Webhook collection
-var WebhookArray = []Webhook{}
-
 // WebHook structure
 type Webhook struct {
 	// URL for the http/s request
-	URL string `json:"url"`
+	URL string
 	// Method for the http/s request
-	Method string `json:"method"`
+	Method string
 	// Code to look for when determining if the request was successful.
 	//   If this is not specified, request is sent and forgotten about.
-	Success *int `json:"success"`
+	Success *int
 	// Timeout for the http/s request
-	Timeout time.Duration `json:"timeout"`
-}
-
-func (w *Webhook) UnmarshalJSON(data []byte) error {
-	type testAlias Webhook
-	test := &testAlias{
-		Timeout: time.Second * 5,
-	}
-
-	_ = json.Unmarshal(data, test)
-
-	*w = Webhook(*test)
-	return nil
+	Timeout time.Duration
 }
 
 func (w *Webhook) Do() error {
@@ -62,20 +46,18 @@ func (w *Webhook) Do() error {
 }
 
 // Wait for trigger events from the channel, and send webhooks when triggered
-func ServeWebhooks(ch chan struct{}) {
+func (w *Webhook) run(ch chan struct{}) {
 	for {
 		// Wait for trigger
 		<-ch
 
-		// Calling webhook - one after another
-		for _, v := range WebhookArray {
-			log.V(0).Infof("calling webhook %v\n", v.URL)
-			if err := v.Do(); err != nil {
-				log.Errorf("error calling webhook %v: %v", v.URL, err)
+		for {
+			if err := w.Do(); err != nil {
+				log.Errorf("error calling webhook %v: %v", w.URL, err)
 			} else {
-				log.V(0).Infof("calling webhook %v was: OK\n", v.URL)
+				log.V(0).Infof("calling webhook %v was: OK\n", w.URL)
+				break
 			}
 		}
 	}
-
 }
