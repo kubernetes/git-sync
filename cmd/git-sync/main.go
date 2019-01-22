@@ -246,6 +246,9 @@ func main() {
 			if *flHTTPMetrics {
 				http.Handle("/metrics", promhttp.Handler())
 			}
+			// This is a dumb liveliness check endpoint. Currently this checks
+			// nothing and will always return 200 if the process is live.
+			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
 			http.Serve(ln, http.DefaultServeMux)
 		}()
 	}
