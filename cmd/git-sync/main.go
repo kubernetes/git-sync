@@ -71,7 +71,7 @@ var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC
 var flWebhookTimeout = flag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
 	"the timeout used when communicating with the webhook target")
 var flWebhookBackoff = flag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
-	"the duration to wait after a failed webhook call")
+	"if a webhook call fails (dependant on webhook-success-status) this defines how much time to wait before retrying the call")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")

@@ -34,11 +34,15 @@ docker run -d \
     nginx
 ```
 
-## Example of webhooks usage
-**Webhook config example**
-A webhook is configured using a set of CLI flags. At its most basic only `webhook-url` needs to be set.
+## Webhooks
+Webhooks are executed asynchronously from the main git-sync process. If a `webhook-url` is configured,
+when a change occurs to the local git checkout a call is sent using the method defined in `webhook-method`
+(default to `POST`). git-sync will continually attempt this webhook call until it succeeds (based on `webhook-success-status`).
+If unsuccessful, git-sync will wait `webhook-backoff` (default `3s`) before re-attempting the webhook call.
 
 **Usage**
+
+A webhook is configured using a set of CLI flags. At its most basic only `webhook-url` needs to be set.
 
 ```
 docker run -d \
