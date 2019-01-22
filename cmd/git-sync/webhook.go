@@ -18,6 +18,8 @@ type Webhook struct {
 	Success *int
 	// Timeout for the http/s request
 	Timeout time.Duration
+	// BackoffDuration for failed webhook calls
+	BackoffDuration time.Duration
 }
 
 func (w *Webhook) Do() error {
@@ -54,6 +56,7 @@ func (w *Webhook) run(ch chan struct{}) {
 		for {
 			if err := w.Do(); err != nil {
 				log.Errorf("error calling webhook %v: %v", w.URL, err)
+				time.Sleep(w.BackoffDuration)
 			} else {
 				log.V(0).Infof("calling webhook %v was: OK\n", w.URL)
 				break
