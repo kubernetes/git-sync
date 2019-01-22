@@ -68,9 +68,9 @@ var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_
 	"the method for the webook to send with")
 var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
 	"the status code which indicates a successful webhook call")
-var flWebhookTimeout = flag.Duration("webhook-timeout-duration", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT_DURATION", time.Second),
+var flWebhookTimeout = flag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
 	"the timeout used when communicating with the webhook target")
-var flWebhookBackoffDuration = flag.Duration("webhook-backoff-duration", envDuration("GIT_SYNC_WEBHOOK_BACKOFF_DURATION", time.Second*3),
+var flWebhookBackoff = flag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
 	"the duration to wait after a failed webhook call")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
@@ -215,11 +215,11 @@ func main() {
 	webhookTriggerChan := make(chan struct{}, 1)
 	if *flWebhookURL != "" {
 		webhook := Webhook{
-			URL:             *flWebhookURL,
-			Method:          *flWebhookMethod,
-			Success:         flWebhookStatusSuccess,
-			Timeout:         *flWebhookTimeout,
-			BackoffDuration: *flWebhookBackoffDuration,
+			URL:     *flWebhookURL,
+			Method:  *flWebhookMethod,
+			Success: flWebhookStatusSuccess,
+			Timeout: *flWebhookTimeout,
+			Backoff: *flWebhookBackoff,
 		}
 		go webhook.run(webhookTriggerChan)
 	}
