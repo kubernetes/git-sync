@@ -15,7 +15,7 @@ type Webhook struct {
 	Method string
 	// Code to look for when determining if the request was successful.
 	//   If this is not specified, request is sent and forgotten about.
-	Success *int
+	Success int
 	// Timeout for the http/s request
 	Timeout time.Duration
 	// Backoff for failed webhook calls
@@ -40,8 +40,8 @@ func (w *Webhook) Do() error {
 	resp.Body.Close()
 
 	// If the webhook has a success statusCode, check against it
-	if w.Success != nil && resp.StatusCode != *w.Success {
-		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, *w.Success)
+	if w.Success != -1 && resp.StatusCode != w.Success {
+		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, w.Success)
 	}
 
 	return nil
