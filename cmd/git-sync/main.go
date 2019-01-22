@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -101,6 +102,8 @@ var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address (including port) for git-sync's HTTP endpoint")
 var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", true),
 	"enable metrics on git-sync's HTTP endpoint")
+var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
+	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
 var log = newLoggerOrDie()
 
@@ -242,14 +245,24 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERROR: unable to bind HTTP endpoint: %v\n", err)
 			os.Exit(1)
 		}
+		mux := http.NewServeMux()
 		go func() {
 			if *flHTTPMetrics {
-				http.Handle("/metrics", promhttp.Handler())
+				mux.Handle("/metrics", promhttp.Handler())
 			}
+
+			if *flHTTPprof {
+				mux.HandleFunc("/debug/pprof/", pprof.Index)
+				mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+				mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+				mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+				mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			}
+
 			// This is a dumb liveliness check endpoint. Currently this checks
 			// nothing and will always return 200 if the process is live.
-			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
-			http.Serve(ln, http.DefaultServeMux)
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			http.Serve(ln, mux)
 		}()
 	}
 
