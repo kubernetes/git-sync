@@ -594,13 +594,11 @@ testcase "webhook"
 NCPORT=8888
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
-expected_depth="1"
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
-    --depth="$expected_depth" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -635,31 +633,30 @@ pass
 
 # Test http handler
 testcase "http"
+BINDPORT=8888
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
-expected_depth="1"
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
     --repo="$REPO" \
-    --depth="$expected_depth" \
     --root="$ROOT" \
-    --http-bind=":8888" \
+    --http-bind=":$BINDPORT" \
     --http-metrics \
     --http-pprof \
     --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 2
 # check that health endpoint is alive
-if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888) -ne 200 ]] ; then
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
     fail "health endpoint failed"
 fi
 # check that the metrics endpoint exists
-if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888/metrics) -ne 200 ]] ; then
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT/metrics) -ne 200 ]] ; then
     fail "metrics endpoint failed"
 fi
 # check that the pprof endpoint exists
-if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888/debug/pprof/) -ne 200 ]] ; then
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT/debug/pprof/) -ne 200 ]] ; then
     fail "pprof endpoint failed"
 fi
 # Wrap up
