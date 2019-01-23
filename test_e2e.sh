@@ -633,5 +633,39 @@ remove_sync_container
 wait
 pass
 
+# Test http handler
+testcase "http"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+expected_depth="1"
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --repo="$REPO" \
+    --depth="$expected_depth" \
+    --root="$ROOT" \
+    --http-bind=":8888" \
+    --http-metrics \
+    --http-pprof \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 2
+# check that health endpoint is alive
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888) -ne 200 ]] ; then
+    fail "health endpoint failed"
+fi
+# check that the metrics endpoint exists
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888/metrics) -ne 200 ]] ; then
+    fail "metrics endpoint failed"
+fi
+# check that the pprof endpoint exists
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:8888/debug/pprof/) -ne 200 ]] ; then
+    fail "pprof endpoint failed"
+fi
+# Wrap up
+remove_sync_container
+wait
+pass
+
 echo "cleaning up $DIR"
 rm -rf "$DIR"
