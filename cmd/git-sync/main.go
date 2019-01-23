@@ -58,9 +58,20 @@ var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
-	"the number of consecutive failures allowed before aborting (the first pull must succeed)")
+	"the number of consecutive failures allowed before aborting (the first pull must succeed, -1 disables aborting for any number of failures after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files")
+
+var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
+	"the URL for the webook to send to. Default is \"\" which disables the webook.")
+var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
+	"the method for the webook to send with")
+var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
+	"the status code which indicates a successful webhook call. A value of -1 disables success checks to make webhooks fire-and-forget")
+var flWebhookTimeout = flag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
+	"the timeout used when communicating with the webhook target")
+var flWebhookBackoff = flag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
+	"if a webhook call fails (dependant on webhook-success-status) this defines how much time to wait before retrying the call")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use")
@@ -69,8 +80,12 @@ var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
+var flSSHKeyFile = flag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
+	"the ssh key to use")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
+var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH_KNOWN_HOSTS_FILE", "/etc/git-secret/known_hosts"),
+	"the known hosts file to use")
 
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
@@ -132,6 +147,18 @@ func envFloat(key string, def float64) float64 {
 	return def
 }
 
+func envDuration(key string, def time.Duration) time.Duration {
+	if env := os.Getenv(key); env != "" {
+		val, err := time.ParseDuration(env)
+		if err != nil {
+			log.Errorf("invalid value for %q: using default: %v", key, def)
+			return def
+		}
+		return val
+	}
+	return def
+}
+
 func main() {
 	setFlagDefaults()
 
@@ -184,12 +211,25 @@ func main() {
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)
 
+	// Startup webhooks goroutine
+	webhookTriggerChan := make(chan struct{}, 1)
+	if *flWebhookURL != "" {
+		webhook := Webhook{
+			URL:     *flWebhookURL,
+			Method:  *flWebhookMethod,
+			Success: *flWebhookStatusSuccess,
+			Timeout: *flWebhookTimeout,
+			Backoff: *flWebhookBackoff,
+		}
+		go webhook.run(webhookTriggerChan)
+	}
+
 	initialSync := true
 	failCount := 0
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
-			if initialSync || failCount >= *flMaxSyncFailures {
+		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
 				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
 			}
@@ -200,6 +240,15 @@ func main() {
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
+		} else if changed {
+			// Trigger webhooks to be called. We do a non-blocking write to the channel as we
+			// don't want to backup the syncing locally because we can't complete a webhook call.
+			// Since the channel has a buffer of 1 we ensure that it is called for a change, but
+			// this allows us to de-dupe calls if they happen before the webhook call completes.
+			select {
+			case webhookTriggerChan <- struct{}{}:
+			default:
+			}
 		}
 		if initialSync {
 			if *flOneTime {
@@ -290,11 +339,22 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev, hash string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
+	args := []string{"fetch", "--tags"}
+	if depth != 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+	}
+	args = append(args, "origin", branch)
+
 	// Update from the remote.
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "fetch", "--tags", "origin", branch); err != nil {
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, args...); err != nil {
+		return err
+	}
+
+	// GC clone
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
@@ -386,7 +446,8 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 }
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) error {
+// returns (1) whether a change occured and (2) an error if one happened
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, error) {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	hash := rev
@@ -395,18 +456,18 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	case os.IsNotExist(err):
 		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
 		if err != nil {
-			return err
+			return false, err
 		}
 		hash, err = hashForRev(ctx, rev, gitRoot)
 		if err != nil {
-			return err
+			return false, err
 		}
 	case err != nil:
-		return fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
+		return false, fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
 		local, remote, err := getRevs(ctx, target, branch, rev)
 		if err != nil {
-			return err
+			return false, err
 		}
 		log.V(2).Infof("local hash:  %s", local)
 		log.V(2).Infof("remote hash: %s", remote)
@@ -415,11 +476,11 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 			hash = remote
 		} else {
 			log.V(1).Infof("no update required")
-			return nil
+			return false, nil
 		}
 	}
 
-	return addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, hash)
+	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
 }
 
 // getRevs returns the local and upstream hashes for rev.
@@ -513,8 +574,8 @@ func setupGitAuth(username, password, gitURL string) error {
 func setupGitSSH(setupKnownHosts bool) error {
 	log.V(1).Infof("setting up git SSH credentials")
 
-	var pathToSSHSecret = "/etc/git-secret/ssh"
-	var pathToSSHKnownHosts = "/etc/git-secret/known_hosts"
+	var pathToSSHSecret = *flSSHKeyFile
+	var pathToSSHKnownHosts = *flSSHKnownHostsFile
 
 	fileInfo, err := os.Stat(pathToSSHSecret)
 	if err != nil {
