@@ -536,6 +536,8 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Wrap up
+remove_sync_container
+wait
 pass
 
 # Test depth syncing
