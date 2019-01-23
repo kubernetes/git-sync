@@ -538,5 +538,53 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Wrap up
 pass
 
+# Test depth syncing
+testcase "depth"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+expected_depth="1"
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --depth="$expected_depth" \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+if [ $expected_depth != $depth ]; then
+    fail "initial depth mismatch expected=$expected_depth actual=$depth"
+fi
+# Move forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
+depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+if [ $expected_depth != $depth ]; then
+    fail "forward depth mismatch expected=$expected_depth actual=$depth"
+fi
+# Move backward
+git -C "$REPO" reset -q --hard HEAD^
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+if [ $expected_depth != $depth ]; then
+    fail "backward depth mismatch expected=$expected_depth actual=$depth"
+fi
+# Wrap up
+remove_sync_container
+wait
+pass
+
 echo "cleaning up $DIR"
 rm -rf "$DIR"
