@@ -403,11 +403,22 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev, hash string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
+	args := []string{"fetch", "--tags"}
+	if depth != 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+	}
+	args = append(args, "origin", branch)
+
 	// Update from the remote.
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "fetch", "--tags", "origin", branch); err != nil {
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, args...); err != nil {
+		return err
+	}
+
+	// GC clone
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
@@ -533,7 +544,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		}
 	}
 
-	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, hash)
+	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
 }
 
 // getRevs returns the local and upstream hashes for rev.
