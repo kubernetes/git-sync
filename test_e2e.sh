@@ -89,6 +89,7 @@ function GIT_SYNC() {
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
         -v "$(pwd)/slow_git.sh":"/slow_git.sh" \
+        --network="host" \
         --rm \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         "$@"
@@ -582,6 +583,81 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
 if [ $expected_depth != $depth ]; then
     fail "backward depth mismatch expected=$expected_depth actual=$depth"
+fi
+# Wrap up
+remove_sync_container
+wait
+pass
+
+# Test webhook
+testcase "webhook"
+NCPORT=8888
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+# check that basic call works
+{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+NCPID=$!
+sleep 3
+if kill -0 $NCPID > /dev/null 2>&1; then
+    fail "webhook not called, server still running"
+fi
+# Move forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+# return a failure to ensure that we try again
+{ (echo -e "HTTP/1.1 500 Internal Server Error\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+NCPID=$!
+sleep 3
+if kill -0 $NCPID > /dev/null 2>&1; then
+    fail "2 webhook not called, server still running"
+fi
+# Now return 200, ensure that it gets called
+{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+NCPID=$!
+sleep 3
+if kill -0 $NCPID > /dev/null 2>&1; then
+    fail "3 webhook not called, server still running"
+fi
+# Wrap up
+remove_sync_container
+wait
+pass
+
+# Test http handler
+testcase "http"
+BINDPORT=8888
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --repo="$REPO" \
+    --root="$ROOT" \
+    --http-bind=":$BINDPORT" \
+    --http-metrics \
+    --http-pprof \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 2
+# check that health endpoint is alive
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
+    fail "health endpoint failed"
+fi
+# check that the metrics endpoint exists
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT/metrics) -ne 200 ]] ; then
+    fail "metrics endpoint failed"
+fi
+# check that the pprof endpoint exists
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT/debug/pprof/) -ne 200 ]] ; then
+    fail "pprof endpoint failed"
 fi
 # Wrap up
 remove_sync_container
