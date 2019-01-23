@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -34,6 +37,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thockin/glogr"
 	"github.com/thockin/logr"
 )
@@ -93,7 +98,33 @@ var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search)")
 
+var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
+	"the bind address (including port) for git-sync's HTTP endpoint")
+var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", true),
+	"enable metrics on git-sync's HTTP endpoint")
+var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
+	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
+
 var log = newLoggerOrDie()
+
+// Total pull/error, summary on pull duration
+var (
+	// TODO: have a marker for "which" servergroup
+	syncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "git_sync_duration_seconds",
+		Help: "Summary of git_sync durations",
+	}, []string{"status"})
+
+	syncCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_count_total",
+		Help: "How many git syncs completed, partitioned by success",
+	}, []string{"status"})
+)
+
+func init() {
+	prometheus.MustRegister(syncDuration)
+	prometheus.MustRegister(syncCount)
+}
 
 func newLoggerOrDie() logr.Logger {
 	g, err := glogr.New()
@@ -208,6 +239,33 @@ func main() {
 		}
 	}
 
+	if *flHTTPBind != "" {
+		ln, err := net.Listen("tcp", *flHTTPBind)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: unable to bind HTTP endpoint: %v\n", err)
+			os.Exit(1)
+		}
+		mux := http.NewServeMux()
+		go func() {
+			if *flHTTPMetrics {
+				mux.Handle("/metrics", promhttp.Handler())
+			}
+
+			if *flHTTPprof {
+				mux.HandleFunc("/debug/pprof/", pprof.Index)
+				mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+				mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+				mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+				mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			}
+
+			// This is a dumb liveliness check endpoint. Currently this checks
+			// nothing and will always return 200 if the process is live.
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			http.Serve(ln, mux)
+		}()
+	}
+
 	// From here on, output goes through logging.
 	log.V(0).Infof("starting up: %q", os.Args)
 
@@ -227,8 +285,11 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
+		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
+			syncCount.WithLabelValues("error").Inc()
 			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
 				log.Errorf("error syncing repo: %v", err)
 				os.Exit(1)
@@ -250,6 +311,9 @@ func main() {
 			default:
 			}
 		}
+		syncDuration.WithLabelValues("success").Observe(time.Now().Sub(start).Seconds())
+		syncCount.WithLabelValues("success").Inc()
+
 		if initialSync {
 			if *flOneTime {
 				os.Exit(0)
