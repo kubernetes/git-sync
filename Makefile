@@ -123,7 +123,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
 	@docker build \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY) \
-	    --build-arg=$(HTTPS_PROXY) \
+	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY) \
 	    -t $(IMAGE):$(TAG) \
 	    -f .dockerfile-$(OS)_$(ARCH) \
 	    .
