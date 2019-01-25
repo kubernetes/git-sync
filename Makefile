@@ -87,10 +87,19 @@ all-push: $(addprefix push-, $(ALL_PLATFORMS))
 
 build: bin/$(OS)_$(ARCH)/$(BIN)
 
-bin/$(OS)_$(ARCH)/$(BIN): build-dirs
+BUILD_DIRS := bin/$(OS)_$(ARCH) .go/src/$(PKG) .go/pkg .go/bin .go/std/$(OS)_$(ARCH) .go/cache
+
+# TODO: This is .PHONY because building Go code uses a compiler-internal DAG,
+# so we have to run the go tool.  Unfortunately, go always touches the binary
+# during `go install` even if it didn't change anything (as per md5sum).  This
+# makes make unhappy.  Better would be to run go, see that the result did not
+# change, and then bypass further processing.  Sadly not possible for now.
+.PHONY: bin/$(OS)_$(ARCH)/$(BIN)
+bin/$(OS)_$(ARCH)/$(BIN): $(BUILD_DIRS)
 	@echo "building: $@"
 	@docker run                                                                  \
-	    -i                                                                       \
+	    -ti                                                                      \
+	    --rm                                                                     \
 	    -u $$(id -u):$$(id -g)                                                   \
 	    -v $$(pwd)/.go:/go                                                       \
 	    -v $$(pwd):/go/src/$(PKG)                                                \
@@ -98,10 +107,9 @@ bin/$(OS)_$(ARCH)/$(BIN): build-dirs
 	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                       \
 	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
+	    -w /go/src/$(PKG)                                                        \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
-	    -w /go/src/$(PKG)                                                        \
-	    --rm                                                                     \
 	    $(BUILD_IMAGE)                                                           \
 	    /bin/sh -c "                                                             \
 	        ARCH=$(ARCH)                                                         \
@@ -141,7 +149,7 @@ push-name:
 	@echo "pushed: $(IMAGE):$(TAG)"
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
-manifest-list: container
+manifest-list: push
 	manifest-tool \
 	    --username=oauth2accesstoken \
 	    --password=$$(gcloud auth print-access-token) \
@@ -153,7 +161,7 @@ manifest-list: container
 version:
 	@echo $(VERSION)
 
-test: build-dirs
+test: $(BUILD_DIRS)
 	@docker run                                                                  \
 	    -ti                                                                      \
 	    -u $$(id -u):$$(id -g)                                                   \
@@ -171,9 +179,8 @@ test: build-dirs
 	    "
 	@./test_e2e.sh
 
-build-dirs:
-	@mkdir -p bin/$(OS)_$(ARCH)
-	@mkdir -p .go/src/$(PKG) .go/pkg .go/bin .go/std/$(OS)_$(ARCH) .go/cache
+$(BUILD_DIRS):
+	@mkdir -p $@
 
 clean: container-clean bin-clean
 
