@@ -12,13 +12,14 @@ v2.0.4
 
 $ git tag -am "v2.0.5" v2.0.5
 
-$ make container
+$ make manifest-list
 <...lots of output...>
-container: staging-k8s.gcr.io/git-sync-amd64:v2.0.5
-
-$ gcloud docker push -- staging-k8s.gcr.io/git-sync-amd64:v2.0.5
+Successfully tagged staging-k8s.gcr.io/git-sync:v2.0.5__linux_amd64
 <...lots of output...>
-v2.0.5: digest: sha256:904833aedf3f14373e73296240ed44d54aecd4c02367b004452dfeca2465e5bf size: 950
+v2.0.5__linux_amd64: digest: sha256:74cd8777ba08c7b725cd2f6de34a638ba50b48cde59f829e1dc982c8c8c9959a size: 951
+pushed: staging-k8s.gcr.io/git-sync:v2.0.5__linux_amd64
+<...lots of output...>
+Digest: sha256:4d338888373809661b5a29314ca8024379b77c0afb53fd66d6821cf628f75438 433
 ```
 
 Lastly, make a release through the [github UI](https://github.com/kubernetes/git-sync/releases).
