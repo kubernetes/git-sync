@@ -21,12 +21,6 @@ PKG := k8s.io/git-sync
 # Where to push the docker image.
 REGISTRY ?= staging-k8s.gcr.io
 
-# Which platform to build - see $(ALL_PLATFORMS) for options.
-PLATFORM ?= linux/amd64
-
-OS := $(firstword $(subst /, ,$(PLATFORM)))
-ARCH := $(lastword $(subst /, ,$(PLATFORM)))
-
 # This version-strategy uses git tags to set the version string
 VERSION := $(shell git describe --tags --always --dirty)
 #
@@ -41,23 +35,24 @@ SRC_DIRS := cmd pkg # directories which hold app source (not vendored)
 
 ALL_PLATFORMS := linux/amd64
 
+# Used internally.  Users should pass GOOS and/or GOARCH.
+OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
+ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
+
 # TODO: get a baseimage that works for other platforms
 # linux/arm linux/arm64 linux/ppc64le
 
 # Set default base image dynamically for each arch
-ifeq ($(PLATFORM),linux/amd64)
+ifeq ($(OS)/$(ARCH),linux/amd64)
     BASEIMAGE ?= alpine:3.8
-#endif
-#ifeq ($(PLATFORM),linux/arm)
+#else ifeq ($(OS)/$(ARCH),linux/arm)
 #    BASEIMAGE ?= armel/busybox
-#endif
-#ifeq ($(PLATFORM),linux/arm64)
+#else ifeq ($(OS)/$(ARCH),linux/arm64)
 #    BASEIMAGE ?= aarch64/busybox
-#endif
-#ifeq ($(PLATFORM),linux/ppc64le)
+#else ifeq ($(OS)/$(ARCH),linux/ppc64le)
 #    BASEIMAGE ?= ppc64le/busybox
 else
-    $(error Unsupported platform '$(PLATFORM)')
+    $(error Unsupported target platform '$(OS)/$(ARCH)')
 endif
 
 IMAGE := $(REGISTRY)/$(BIN)
@@ -70,41 +65,62 @@ BUILD_IMAGE ?= golang:1.11-alpine
 # If you want to build AND push all containers, see the 'all-push' rule.
 all: build
 
+# For the following OS/ARCH expansions, we transform OS/ARCH into OS_ARCH
+# because make pattern rules don't match with embedded '/' characters.
+
 build-%:
-	@$(MAKE) --no-print-directory ARCH=$* build
+	@$(MAKE) build                        \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
 container-%:
-	@$(MAKE) --no-print-directory ARCH=$* container
+	@$(MAKE) container                    \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
 push-%:
-	@$(MAKE) --no-print-directory ARCH=$* push
+	@$(MAKE) push                         \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
-all-build: $(addprefix build-, $(ALL_PLATFORMS))
+all-build: $(addprefix build-, $(subst /,_, $(ALL_PLATFORMS)))
 
-all-container: $(addprefix container-, $(ALL_PLATFORMS))
+all-container: $(addprefix container-, $(subst /,_, $(ALL_PLATFORMS)))
 
-all-push: $(addprefix push-, $(ALL_PLATFORMS))
+all-push: $(addprefix push-, $(subst /,_, $(ALL_PLATFORMS)))
 
 build: bin/$(OS)_$(ARCH)/$(BIN)
 
-BUILD_DIRS := bin/$(OS)_$(ARCH) .go/src/$(PKG) .go/pkg .go/bin .go/std/$(OS)_$(ARCH) .go/cache
+BUILD_DIRS :=             \
+    bin/$(OS)_$(ARCH)     \
+    .go/src/$(PKG)        \
+    .go/pkg               \
+    .go/bin/$(OS)_$(ARCH) \
+    .go/std/$(OS)_$(ARCH) \
+    .go/cache
 
-# TODO: This is .PHONY because building Go code uses a compiler-internal DAG,
-# so we have to run the go tool.  Unfortunately, go always touches the binary
-# during `go install` even if it didn't change anything (as per md5sum).  This
-# makes make unhappy.  Better would be to run go, see that the result did not
-# change, and then bypass further processing.  Sadly not possible for now.
-.PHONY: bin/$(OS)_$(ARCH)/$(BIN)
-bin/$(OS)_$(ARCH)/$(BIN): $(BUILD_DIRS)
-	@echo "building: $@"
+# The following structure defeats Go's (intentional) behavior to always touch
+# result files, even if they have not changed.  This will still run `go` but
+# will not trigger further work if nothing has actually changed.
+OUTBIN = bin/$(OS)_$(ARCH)/$(BIN)
+$(OUTBIN): .go/$(OUTBIN).stamp
+	@true
+
+# This will build the binary under ./.go and update the real binary iff needed.
+.PHONY: .go/$(OUTBIN).stamp
+.go/$(OUTBIN).stamp: $(BUILD_DIRS)
+	@echo "making $(OUTBIN)"
 	@docker run                                                                  \
 	    -ti                                                                      \
 	    --rm                                                                     \
 	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd)/.go:/go                                                       \
 	    -v $$(pwd):/go/src/$(PKG)                                                \
-	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin                                     \
-	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                       \
+	    -v $$(pwd)/.go:/go                                                       \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
 	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
 	    -w /go/src/$(PKG)                                                        \
@@ -118,7 +134,12 @@ bin/$(OS)_$(ARCH)/$(BIN): $(BUILD_DIRS)
 	        PKG=$(PKG)                                                           \
 	        ./build/build.sh                                                     \
 	    "
+	@if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then \
+	    cat .go/$(OUTBIN) > $(OUTBIN);         \
+	    date >$@;                              \
+	fi
 
+# Used to track state in hidden files.
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
 container: .container-$(DOTFILE_IMAGE) container-name
@@ -165,9 +186,10 @@ test: $(BUILD_DIRS)
 	@docker run                                                                  \
 	    -ti                                                                      \
 	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd)/.go:/go                                                       \
 	    -v $$(pwd):/go/src/$(PKG)                                                \
-	    -v $$(pwd)/bin/$(OS)_$(ARCH):/go/bin                                     \
+	    -v $$(pwd)/.go:/go                                                       \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
 	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
