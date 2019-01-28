@@ -21,12 +21,6 @@ PKG := k8s.io/git-sync
 # Where to push the docker image.
 REGISTRY ?= staging-k8s.gcr.io
 
-# Which platform to build - see $(ALL_PLATFORMS) for options.
-PLATFORM ?= linux/amd64
-
-OS := $(firstword $(subst /, ,$(PLATFORM)))
-ARCH := $(lastword $(subst /, ,$(PLATFORM)))
-
 # This version-strategy uses git tags to set the version string
 VERSION := $(shell git describe --tags --always --dirty)
 #
@@ -41,23 +35,24 @@ SRC_DIRS := cmd pkg # directories which hold app source (not vendored)
 
 ALL_PLATFORMS := linux/amd64
 
+# Used internally.  Users should pass GOOS and/or GOARCH.
+OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
+ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
+
 # TODO: get a baseimage that works for other platforms
 # linux/arm linux/arm64 linux/ppc64le
 
 # Set default base image dynamically for each arch
-ifeq ($(PLATFORM),linux/amd64)
+ifeq ($(OS)/$(ARCH),linux/amd64)
     BASEIMAGE ?= alpine:3.8
-#endif
-#ifeq ($(PLATFORM),linux/arm)
+#else ifeq ($(OS)/$(ARCH),linux/arm)
 #    BASEIMAGE ?= armel/busybox
-#endif
-#ifeq ($(PLATFORM),linux/arm64)
+#else ifeq ($(OS)/$(ARCH),linux/arm64)
 #    BASEIMAGE ?= aarch64/busybox
-#endif
-#ifeq ($(PLATFORM),linux/ppc64le)
+#else ifeq ($(OS)/$(ARCH),linux/ppc64le)
 #    BASEIMAGE ?= ppc64le/busybox
 else
-    $(error Unsupported platform '$(PLATFORM)')
+    $(error Unsupported target platform '$(OS)/$(ARCH)')
 endif
 
 IMAGE := $(REGISTRY)/$(BIN)
@@ -70,20 +65,32 @@ BUILD_IMAGE ?= golang:1.11-alpine
 # If you want to build AND push all containers, see the 'all-push' rule.
 all: build
 
+# For the following OS/ARCH expansions, we transform OS/ARCH into OS_ARCH
+# because make pattern rules don't match with embedded '/' characters.
+
 build-%:
-	@$(MAKE) --no-print-directory ARCH=$* build
+	@$(MAKE) build                        \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
 container-%:
-	@$(MAKE) --no-print-directory ARCH=$* container
+	@$(MAKE) container                    \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
 push-%:
-	@$(MAKE) --no-print-directory ARCH=$* push
+	@$(MAKE) push                         \
+	    --no-print-directory              \
+	    GOOS=$(firstword $(subst _, ,$*)) \
+	    GOARCH=$(lastword $(subst _, ,$*))
 
-all-build: $(addprefix build-, $(ALL_PLATFORMS))
+all-build: $(addprefix build-, $(subst /,_, $(ALL_PLATFORMS)))
 
-all-container: $(addprefix container-, $(ALL_PLATFORMS))
+all-container: $(addprefix container-, $(subst /,_, $(ALL_PLATFORMS)))
 
-all-push: $(addprefix push-, $(ALL_PLATFORMS))
+all-push: $(addprefix push-, $(subst /,_, $(ALL_PLATFORMS)))
 
 build: bin/$(OS)_$(ARCH)/$(BIN)
 
@@ -132,6 +139,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	    date >$@;                              \
 	fi
 
+# Used to track state in hidden files.
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
 container: .container-$(DOTFILE_IMAGE) container-name
