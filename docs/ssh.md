@@ -15,7 +15,7 @@ ssh-keyscan $YOUR_GIT_HOST > /tmp/known_hosts
 Use the ``kubectl create secret`` command and point to the file on your filesystem that stores the key. Ensure that the file is mapped to "ssh" as shown (the file can be located anywhere).
 
 ```
-kubectl create secret generic git-creds --from-file=ssh=~/.ssh/id_rsa --from-file=known_hosts=/tmp/known_hosts
+kubectl create secret generic git-creds --from-file=ssh=$HOME/.ssh/id_rsa --from-file=known_hosts=/tmp/known_hosts
 ```
 
 ***Method 2:***
