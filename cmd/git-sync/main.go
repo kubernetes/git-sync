@@ -641,13 +641,9 @@ func setupGitSSH(setupKnownHosts bool) error {
 	var pathToSSHSecret = *flSSHKeyFile
 	var pathToSSHKnownHosts = *flSSHKnownHostsFile
 
-	fileInfo, err := os.Stat(pathToSSHSecret)
+	_, err := os.Stat(pathToSSHSecret)
 	if err != nil {
 		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
-	}
-
-	if fileInfo.Mode() != 0400 {
-		return fmt.Errorf("Permissions %s for SSH key are too open. It is recommended to mount secret volume with `defaultMode: 256` (decimal number for octal 0400).", fileInfo.Mode())
 	}
 
 	if setupKnownHosts {
