@@ -54,7 +54,7 @@ var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git operations")
-var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
+var flLink = flag.String("link", envString("GIT_SYNC_LINK", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
@@ -199,12 +199,12 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	if *flDest == "" {
+	if *flLink == "" {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
-		*flDest = parts[len(parts)-1]
+		*flLink = parts[len(parts)-1]
 	}
-	if strings.Contains(*flDest, "/") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a bare name\n")
+	if strings.Contains(*flLink, "/") {
+		fmt.Fprintf(os.Stderr, "ERROR: --link must be a bare name\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -287,7 +287,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flLink); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
@@ -403,7 +403,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, depth int, hash string) error {
 	log.V(0).Infof("syncing to %s (%s)", rev, hash)
 
 	args := []string{"fetch", "--tags"}
@@ -458,7 +458,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		}
 	}
 
-	return updateSymlink(ctx, gitRoot, dest, worktreePath)
+	return updateSymlink(ctx, gitRoot, link, worktreePath)
 }
 
 func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
@@ -511,8 +511,8 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured and (2) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, error) {
-	target := path.Join(gitRoot, dest)
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, link string) (bool, error) {
+	target := path.Join(gitRoot, link)
 	gitRepoPath := path.Join(target, ".git")
 	hash := rev
 	_, err := os.Stat(gitRepoPath)
@@ -544,7 +544,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		}
 	}
 
-	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
+	return true, addWorktreeAndSwap(ctx, gitRoot, link, branch, rev, depth, hash)
 }
 
 // getRevs returns the local and upstream hashes for rev.
