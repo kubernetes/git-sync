@@ -74,7 +74,7 @@ In your git-sync container configuration, mount the Secret volume at
 environment variable) is set to use the SSH protocol (e.g.
 git@github.com/foo/bar) , and set the `-ssh` flags (or set GIT_SYNC_SSH to
 "true").  You will also need to set your container's `securityContext` to run
-as user ID "65535" which is created for running git-syn as non-root.
+as user ID "65533" which is created for running git-sync as non-root.
 
 ```
       # ...
