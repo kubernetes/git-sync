@@ -54,6 +54,10 @@ var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git operations")
+
+// Deprecated: flDest is deprecated. Use flLink instead.
+var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
+	"deprecated: see --link, the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
 var flLink = flag.String("link", envString("GIT_SYNC_LINK", ""),
 	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
@@ -199,6 +203,17 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	if *flDest == "" {
+		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		*flDest = parts[len(parts)-1]
+	}
+	if strings.Contains(*flDest, "/") {
+		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a bare name. The --dest flag is deprecated, please use --link instead.\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	if *flLink == "" {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flLink = parts[len(parts)-1]
@@ -208,6 +223,18 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	if *flDest != "" {
+		if *flLink == "" {
+			log.V(0).Infof("The --dest flag is deprecated, please use --link instead.")
+			*flLink = *flDest
+		} else {
+			fmt.Fprintf(os.Stderr, "ERROR: flags --dest and --link are mutually exclusive.\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+	}
+
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: git executable %q not found: %v\n", *flGitCmd, err)
 		os.Exit(1)
