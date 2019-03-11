@@ -1,0 +1,29 @@
+version: 2
+
+jobs:
+  build_support_autoreporter:
+    environment:
+      - BUILD_TARGET: prod
+      - IMAGE_NAME: customer-support-autoreporter
+      - GOOS: linux
+      - GOARCH: amd64
+      - VERSION: 3.1.1
+    docker:
+      - image: ${DOCKER_BUILD_IMAGE}
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build image
+          command: make container
+workflows:
+  version: 2
+  main:
+    jobs:
+      - build_support_autoreporter:
+          context: aws-ecr-prod
+          filters:
+            tags:
+              only:
+                  /.*/
