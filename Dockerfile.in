@@ -26,6 +26,22 @@ RUN apk update --no-cache && apk add \
 
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
 
+# Compile libnss_wrapper (see https://bugs.alpinelinux.org/issues/6710)
+RUN apk add --no-cache --virtual .nss_wrapper-build-deps git build-base cmake cmocka-dev && \
+    git clone git://git.samba.org/nss_wrapper.git && \
+    cd nss_wrapper && \
+    mkdir build && \
+    cd build/ && \
+    mkdir -p /usr/local/include/ && \
+    echo -e "#ifndef NSS__H\n#define NSS__H\n\nenum nss_status\n{\n\tNSS_STATUS_TRYAGAIN = -2,\n\tNSS_STATUS_UNAVAIL = -1,\n\tNSS_STATUS_NOTFOUND = 0,\n\tNSS_STATUS_SUCCESS = 1,\n\tNSS_STATUS_RETURN = 2\n};\n\n#endif" > /usr/local/include/nss.h && \
+    cmake .. -DUNIT_TESTING:BOOL=ON && \
+    make && \
+    make CTEST_OUTPUT_ON_FAILURE=TRUE test && \
+    make install && \
+    rm -fr /nss_wrapper
+
+ADD nss_wrapper.sh /nss_wrapper.sh
+
 WORKDIR /tmp
 USER git-sync:nobody
 ENTRYPOINT ["/{ARG_BIN}"]
