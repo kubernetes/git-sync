@@ -40,7 +40,10 @@ import (
 	"github.com/go-logr/glogr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"k8s.io/git-sync/pkg/version"
 )
+
+var flVer = flag.Bool("version", false, "print the version and exit")
 
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""),
 	"the git repository to clone")
@@ -184,6 +187,12 @@ func main() {
 	setFlagDefaults()
 
 	flag.Parse()
+
+	if *flVer {
+		fmt.Println(version.VERSION)
+		os.Exit(0)
+	}
+
 	if *flRepo == "" {
 		fmt.Fprintf(os.Stderr, "ERROR: --repo or $GIT_SYNC_REPO must be provided\n")
 		flag.Usage()
