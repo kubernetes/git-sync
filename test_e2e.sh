@@ -52,16 +52,6 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
-function finish() {
-  if [ $? -ne 0 ]; then
-    echo "The directory $DIR was not removed as it contains"\
-         "log files useful for debugging"
-    remove_sync_container
-  fi
-}
-
-trap finish INT EXIT
-
 # #####################
 # main
 # #####################
@@ -79,6 +69,16 @@ if [[ -z "$DIR" ]]; then
     exit 1
 fi
 echo "test root is $DIR"
+
+function finish() {
+  if [ $? -ne 0 ]; then
+    echo "The directory $DIR was not removed as it contains"\
+         "log files useful for debugging"
+    remove_sync_container
+  fi
+}
+
+trap finish INT EXIT
 
 CONTAINER_NAME=git-sync-$RANDOM
 function GIT_SYNC() {
