@@ -37,10 +37,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/glogr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/thockin/glogr"
-	"github.com/thockin/logr"
 )
 
 var flRepo = flag.String("repo", envString("GIT_SYNC_REPO", ""),
@@ -105,7 +104,7 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
-var log = newLoggerOrDie()
+var log = glogr.New()
 
 // Total pull/error, summary on pull duration
 var (
@@ -124,15 +123,6 @@ var (
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
-}
-
-func newLoggerOrDie() logr.Logger {
-	g, err := glogr.New()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failind to initialize logging: %v\n", err)
-		os.Exit(1)
-	}
-	return g
 }
 
 func envString(key, def string) string {
@@ -158,7 +148,7 @@ func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.Atoi(env)
 		if err != nil {
-			log.Errorf("invalid value for %q: using default: %v", key, def)
+			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
 			return def
 		}
 		return val
@@ -170,7 +160,7 @@ func envFloat(key string, def float64) float64 {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.ParseFloat(env, 64)
 		if err != nil {
-			log.Errorf("invalid value for %q: using default: %v", key, def)
+			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
 			return def
 		}
 		return val
@@ -182,7 +172,7 @@ func envDuration(key string, def time.Duration) time.Duration {
 	if env := os.Getenv(key); env != "" {
 		val, err := time.ParseDuration(env)
 		if err != nil {
-			log.Errorf("invalid value for %q: using default: %v", key, def)
+			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
 			return def
 		}
 		return val
@@ -267,7 +257,7 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
-	log.V(0).Infof("starting up: %q", os.Args)
+	log.V(0).Info("starting up", "args", os.Args)
 
 	// Startup webhooks goroutine
 	webhookTriggerChan := make(chan struct{}, 1)
@@ -291,13 +281,13 @@ func main() {
 			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
-				log.Errorf("error syncing repo: %v", err)
+				log.Error(err, "failed to sync repo, aborting")
 				os.Exit(1)
 			}
 
 			failCount++
-			log.Errorf("unexpected error syncing repo: %v", err)
-			log.V(0).Infof("waiting %v before retrying", waitTime(*flWait))
+			log.Error(err, "unexpected error syncing repo, will retry")
+			log.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
@@ -319,17 +309,17 @@ func main() {
 				os.Exit(0)
 			}
 			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
-				log.Errorf("can't tell if rev %s is a git hash, exiting", *flRev)
+				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
 				os.Exit(1)
 			} else if isHash {
-				log.V(0).Infof("rev %s appears to be a git hash, no further sync needed", *flRev)
+				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
 				sleepForever()
 			}
 			initialSync = false
 		}
 
 		failCount = 0
-		log.V(1).Infof("next sync in %v", waitTime(*flWait))
+		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
 		cancel()
 		time.Sleep(waitTime(*flWait))
 	}
@@ -361,7 +351,8 @@ func sleepForever() {
 // updateSymlink atomically swaps the symlink to point at the specified directory and cleans up the previous worktree.
 func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	currentDir, err := filepath.EvalSymlinks(path.Join(gitRoot, link))
+	fullpath := path.Join(gitRoot, link)
+	currentDir, err := filepath.EvalSymlinks(fullpath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error accessing symlink: %v", err)
 	}
@@ -373,15 +364,16 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 		return fmt.Errorf("error converting to relative path: %v", err)
 	}
 
-	if _, err := runCommand(ctx, gitRoot, "ln", "-snf", newDirRelative, "tmp-link"); err != nil {
+	const tmplink = "tmp-link"
+	if _, err := runCommand(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return fmt.Errorf("error creating symlink: %v", err)
 	}
-	log.V(1).Infof("created symlink %s -> %s", "tmp-link", newDirRelative)
+	log.V(1).Info("created tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
 
-	if _, err := runCommand(ctx, gitRoot, "mv", "-T", "tmp-link", link); err != nil {
+	if _, err := runCommand(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
-	log.V(1).Infof("renamed symlink %s to %s", "tmp-link", link)
+	log.V(1).Info("renamed symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 
 	// Clean up previous worktree
 	if len(currentDir) > 0 {
@@ -389,14 +381,14 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
 
-		log.V(1).Infof("removed %s", currentDir)
+		log.V(1).Info("removed previous worktree", "path", currentDir)
 
 		_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune")
 		if err != nil {
 			return err
 		}
 
-		log.V(1).Infof("pruned old worktrees")
+		log.V(1).Info("pruned old worktrees")
 	}
 
 	return nil
@@ -404,7 +396,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
-	log.V(0).Infof("syncing to %s (%s)", rev, hash)
+	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "--tags"}
 	if depth != 0 {
@@ -428,7 +420,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if err != nil {
 		return err
 	}
-	log.V(0).Infof("added worktree %s for origin/%s", worktreePath, branch)
+	log.V(0).Info("added worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
@@ -448,7 +440,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if err != nil {
 		return err
 	}
-	log.V(0).Infof("reset worktree %s to %s", worktreePath, hash)
+	log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	if *flChmod != 0 {
 		// set file permissions
@@ -471,7 +463,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
-			log.V(0).Infof("%s exists and is not empty (previous crash?), cleaning up", gitRoot)
+			log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", gitRoot)
 			err := os.RemoveAll(gitRoot)
 			if err != nil {
 				return err
@@ -484,7 +476,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 			return err
 		}
 	}
-	log.V(0).Infof("cloned %s", repo)
+	log.V(0).Info("cloned repo", "origin", repo)
 
 	return nil
 }
@@ -533,15 +525,13 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		if err != nil {
 			return false, err
 		}
-		log.V(2).Infof("local hash:  %s", local)
-		log.V(2).Infof("remote hash: %s", remote)
-		if local != remote {
-			log.V(0).Infof("update required")
-			hash = remote
-		} else {
-			log.V(1).Infof("no update required")
+		log.V(2).Info("git state", "local", local, "remote", remote)
+		if local == remote {
+			log.V(1).Info("no update required")
 			return false, nil
 		}
+		log.V(0).Info("update required")
+		hash = remote
 	}
 
 	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
@@ -594,7 +584,7 @@ func cmdForLog(command string, args ...string) string {
 }
 
 func runCommand(ctx context.Context, cwd, command string, args ...string) (string, error) {
-	log.V(5).Infof("run(%q): %s", cwd, cmdForLog(command, args...))
+	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdForLog(command, args...))
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
@@ -603,6 +593,7 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("command timed out: %v: %q", err, string(output))
+
 	}
 	if err != nil {
 		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
@@ -612,7 +603,7 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 }
 
 func setupGitAuth(username, password, gitURL string) error {
-	log.V(1).Infof("setting up the git credential cache")
+	log.V(1).Info("setting up git credential cache")
 	cmd := exec.Command(*flGitCmd, "config", "--global", "credential.helper", "cache")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -636,20 +627,20 @@ func setupGitAuth(username, password, gitURL string) error {
 }
 
 func setupGitSSH(setupKnownHosts bool) error {
-	log.V(1).Infof("setting up git SSH credentials")
+	log.V(1).Info("setting up git SSH credentials")
 
 	var pathToSSHSecret = *flSSHKeyFile
 	var pathToSSHKnownHosts = *flSSHKnownHostsFile
 
 	_, err := os.Stat(pathToSSHSecret)
 	if err != nil {
-		return fmt.Errorf("error: could not find SSH key Secret: %v", err)
+		return fmt.Errorf("error: could not access SSH key Secret: %v", err)
 	}
 
 	if setupKnownHosts {
 		_, err := os.Stat(pathToSSHKnownHosts)
 		if err != nil {
-			return fmt.Errorf("error: could not find SSH known_hosts file: %v", err)
+			return fmt.Errorf("error: could not access SSH known_hosts file: %v", err)
 		}
 
 		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
@@ -666,13 +657,13 @@ func setupGitSSH(setupKnownHosts bool) error {
 }
 
 func setupGitCookieFile() error {
-	log.V(1).Infof("configuring git cookie file")
+	log.V(1).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
 
 	_, err := os.Stat(pathToCookieFile)
 	if err != nil {
-		return fmt.Errorf("error: could not find git cookie file: %v", err)
+		return fmt.Errorf("error: could not access git cookie file: %v", err)
 	}
 
 	cmd := exec.Command(*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile)
