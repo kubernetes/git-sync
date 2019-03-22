@@ -15,9 +15,6 @@
 # The binary to build (just the basename).
 BIN := git-sync
 
-# This repo's root import path (under GOPATH).
-PKG := k8s.io/git-sync
-
 # Where to push the docker image.
 REGISTRY ?= staging-k8s.gcr.io
 
@@ -82,10 +79,7 @@ build: bin/$(OS)_$(ARCH)/$(BIN)
 
 BUILD_DIRS :=             \
     bin/$(OS)_$(ARCH)     \
-    .go/src/$(PKG)        \
-    .go/pkg               \
     .go/bin/$(OS)_$(ARCH) \
-    .go/std/$(OS)_$(ARCH) \
     .go/cache
 
 # The following structure defeats Go's (intentional) behavior to always touch
@@ -103,13 +97,11 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	    -ti                                                                      \
 	    --rm                                                                     \
 	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd):/go/src/$(PKG)                                                \
-	    -v $$(pwd)/.go:/go                                                       \
+	    -v $$(pwd):/src                                                          \
+	    -w /src                                                                  \
 	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
 	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
-	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
-	    -w /go/src/$(PKG)                                                        \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
 	    $(BUILD_IMAGE)                                                           \
@@ -117,7 +109,6 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	        ARCH=$(ARCH)                                                         \
 	        OS=$(OS)                                                             \
 	        VERSION=$(VERSION)                                                   \
-	        PKG=$(PKG)                                                           \
 	        ./build/build.sh                                                     \
 	    "
 	@if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then \
@@ -172,15 +163,13 @@ test: $(BUILD_DIRS)
 	@docker run                                                                  \
 	    -ti                                                                      \
 	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd):/go/src/$(PKG)                                                \
-	    -v $$(pwd)/.go:/go                                                       \
+	    -v $$(pwd):/src                                                          \
+	    -w /src                                                                  \
 	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
 	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
-	    -v $$(pwd)/.go/std/$(OS)_$(ARCH):/usr/local/go/pkg/$(OS)_$(ARCH)_static  \
 	    -v $$(pwd)/.go/cache:/.cache                                             \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
-	    -w /go/src/$(PKG)                                                        \
 	    $(BUILD_IMAGE)                                                           \
 	    /bin/sh -c "                                                             \
 	        ./build/test.sh $(SRC_DIRS)                                          \
