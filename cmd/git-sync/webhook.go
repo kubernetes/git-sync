@@ -54,10 +54,10 @@ func (w *Webhook) run(ch chan struct{}) {
 
 		for {
 			if err := w.Do(); err != nil {
-				log.Errorf("error calling webhook %v: %v", w.URL, err)
+				log.Error(err, "error calling webhook", "url", w.URL)
 				time.Sleep(w.Backoff)
 			} else {
-				log.V(0).Infof("calling webhook %v was: OK\n", w.URL)
+				log.V(0).Info("success calling webhook", "url", w.URL)
 				break
 			}
 		}
