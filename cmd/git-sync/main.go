@@ -64,6 +64,8 @@ var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
 	"the max number of seconds for a complete sync")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
+var flAbortOnFirstSyncError = flag.Bool("abort-on-first-sync-error", envBool("GIT_ABORT_ON_FIRST_SYNC_ERROR", true),
+	"if set, aborts git-sync if the first attempt to sync results in an error, otherwise keeps retrying")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first pull must succeed, -1 disables aborting for any number of failures after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
@@ -289,7 +291,11 @@ func main() {
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
-			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
+			if (initialSync && flAbortOnFirstSyncError) || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
+				// A failure to sync at first attempt or after a number of
+				// retries may indicate a non-transient error, like say a typo
+				// in the git repo name.  This may not be recoverable unless we
+				// exit.
 				log.Error(err, "failed to sync repo, aborting")
 				os.Exit(1)
 			}
