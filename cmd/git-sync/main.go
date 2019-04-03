@@ -289,7 +289,8 @@ func main() {
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
-			if initialSync || (*flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures) {
+			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
+				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "failed to sync repo, aborting")
 				os.Exit(1)
 			}
