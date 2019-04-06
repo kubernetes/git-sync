@@ -602,10 +602,12 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 	}
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
+		log.V(3).Info("command timed out", "err", err, "cwd", cwd, "cmd", cmdForLog(command, args...))
 		return "", fmt.Errorf("command timed out: %v: %q", err, string(output))
 
 	}
 	if err != nil {
+		log.V(3).Info("error running command", "err", err, "cwd", cwd, "cmd", cmdForLog(command, args...))
 		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
 	}
 
