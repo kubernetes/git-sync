@@ -18,14 +18,16 @@ MAINTAINER Tim Hockin <thockin@google.com>
 
 ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 
-RUN apk update --no-cache && apk add \
-    ca-certificates \
-    coreutils \
-    git \
-    openssh-client
+RUN apt-get update \
+    && apt-get -y install \
+        ca-certificates \
+        coreutils \
+        git \
+        openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set $HOME so git can create things like .gitconfig
-ENV HOME /tmp
+RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
 
-USER nobody:nobody
+WORKDIR /tmp
+USER git-sync:nogroup
 ENTRYPOINT ["/{ARG_BIN}"]
