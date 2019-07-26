@@ -147,12 +147,13 @@ push-name:
 	@echo "pushed: $(IMAGE):$(TAG)"
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
-manifest-list: push
-	manifest-tool \
-	    --username=oauth2accesstoken \
-	    --password=$$(gcloud auth print-access-token) \
-	    push from-args \
-	    --platforms "$(ALL_PLATFORMS)" \
+manifest-list: all-push
+	platforms=$$(echo $(ALL_PLATFORMS) | sed 's/ /,/g');  \
+	manifest-tool                                         \
+	    --username=oauth2accesstoken                      \
+	    --password=$$(gcloud auth print-access-token)     \
+	    push from-args                                    \
+	    --platforms "$$platforms"                         \
 	    --template $(REGISTRY)/$(BIN):$(VERSION)__OS_ARCH \
 	    --target $(REGISTRY)/$(BIN):$(VERSION)
 
