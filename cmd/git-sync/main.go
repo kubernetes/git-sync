@@ -453,11 +453,12 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	// Update submodules
-	// NOTICE: it works for repos with or without submodules
-	// TODO: add --depth flag support
-	// possible bug in git: git fetches full submodule history even with --depth flag is provided
-	// (tested with git version 2.23.0 on Mac)
-	_, err = runCommand(ctx, worktreePath, *flGitCmd, "submodule", "update", "--init", "--recursive")
+	// NOTICE: it works for repo with or without submodules
+	submodules_args := []string{"submodule", "update", "--init", "--recursive"}
+	if depth != 0 {
+		submodules_args = append(submodules_args, "--depth", strconv.Itoa(depth))
+	}
+	_, err = runCommand(ctx, worktreePath, *flGitCmd, submodules_args...)
 	if err != nil {
 		return err
 	}
