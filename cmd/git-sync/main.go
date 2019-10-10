@@ -453,12 +453,12 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	// Update submodules
-
+	// NOTICE: it works for repos with or without submodules
 	_, err = runCommand(ctx, worktreePath, *flGitCmd, "submodule", "update", "--init", "--recursive")
 	if err != nil {
 		return err
 	}
-	log.V(0).Info("updating submodules")
+	log.V(0).Info("updated submodules")
 
 	if *flChmod != 0 {
 		// set file permissions
