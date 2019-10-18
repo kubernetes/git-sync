@@ -454,6 +454,9 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Update submodules
 	// NOTICE: it works for repos with or without submodules
+	// TODO: add --depth flag support
+	// possible bug in git: git fetches full submodule history even with --depth flag is provided
+	// (tested with git version 2.23.0 on Mac)
 	_, err = runCommand(ctx, worktreePath, *flGitCmd, "submodule", "update", "--init", "--recursive")
 	if err != nil {
 		return err
