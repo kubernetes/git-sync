@@ -664,5 +664,103 @@ remove_sync_container
 wait
 pass
 
+# Test submodule sync
+testcase "submodule-sync"
+
+# Init submodule repo
+SUBMODULE_REPO_NAME="sub"
+SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
+mkdir "$SUBMODULE"
+
+git -C "$SUBMODULE" init -q
+echo "submodule" > "$SUBMODULE"/submodule
+git -C "$SUBMODULE" add submodule
+git -C "$SUBMODULE" commit -aqm "init submodule file"
+
+# Init nested submodule repo
+NESTED_SUBMODULE_REPO_NAME="nested-sub"
+NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
+mkdir "$NESTED_SUBMODULE"
+
+git -C "$NESTED_SUBMODULE" init -q
+echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
+git -C "$NESTED_SUBMODULE" add nested-submodule
+git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
+
+# Add submodule
+git -C "$REPO" submodule add -q $SUBMODULE
+git -C "$REPO" commit -aqm "add submodule"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --wait=0.1 \
+    --repo="$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "submodule"
+# Make change in submodule repo
+echo "$TESTCASE 2" > "$SUBMODULE"/submodule
+git -C "$SUBMODULE" commit -qam "$TESTCASE 2"
+git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$TESTCASE 2"
+# Move backward in submodule repo
+git -C "$SUBMODULE" reset -q --hard HEAD^
+git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+git -C "$REPO" commit -qam "$TESTCASE 3"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "submodule"
+# Add nested submodule to submodule repo
+git -C "$SUBMODULE" submodule add -q $NESTED_SUBMODULE
+git -C "$SUBMODULE" commit -aqm "add nested submodule"
+git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+git -C "$REPO" commit -qam "$TESTCASE 4"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule
+assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule "nested-submodule"
+# Remove nested submodule
+git -C "$SUBMODULE" submodule deinit -q $NESTED_SUBMODULE_REPO_NAME
+rm -rf "$SUBMODULE"/.git/modules/$NESTED_SUBMODULE_REPO_NAME
+git -C "$SUBMODULE" rm -qf $NESTED_SUBMODULE_REPO_NAME
+git -C "$SUBMODULE" commit -aqm "delete nested submodule"
+git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+git -C "$REPO" commit -qam "$TESTCASE 5"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule
+# Remove submodule
+git -C "$REPO" submodule deinit -q $SUBMODULE_REPO_NAME
+rm -rf "$REPO"/.git/modules/$SUBMODULE_REPO_NAME
+git -C "$REPO" rm -qf $SUBMODULE_REPO_NAME 
+git -C "$REPO" commit -aqm "delete submodule"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+# Wrap up
+rm -rf $SUBMODULE
+rm -rf $NESTED_SUBMODULE
+remove_sync_container
+wait
+pass
+
 echo "cleaning up $DIR"
 rm -rf "$DIR"
