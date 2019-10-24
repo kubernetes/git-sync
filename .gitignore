@@ -3,3 +3,4 @@
 /.push-*
 /.container-*
 /.dockerfile-*
+/.vscode
