@@ -21,6 +21,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ import (
 	"github.com/go-logr/glogr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rivo/uniseg"
 	"k8s.io/git-sync/pkg/version"
 )
 
@@ -64,6 +66,10 @@ var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
 	"the max number of seconds for a complete sync")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the initial checkout")
+var flSpecific = flag.Bool("specific", envBool("GIT_SYNC_SPECIFIC", false),
+	"checkout at a specific time daily")
+var flSpecificTime = flag.String("specific-time", envString("GIT_SYNC_SPECIFIC_TIME", "0000"),
+	"specify in military time when to checkout")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first pull must succeed, -1 disables aborting for any number of failures after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
@@ -183,6 +189,36 @@ func envDuration(key string, def time.Duration) time.Duration {
 	return def
 }
 
+func sanitizeSpecificTime(t string) (h int, m int) {
+	if uniseg.GraphemeClusterCount(t) != 4 {
+		err := errors.New("error=")
+		log.Error(err, "--specific-time value not in military format, e.g. 1500 or 0130")
+		os.Exit(1)
+	}
+
+	tsplit := strings.Split(t, "")
+	h, _ = strconv.Atoi(strings.Join(tsplit[0:2], ""))
+	m, _ = strconv.Atoi(strings.Join(tsplit[2:], ""))
+
+	return h, m
+}
+
+func initSpecific(h int, m int) {
+	hold := true
+	t := time.Now()
+	n := time.Date(t.Year(), t.Month(), t.Day(), h, m, 0, 0, t.Location())
+	d := n.Sub(t)
+	if d < 0 {
+		n = n.Add(24 * time.Hour)
+		d = n.Sub(t)
+	}
+	for hold {
+		time.Sleep(d)
+		d = 24 * time.Hour
+		hold = false
+	}
+}
+
 func main() {
 	setFlagDefaults()
 
@@ -270,7 +306,11 @@ func main() {
 
 	// Startup webhooks goroutine
 	webhookTriggerChan := make(chan struct{}, 1)
-	if *flWebhookURL != "" {
+	if *flWebhookURL != "" && *flSpecific == true {
+		err := errors.New("error=")
+		log.Error(err, "--specific does not support webhooks")
+		os.Exit(1)
+	} else if *flWebhookURL != "" {
 		webhook := Webhook{
 			URL:     *flWebhookURL,
 			Method:  *flWebhookMethod,
@@ -286,6 +326,10 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
+		if *flSpecific {
+			h, m := sanitizeSpecificTime(*flSpecificTime)
+			initSpecific(h, m)
+		}
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
