@@ -22,8 +22,15 @@ type Webhook struct {
 	Backoff time.Duration
 }
 
-func (w *Webhook) Do() error {
+type webhookRepoInfo struct {
+	Hash   string
+	Branch string
+}
+
+func (w *Webhook) Do(info webhookRepoInfo) error {
 	req, err := http.NewRequest(w.Method, w.URL, nil)
+	req.Header.Set("Git-Sync-Branch", info.Branch)
+	req.Header.Set("Git-Sync-Hash", info.Hash)
 	if err != nil {
 		return err
 	}
@@ -47,13 +54,13 @@ func (w *Webhook) Do() error {
 }
 
 // Wait for trigger events from the channel, and send webhooks when triggered
-func (w *Webhook) run(ch chan struct{}) {
+func (w *Webhook) run(ch chan webhookRepoInfo) {
 	for {
 		// Wait for trigger
-		<-ch
+		info := <-ch
 
 		for {
-			if err := w.Do(); err != nil {
+			if err := w.Do(info); err != nil {
 				log.Error(err, "error calling webhook", "url", w.URL)
 				time.Sleep(w.Backoff)
 			} else {
