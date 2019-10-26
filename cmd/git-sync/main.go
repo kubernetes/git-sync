@@ -40,6 +40,7 @@ import (
 	"github.com/go-logr/glogr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"k8s.io/git-sync/pkg/pid1"
 	"k8s.io/git-sync/pkg/version"
 )
 
@@ -184,6 +185,20 @@ func envDuration(key string, def time.Duration) time.Duration {
 }
 
 func main() {
+	// In case we come up as pid 1, act as init.
+	if os.Getpid() == 1 {
+		fmt.Fprintf(os.Stderr, "INFO: detected pid 1, running init handler\n")
+		err := pid1.ReRun()
+		if err == nil {
+			os.Exit(0)
+		}
+		if exerr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exerr.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "ERROR: unhandled pid1 error: %v\n", err)
+		os.Exit(127)
+	}
+
 	setFlagDefaults()
 
 	flag.Parse()
@@ -198,15 +213,18 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	if *flDest == "" {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flDest = parts[len(parts)-1]
 	}
+
 	if strings.Contains(*flDest, "/") {
 		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a bare name\n")
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: git executable %q not found: %v\n", *flGitCmd, err)
 		os.Exit(1)

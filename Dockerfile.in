@@ -14,8 +14,6 @@
 
 FROM {ARG_FROM}
 
-MAINTAINER Tim Hockin <thockin@google.com>
-
 RUN apt-get update \
     && apt-get -y install \
         ca-certificates \
