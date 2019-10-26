@@ -16,8 +16,6 @@ FROM {ARG_FROM}
 
 MAINTAINER Tim Hockin <thockin@google.com>
 
-ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
-
 RUN apt-get update \
     && apt-get -y install \
         ca-certificates \
@@ -27,6 +25,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
+
+ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 
 WORKDIR /tmp
 USER git-sync:nogroup
