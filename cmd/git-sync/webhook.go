@@ -23,13 +23,11 @@ type Webhook struct {
 }
 
 type webhookRepoInfo struct {
-	Hash   string
-	Branch string
+	Hash string
 }
 
 func (w *Webhook) Do(info webhookRepoInfo) error {
 	req, err := http.NewRequest(w.Method, w.URL, nil)
-	req.Header.Set("Git-Sync-Branch", info.Branch)
 	req.Header.Set("Git-Sync-Hash", info.Hash)
 	if err != nil {
 		return err

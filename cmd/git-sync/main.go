@@ -302,7 +302,7 @@ func main() {
 			time.Sleep(waitTime(*flWait))
 			continue
 		} else if changed {
-			err := triggerWebhook(ctx, webhookTriggerChan, *flBranch, *flRev, *flRoot)
+			err := triggerWebhook(ctx, webhookTriggerChan, *flRev, *flRoot)
 			if err != nil {
 				log.Error(err, "triggering webhook failed")
 			}
@@ -692,10 +692,8 @@ func setupGitCookieFile() error {
 	return nil
 }
 
-func triggerWebhook(ctx context.Context, ch chan webhookRepoInfo, branch, rev, gitRoot string) error {
-	info := webhookRepoInfo{
-		Branch: branch,
-	}
+func triggerWebhook(ctx context.Context, ch chan webhookRepoInfo, rev, gitRoot string) error {
+	info := webhookRepoInfo{}
 
 	hash, err := hashForRev(ctx, rev, gitRoot)
 	if err != nil {
