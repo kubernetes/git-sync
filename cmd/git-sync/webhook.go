@@ -28,7 +28,7 @@ type webhookRepoInfo struct {
 
 func (w *Webhook) Do(info webhookRepoInfo) error {
 	req, err := http.NewRequest(w.Method, w.URL, nil)
-	req.Header.Set("Git-Sync-Hash", info.Hash)
+	req.Header.Set("Gitsync-Hash", info.Hash)
 	if err != nil {
 		return err
 	}
