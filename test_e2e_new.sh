@@ -12,8 +12,26 @@ function testcase() {
     TESTCASE="$1"
 }
 
+function dump_stack() {
+  local stack_skip=${1:-0}
+  stack_skip=$((stack_skip + 1))
+  if [[ ${#FUNCNAME[@]} -gt ${stack_skip} ]]; then
+    echo "Call stack:" >&2
+    local i
+    for ((i=1 ; i <= ${#FUNCNAME[@]} - stack_skip ; i++))
+    do
+      local frame_no=$((i - 1 + stack_skip))
+      local source_file=${BASH_SOURCE[${frame_no}]}
+      local source_lineno=${BASH_LINENO[$((frame_no - 1))]}
+      local funcname=${FUNCNAME[${frame_no}]}
+      echo "  ${i}: ${source_file}:${source_lineno} ${funcname}(...)" >&2
+    done
+  fi
+}
+
 function fail() {
     echo "FAIL: " "$@"
+    dump_stack
     remove_containers || true
     exit 1
 }
@@ -52,6 +70,7 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
+#FIXME: remove all users of this in favor of docker
 NCPORT=8888
 function freencport() {
   while :; do
@@ -66,7 +85,9 @@ function freencport() {
 
 # Build it
 make container REGISTRY=e2e VERSION=$(make -s version)
+echo
 make test-tools REGISTRY=e2e
+echo
 
 RUNID="${RANDOM}${RANDOM}"
 DIR=""
@@ -75,10 +96,14 @@ for i in $(seq 1 10); do
     mkdir "$DIR" && break
 done
 if [[ -z "$DIR" ]]; then
-    echo "Failed to make a temp dir"
+    echo "Failed to make a test root dir"
     exit 1
 fi
+TMP="$DIR/tmp"
+mkdir -p "$TMP"
+
 echo "test root is $DIR"
+echo
 
 REPO="$DIR/repo"
 function init_repo() {
@@ -93,7 +118,6 @@ function init_repo() {
 ROOT="$DIR/root"
 function clean_root() {
     rm -rf "$ROOT"
-    mkdir -p "$ROOT"
 }
 
 # Init SSH for test cases.
@@ -104,16 +128,18 @@ cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 function finish() {
   if [ $? -ne 0 ]; then
-    echo "The directory $DIR was not removed as it contains"\
-         "log files useful for debugging"
+    echo -e "\nTest logs: $DIR"
   fi
+  trap "" INT EXIT
   remove_containers
+  exit 1
 }
 trap finish INT EXIT
 
 SLOW_GIT=/slow_git.sh
 ASKPASS_GIT=/askpass_git.sh
 
+#FIXME: not on hostnet?
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
     docker run \
@@ -129,6 +155,7 @@ function GIT_SYNC() {
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         --add-user \
+        --v=5 \
         "$@"
 }
 
@@ -141,6 +168,318 @@ function remove_containers() {
 }
 
 ##############################################
+# Test initializing when root doesn't exist
+##############################################
+testcase "sha-root-doesnt-exist"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when root exists but is under a git repo
+##############################################
+testcase "sha-root-exists-but-is-not-git-root"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a parent dir that is a git repo.
+mkdir -p "$ROOT/subdir/root"
+git -C "$ROOT/subdir" init >/dev/null
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT/subdir/root" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/subdir/root/link
+assert_file_exists "$ROOT"/subdir/root/link/file
+assert_file_eq "$ROOT"/subdir/root/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when root exists but fails sanity
+##############################################
+testcase "sha-root-exists-but-fails-sanity"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make an invalid git repo.
+mkdir -p "$ROOT"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when root exists and is valid
+##############################################
+testcase "sha-root-exists-and-is-valid"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a valid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when worktree exists but no link
+##############################################
+testcase "sha-worktree-exists-but-no-link"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a valid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+# Fake a worktree, but not a link
+mkdir -p "$ROOT/worktrees/$SHA"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when worktree exists but is not correctly linked
+##############################################
+testcase "sha-worktree-exists-but-wrong-link"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a valid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+# Fake a worktree and link
+mkdir -p "$ROOT/worktrees/$SHA"
+ln -sf "$ROOT/wrong" "$ROOT/link"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when worktree exists and is linked
+##############################################
+testcase "sha-worktree-exists-correct-link-bad-worktree"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a valid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+# Fake a worktree and link
+mkdir -p "$ROOT/worktrees/$SHA"
+ln -sf "$ROOT/worktrees/$SHA" "$ROOT/link"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing with a weird --root flag
+##############################################
+testcase "sha-root-flag-is-weird"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="../../../../../$ROOT/../../../../../../$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test initializing when worktree exists and linked is correct, but weird
+##############################################
+testcase "sha-worktree-exists-correct-but-weird-link"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make a valid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+# Fake a worktree and link
+mkdir -p "$ROOT/worktrees/$SHA"
+ln -sf "../../../../../$ROOT/../../../../../$ROOT/worktrees/$SHA" "$ROOT/link"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test converting from a normal to shallow repo
+##############################################
+testcase "sha-deep-to-shallow-to-deep"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+if [ $(git -C "$ROOT/worktrees/$SHA" rev-parse --is-shallow-repository) = "true" ]; then
+    fail "repo should not be shallow"
+fi
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    --depth=1 \
+    >> "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+if [ $(git -C "$ROOT/worktrees/$SHA" rev-parse --is-shallow-repository) = "false" ]; then
+    fail "repo should be shallow"
+fi
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA" \
+    --root="$ROOT" \
+    --leaf="link" \
+    >> "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+if [ $(git -C "$ROOT/worktrees/$SHA" rev-parse --is-shallow-repository) = "true" ]; then
+    fail "repo should not be shallow"
+fi
+# Wrap up
+pass
+
+#FIXME: COMMENT
+testcase "repo-size"
+dd if=/dev/urandom of="$REPO"/file1 bs=1024 count=4096 >/dev/null 2>&1
+git -C "$REPO" add file1
+git -C "$REPO" commit -qam "file 1"
+git -C "$REPO" tag -f "f1" # to force export of the SHA
+SHA1=$(git -C "$REPO" rev-parse HEAD)
+dd if=/dev/urandom of="$REPO"/file2 bs=1024 count=4096 >/dev/null 2>&1
+git -C "$REPO" add file2
+git -C "$REPO" commit -qam "file 1+2"
+git -C "$REPO" rm -q file1
+git -C "$REPO" commit -qam "file 2"
+git -C "$REPO" tag -f "f2" # to force export of the SHA
+SHA2=$(git -C "$REPO" rev-parse HEAD)
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA1" \
+    --root="$ROOT" \
+    --leaf="link" \
+    --depth=1 \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+SIZE=$(du -s "$ROOT" | cut -f1)
+if [ "$SIZE" -lt 7000 ]; then
+    fail "repo is impossibly small: $SIZE"
+fi
+if [ "$SIZE" -gt 9000 ]; then
+    fail "repo is too big: $SIZE"
+fi
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --rev="sha:$SHA2" \
+    --root="$ROOT" \
+    --leaf="link" \
+    --depth=1 \
+    >> "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file2
+SIZE=$(du -s "$ROOT" | cut -f1)
+if [ "$SIZE" -lt 7000 ]; then
+    fail "repo is impossibly small: $SIZE"
+fi
+if [ "$SIZE" -gt 9000 ]; then
+    fail "repo is too big: $SIZE"
+fi
+# Wrap up
+pass
+
+##############################################
 # Test master one-time
 ##############################################
 testcase "master-one-time"
@@ -148,8 +487,6 @@ testcase "master-one-time"
 echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --rev=master \
@@ -163,41 +500,6 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 pass
 
 ##############################################
-# Test default syncing (master)
-##############################################
-testcase "default-sync"
-# First sync
-echo "$TESTCASE 1" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 1"
-GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --period=100ms \
-    --repo="file://$REPO" \
-    --root="$ROOT" \
-    --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-# Move forward
-echo "$TESTCASE 2" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
-# Move backward
-git -C "$REPO" reset -q --hard HEAD^
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-# Wrap up
-pass
-
-##############################################
 # Test master syncing
 ##############################################
 testcase "master"
@@ -205,8 +507,6 @@ testcase "master"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --rev=master \
@@ -234,6 +534,83 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
+# Test initializing when root doesn't exist
+##############################################
+testcase "special-file-names"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/link
+git -C "$REPO" add link
+mkdir -p "$REPO"/worktrees/
+echo "$TESTCASE 1" > "$REPO"/worktrees/file
+git -C "$REPO" add worktrees/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --period=100ms \
+    --repo="file://$REPO" \
+    --rev=master \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/link
+assert_file_eq "$ROOT"/link/link "$TESTCASE 1"
+assert_file_exists "$ROOT"/link/worktrees/file
+assert_file_eq "$ROOT"/link/worktrees/file "$TESTCASE 1"
+# Move HEAD forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/link
+assert_file_eq "$ROOT"/link/link "$TESTCASE 1"
+assert_file_exists "$ROOT"/link/worktrees/file
+assert_file_eq "$ROOT"/link/worktrees/file "$TESTCASE 1"
+# Move HEAD backward
+git -C "$REPO" reset -q --hard HEAD^
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/link
+assert_file_eq "$ROOT"/link/link "$TESTCASE 1"
+assert_file_exists "$ROOT"/link/worktrees/file
+assert_file_eq "$ROOT"/link/worktrees/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
+# Test default syncing (master)
+##############################################
+testcase "defaults"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --period=100ms \
+    --repo="file://$REPO" \
+    --root="$ROOT" \
+    --leaf="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Move forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
+# Move backward
+git -C "$REPO" reset -q --hard HEAD^
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
 # Test branch syncing
 ##############################################
 testcase "branch"
@@ -244,8 +621,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" checkout -q master
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --rev="$BRANCH" \
@@ -286,8 +661,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
@@ -333,8 +706,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
@@ -371,75 +742,14 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
-# Test rev syncing
-##############################################
-testcase "hash"
-# First sync
-echo "$TESTCASE 1" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 1"
-HASH=$(git -C "$REPO" rev-list -n1 HEAD)
-GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --period=100ms \
-    --repo="file://$REPO" \
-    --rev="$HASH" \
-    --root="$ROOT" \
-    --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-# Commit something new
-echo "$TESTCASE 2" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 2"
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-# Revert the last change
-git -C "$REPO" reset -q --hard HEAD^
-sleep 3
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-# Wrap up
-pass
-
-##############################################
-# Test rev-sync one-time
-##############################################
-testcase "hash-once"
-# First sync
-echo "$TESTCASE" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE"
-HASH=$(git -C "$REPO" rev-list -n1 HEAD)
-GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --one-time \
-    --repo="file://$REPO" \
-    --rev="$HASH" \
-    --root="$ROOT" \
-    --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
-assert_link_exists "$ROOT"/link
-assert_file_exists "$ROOT"/link/file
-assert_file_eq "$ROOT"/link/file "$TESTCASE"
-# Wrap up
-pass
-
-##############################################
 # Test syncing after a crash
 ##############################################
+#FIXME: fup with earlier cases?
 testcase "bad-git-repo"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -452,13 +762,11 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 rm -f "$ROOT"/.git/HEAD
 # Try again
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -473,8 +781,6 @@ testcase "bad-worktree"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -487,13 +793,11 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 rm -f "$ROOT"/link
 # Try again
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -509,8 +813,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --sync-timeout=1s \
     --repo="file://$REPO" \
@@ -522,14 +824,12 @@ assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --sync-timeout=16s \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
+    >> "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 10
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -553,8 +853,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 expected_depth="1"
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
@@ -604,8 +902,6 @@ GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="wrong" \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --rev=master \
@@ -619,14 +915,12 @@ GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="my-password" \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --repo="file://$REPO" \
     --rev=master \
     --root="$ROOT" \
     --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -641,18 +935,18 @@ echo "$TESTCASE 1" > "$REPO"/file
 freencport
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker run \
+    -d \
+    --rm \
+    --label git-sync-e2e="$RUNID" \
+    -u $(id -u):$(id -g) \
+    alpine sh -c \
+        "while true; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong' | nc -l -p 8000; done")
+sleep 1 # wait for it to come up
+IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
-    --logtostderr \
-    --v=5 \
+    --askpass-url="http://$IP:8000/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
     --rev=master \
@@ -661,73 +955,83 @@ GIT_SYNC \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
 # check for failure
 assert_file_absent "$ROOT"/link/file
+docker kill "$CTR" >/dev/null
 # run with askpass_url service with correct password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker run \
+    -d \
+    --rm \
+    --label git-sync-e2e="$RUNID" \
+    -u $(id -u):$(id -g) \
+    alpine sh -c \
+        "while true; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password' | nc -l -p 8000; done")
+sleep 1 # wait for it to come up
+IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
-    --logtostderr \
-    --v=5 \
+    --askpass-url="http://$IP:8000/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
     --rev=master \
     --root="$ROOT" \
     --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 pass
 
-##############################################
-# Test webhook
-##############################################
-testcase "webhook"
-freencport
-# First sync
-echo "$TESTCASE 1" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 1"
-GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --repo="file://$REPO" \
-    --root="$ROOT" \
-    --webhook-url="http://127.0.0.1:$NCPORT" \
-    --leaf="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-# check that basic call works
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 1 not called, server still running"
-fi
-# Move forward
-echo "$TESTCASE 2" > "$REPO"/file
-git -C "$REPO" commit -qam "$TESTCASE 2"
-# return a failure to ensure that we try again
-{ (echo -e "HTTP/1.1 500 Internal Server Error\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 2 not called, server still running"
-fi
-# Now return 200, ensure that it gets called
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 3 not called, server still running"
-fi
-# Wrap up
-pass
+##FIXME: ##############################################
+##FIXME: # Test webhook
+##FIXME: ##############################################
+##FIXME: testcase "webhook"
+##FIXME: # Check that basic call works
+##FIXME: echo 0 > "$TMP/count.$TESTCASE"
+##FIXME: CTR=$(docker run \
+##FIXME:     -d \
+##FIXME:     --rm \
+##FIXME:     --label git-sync-e2e="$RUNID" \
+##FIXME:     -u $(id -u):$(id -g) \
+##FIXME:     -v "$TMP":"$TMP":rw \
+##FIXME:     alpine sh -c \
+##FIXME:         "I=1; while true; do echo -e 'HTTP/1.1 200 OK\r\n' | nc -l -p 80; echo \$I > $TMP/count.$TESTCASE; done")
+##FIXME: sleep 1 # wait for it to come up
+##FIXME: IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
+##FIXME: # First sync
+##FIXME: echo "$TESTCASE 1" > "$REPO"/file
+##FIXME: git -C "$REPO" commit -qam "$TESTCASE 1"
+##FIXME: GIT_SYNC \
+##FIXME:     --repo="file://$REPO" \
+##FIXME:     --root="$ROOT" \
+##FIXME:     --webhook-url="http://$IP" \
+##FIXME:     --leaf="link" \
+##FIXME:     > "$DIR"/log."$TESTCASE" 2>&1 &
+##FIXME: sleep 3
+##FIXME: COUNT=$(cat "$TMP/count.$TESTCASE")
+##FIXME: if [ "$COUNT" != 1 ]; then
+##FIXME:     fail "webhook 1: expected 1 call, got $COUNT"
+##FIXME: fi
+##FIXME: docker kill "$CTR" >/dev/null
+##FIXME: ###FIXME: this is not good - if I start a new container I may get a new IP.
+##FIXME: # Move forward
+##FIXME: echo "$TESTCASE 2" > "$REPO"/file
+##FIXME: git -C "$REPO" commit -qam "$TESTCASE 2"
+##FIXME: # return a failure to ensure that we try again
+##FIXME: { (echo -e "HTTP/1.1 500 Internal Server Error\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+##FIXME: NCPID=$!
+##FIXME: sleep 3
+##FIXME: if kill -0 $NCPID > /dev/null 2>&1; then
+##FIXME:     fail "webhook 2 not called, server still running"
+##FIXME: fi
+##FIXME: # Now return 200, ensure that it gets called
+##FIXME: { (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+##FIXME: NCPID=$!
+##FIXME: sleep 3
+##FIXME: if kill -0 $NCPID > /dev/null 2>&1; then
+##FIXME:     fail "webhook 3 not called, server still running"
+##FIXME: fi
+##FIXME: # Wrap up
+##FIXME: pass
 
 ##############################################
 # Test http handler
@@ -739,8 +1043,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
-    --v=5 \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
@@ -801,8 +1103,6 @@ git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
 git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -879,7 +1179,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init > /dev/null
+git -C "$SUBMODULE" init -q
 
 # First sync
 expected_depth="1"
@@ -890,8 +1190,6 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
@@ -967,13 +1265,11 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --submodules=off \
     --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
+    --submodules=off \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
@@ -1011,13 +1307,11 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
-    --submodules=shallow \
     --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
+    --submodules=shallow \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
@@ -1034,6 +1328,7 @@ pass
 testcase "ssh"
 echo "$TESTCASE" > "$REPO"/file
 # Run a git-over-SSH server
+#FIXME: run as my uid?
 CTR=$(docker run \
     -d \
     --rm \
@@ -1045,8 +1340,6 @@ sleep 3 # wait for sshd to come up
 IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
-    --logtostderr \
-    --v=5 \
     --one-time \
     --ssh \
     --ssh-known-hosts=false \
@@ -1060,6 +1353,3 @@ assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
-
-echo "cleaning up $DIR"
-rm -rf "$DIR"

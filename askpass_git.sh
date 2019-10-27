@@ -9,7 +9,7 @@ touch "${XDG_CONFIG_HOME}/git/config"
 # outside the e2e test environment. See https://git-scm.com/docs/git-credential-store
 touch "${XDG_CONFIG_HOME}/git/credentials"
 
-if [ "$1" != "clone" ]; then
+if [ "$1" != "fetch" ]; then
   git "$@"
   exit $?
 fi

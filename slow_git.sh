@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ "$1" != "clone" ]; then
+if [ "$1" != "fetch" ]; then
   git "$@"
   exit $?
 fi
