@@ -533,6 +533,16 @@ func hashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 	return strings.Trim(string(output), "\n"), nil
 }
 
+// remoteHashForRef returns the upstream hash for a given ref.
+func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
+	output, err := runCommand(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(string(output), "\t")
+	return parts[0], nil
+}
+
 func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// If rev is a tag name or HEAD, rev-parse will produce the git hash.  If
 	// rev is already a git hash, the output will be the same hash.  Of course, a
@@ -604,15 +614,6 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 	}
 
 	return local, remote, nil
-}
-
-func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
-	if err != nil {
-		return "", err
-	}
-	parts := strings.Split(string(output), "\t")
-	return parts[0], nil
 }
 
 func cmdForLog(command string, args ...string) string {
