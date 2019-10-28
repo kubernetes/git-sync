@@ -472,9 +472,11 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 	log.V(0).Info("updated submodules")
 
+	// Change the file permissions, if requested.
 	if *flChmod != 0 {
-		// set file permissions
-		_, err = runCommand(ctx, "", "chmod", "-R", strconv.Itoa(*flChmod), worktreePath)
+		mode := fmt.Sprintf("%#o", *flChmod)
+		log.V(0).Info("changing file permissions", "mode", mode)
+		_, err = runCommand(ctx, "", "chmod", "-R", mode, worktreePath)
 		if err != nil {
 			return err
 		}
