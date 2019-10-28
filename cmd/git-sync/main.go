@@ -56,50 +56,50 @@ var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
-	"the root directory for git operations")
+	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"the name at which to publish the checked-out files under --root (defaults to leaf dir of --repo)")
+	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
 var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
-	"the max number of seconds for a complete sync")
+	"the max number of seconds allowed for a complete sync")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
-	"exit after the initial checkout")
+	"exit after the first sync")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
-	"the number of consecutive failures allowed before aborting (the first pull must succeed, -1 disables aborting for any number of failures after the initial sync)")
+	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
-	"the file permissions to apply to the checked-out files")
+	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
-	"the URL for the webook to send to. Default is \"\" which disables the webook.")
+	"the URL for a webook notification when syncs complete (default is no webook)")
 var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
-	"the method for the webook to send with")
+	"the HTTP method for the webook")
 var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
-	"the status code which indicates a successful webhook call. A value of -1 disables success checks to make webhooks fire-and-forget")
+	"the HTTP status code indicating a successful webhook (-1 disables success checks to make webhooks fire-and-forget)")
 var flWebhookTimeout = flag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
-	"the timeout used when communicating with the webhook target")
+	"the timeout for the webhook")
 var flWebhookBackoff = flag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
-	"if a webhook call fails (dependant on webhook-success-status) this defines how much time to wait before retrying the call")
+	"the time to wait before retrying a failed webhook")
 
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
-	"the username to use")
+	"the username to use for git auth")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
-	"the password to use")
+	"the password to use for git auth (users should prefer env vars for passwords)")
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKeyFile = flag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
-	"the ssh key to use")
+	"the SSH key to use")
 var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
 	"enable SSH known_hosts verification")
 var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH_KNOWN_HOSTS_FILE", "/etc/git-secret/known_hosts"),
-	"the known hosts file to use")
+	"the known_hosts file to use")
 
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
-	"the git command to run (subject to PATH search)")
+	"the git command to run (subject to PATH search, mostly for testing)")
 
 var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address (including port) for git-sync's HTTP endpoint")
@@ -212,7 +212,7 @@ func main() {
 	}
 
 	if *flRepo == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: --repo or $GIT_SYNC_REPO must be provided\n")
+		fmt.Fprintf(os.Stderr, "ERROR: --repo must be provided\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -234,7 +234,7 @@ func main() {
 	}
 
 	if (*flUsername != "" || *flPassword != "" || *flCookieFile) && *flSSH {
-		fmt.Fprintf(os.Stderr, "ERROR: GIT_SYNC_SSH set but HTTP parameters provided. These cannot be used together.")
+		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, or --cookie-file were provided\n")
 		os.Exit(1)
 	}
 
