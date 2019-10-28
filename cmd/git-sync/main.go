@@ -385,14 +385,14 @@ func sleepForever() {
 // worktree, this returns the path to it.
 func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	fullpath := path.Join(gitRoot, link)
-	currentDir, err := filepath.EvalSymlinks(fullpath)
+	linkPath := path.Join(gitRoot, link)
+	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
 	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("error accessing symlink: %v", err)
+		return "", fmt.Errorf("error accessing current worktree: %v", err)
 	}
 
-	// newDir is /git/rev-..., we need to change it to relative path.
-	// Volume in other container may not be mounted at /git, so the symlink can't point to /git.
+	// newDir is absolute, so we need to change it to a relative path.  This is
+	// so it can be volume-mounted at another path and the symlink still works.
 	newDirRelative, err := filepath.Rel(gitRoot, newDir)
 	if err != nil {
 		return "", fmt.Errorf("error converting to relative path: %v", err)
@@ -409,7 +409,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	}
 	log.V(1).Info("renamed symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 
-	return currentDir, nil
+	return oldWorktreePath, nil
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
