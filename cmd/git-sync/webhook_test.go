@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -14,7 +15,8 @@ func TestWebhookData(t *testing.T) {
 		whd := NewWebhookData()
 
 		whd.UpdateAndTrigger(hash1)
-		whd.WaitForChange()
+
+		<-whd.Events()
 
 		hash := whd.Hash()
 		if hash1 != hash {
@@ -22,12 +24,16 @@ func TestWebhookData(t *testing.T) {
 		}
 	})
 
-	t.Run("second update wins", func(t *testing.T) {
+	t.Run("last update wins when channel buffer is full", func(t *testing.T) {
 		whd := NewWebhookData()
 
-		whd.UpdateAndTrigger(hash1)
+		for i := 0; i < 10; i++ {
+			h := fmt.Sprintf("111111111111111111111111111111111111111%d", i)
+			whd.UpdateAndTrigger(h)
+		}
 		whd.UpdateAndTrigger(hash2)
-		whd.WaitForChange()
+
+		<-whd.Events()
 
 		hash := whd.Hash()
 		if hash2 != hash {
@@ -35,22 +41,20 @@ func TestWebhookData(t *testing.T) {
 		}
 	})
 
-	t.Run("same hash value does not lead to an update", func(t *testing.T) {
+	t.Run("same hash value", func(t *testing.T) {
 		whd := NewWebhookData()
+		events := whd.Events()
 
 		whd.UpdateAndTrigger(hash1)
-		whd.WaitForChange()
+		<-events
+
 		hash := whd.Hash()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
 
 		whd.UpdateAndTrigger(hash1)
-		changed := whd.Wait()
-
-		if changed {
-			t.Fatalf("no change expected")
-		}
+		<-events
 
 		hash = whd.Hash()
 		if hash1 != hash {

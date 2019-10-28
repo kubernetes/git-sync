@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -25,10 +26,9 @@ type Webhook struct {
 }
 
 type webhookData struct {
-	ch chan struct{}
-
-	newHash string
-	curHash string
+	ch    chan struct{}
+	mutex sync.Mutex
+	hash  string
 }
 
 func NewWebhookData() *webhookData {
@@ -37,8 +37,18 @@ func NewWebhookData() *webhookData {
 	}
 }
 
+func (d *webhookData) Events() chan struct{} {
+	return d.ch
+}
+
+func (d *webhookData) update(newHash string) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	d.hash = newHash
+}
+
 func (d *webhookData) UpdateAndTrigger(newHash string) {
-	d.newHash = newHash
+	d.update(newHash)
 
 	select {
 	case d.ch <- struct{}{}:
@@ -46,37 +56,10 @@ func (d *webhookData) UpdateAndTrigger(newHash string) {
 	}
 }
 
-func (d *webhookData) updateState() bool {
-	newHash := d.newHash
-	if newHash != d.curHash {
-		d.curHash = newHash
-		return true
-	}
-	return false
-}
-
 func (d *webhookData) Hash() string {
-	d.updateState()
-	return d.curHash
-}
-
-func (d *webhookData) Wait() bool {
-	// wait for message from UpdateAndTrigger
-	<-d.ch
-
-	changed := d.updateState()
-
-	return changed
-}
-
-func (d *webhookData) WaitForChange() {
-	for {
-		changed := d.Wait()
-
-		if changed {
-			return
-		}
-	}
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.hash
 }
 
 func (w *Webhook) Do(hash string) error {
@@ -106,17 +89,23 @@ func (w *Webhook) Do(hash string) error {
 
 // Wait for trigger events from the channel, and send webhooks when triggered
 func (w *Webhook) run() {
-	for {
-		// Wait for trigger and changed hash value
-		w.Data.WaitForChange()
+	var lastHash string
+
+	// Wait for trigger from webhookData.UpdateAndTrigger
+	for range w.Data.Events() {
 
 		for {
 			hash := w.Data.Hash()
+			if hash == lastHash {
+				break
+			}
+
 			if err := w.Do(hash); err != nil {
 				log.Error(err, "error calling webhook", "url", w.URL)
 				time.Sleep(w.Backoff)
 			} else {
 				log.V(0).Info("success calling webhook", "url", w.URL)
+				lastHash = hash
 				break
 			}
 		}

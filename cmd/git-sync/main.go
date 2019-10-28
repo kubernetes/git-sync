@@ -703,8 +703,6 @@ func triggerWebhook(ctx context.Context, webhook *Webhook, rev, gitRoot, dest st
 
 	// Trigger webhooks to be called. We do a non-blocking write to the channel as we
 	// don't want to backup the syncing locally because we can't complete a webhook call.
-	// Since the channel has a buffer of 1 we ensure that it is called for a change. Only
-	// the event of the last git hash will be send in case the webhook is not fast enough.
 	webhook.Data.UpdateAndTrigger(hash)
 
 	return nil
