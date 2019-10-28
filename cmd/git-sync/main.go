@@ -534,11 +534,21 @@ func hashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 }
 
 func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
-	// If rev is a tag name or HEAD, rev-parse will produce the git hash.  If
-	// rev is already a git hash, the output will be the same hash.  Of course, a
-	// user could specify "abc" and match "abcdef12345678", so we just do a
-	// prefix match.
-	output, err := hashForRev(ctx, rev, gitRoot)
+	// If git doesn't identify rev as a commit, we're done.
+	output, err := runCommand(ctx, gitRoot, *flGitCmd, "cat-file", "-t", rev)
+	if err != nil {
+		return false, err
+	}
+	o := strings.Trim(string(output), "\n")
+	if o != "commit" {
+		return false, nil
+	}
+
+	// `git cat-file -t` also returns "commit" for tags. If rev is already a git
+	// hash, the output will be the same hash as the input.  Of course, a user
+	// could specify "abc" and match "abcdef12345678", so we just do a prefix
+	// match.
+	output, err = hashForRev(ctx, rev, gitRoot)
 	if err != nil {
 		return false, err
 	}
