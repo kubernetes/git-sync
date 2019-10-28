@@ -380,50 +380,36 @@ func sleepForever() {
 	os.Exit(0)
 }
 
-// updateSymlink atomically swaps the symlink to point at the specified directory and cleans up the previous worktree.
-func updateSymlink(ctx context.Context, gitRoot, link, newDir string) error {
+// updateSymlink atomically swaps the symlink to point at the specified
+// directory and cleans up the previous worktree.  If there was a previous
+// worktree, this returns the path to it.
+func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
 	fullpath := path.Join(gitRoot, link)
 	currentDir, err := filepath.EvalSymlinks(fullpath)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("error accessing symlink: %v", err)
+		return "", fmt.Errorf("error accessing symlink: %v", err)
 	}
 
 	// newDir is /git/rev-..., we need to change it to relative path.
 	// Volume in other container may not be mounted at /git, so the symlink can't point to /git.
 	newDirRelative, err := filepath.Rel(gitRoot, newDir)
 	if err != nil {
-		return fmt.Errorf("error converting to relative path: %v", err)
+		return "", fmt.Errorf("error converting to relative path: %v", err)
 	}
 
 	const tmplink = "tmp-link"
 	if _, err := runCommand(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
-		return fmt.Errorf("error creating symlink: %v", err)
+		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 	log.V(1).Info("created tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
 
 	if _, err := runCommand(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
-		return fmt.Errorf("error replacing symlink: %v", err)
+		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 	log.V(1).Info("renamed symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 
-	// Clean up previous worktree
-	if len(currentDir) > 0 {
-		if err = os.RemoveAll(currentDir); err != nil {
-			return fmt.Errorf("error removing directory: %v", err)
-		}
-
-		log.V(1).Info("removed previous worktree", "path", currentDir)
-
-		_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune")
-		if err != nil {
-			return err
-		}
-
-		log.V(1).Info("pruned old worktrees")
-	}
-
-	return nil
+	return currentDir, nil
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
@@ -494,7 +480,21 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		}
 	}
 
-	return updateSymlink(ctx, gitRoot, dest, worktreePath)
+	// Flip the symlink.
+	if oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath); err != nil {
+		return err
+	} else if oldWorktree != "" {
+		// Clean up previous worktree
+		if err := os.RemoveAll(oldWorktree); err != nil {
+			return fmt.Errorf("error removing directory: %v", err)
+		}
+		if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+			return err
+		}
+		log.V(1).Info("pruned old worktrees")
+	}
+
+	return nil
 }
 
 func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
