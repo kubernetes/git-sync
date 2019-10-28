@@ -297,7 +297,7 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
-			syncDuration.WithLabelValues("error").Observe(time.Now().Sub(start).Seconds())
+			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -321,7 +321,7 @@ func main() {
 			default:
 			}
 		}
-		syncDuration.WithLabelValues("success").Observe(time.Now().Sub(start).Seconds())
+		syncDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 		syncCount.WithLabelValues("success").Inc()
 
 		if initialSync {
@@ -538,7 +538,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, error) {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
-	hash := rev
+	var hash string
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
@@ -693,7 +693,7 @@ func setupGitSSH(setupKnownHosts bool) error {
 	}
 
 	if setupKnownHosts {
-		_, err := os.Stat(pathToSSHKnownHosts)
+		_, err = os.Stat(pathToSSHKnownHosts)
 		if err != nil {
 			return fmt.Errorf("error: could not access SSH known_hosts file: %v", err)
 		}
