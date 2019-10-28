@@ -123,6 +123,9 @@ var (
 	}, []string{"status"})
 )
 
+// initTimeout is a timeout for initialization, like git credentials setup.
+const initTimeout = time.Second * 30
+
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
@@ -217,8 +220,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// This context is used only for git credentials initialization. There are no long-running operations like
+	// `git clone`, so initTimeout set to 30 seconds should be enough.
+	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
+
 	if *flUsername != "" && *flPassword != "" {
-		if err := setupGitAuth(*flUsername, *flPassword, *flRepo); err != nil {
+		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
 			os.Exit(1)
 		}
@@ -232,11 +239,14 @@ func main() {
 	}
 
 	if *flCookieFile {
-		if err := setupGitCookieFile(); err != nil {
+		if err := setupGitCookieFile(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
 			os.Exit(1)
 		}
 	}
+
+	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
+	cancel()
 
 	if *flHTTPBind != "" {
 		ln, err := net.Listen("tcp", *flHTTPBind)
@@ -623,25 +633,48 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 	return string(output), nil
 }
 
-func setupGitAuth(username, password, gitURL string) error {
-	log.V(1).Info("setting up git credential cache")
-	cmd := exec.Command(*flGitCmd, "config", "--global", "credential.helper", "cache")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error setting up git credentials %v: %s", err, string(output))
+func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
+	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdForLog(command, args...))
+
+	cmd := exec.CommandContext(ctx, command, args...)
+	if cwd != "" {
+		cmd.Dir = cwd
 	}
 
-	cmd = exec.Command(*flGitCmd, "credential", "approve")
-	stdin, err := cmd.StdinPipe()
+	in, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		return "", err
 	}
-	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
-	io.Copy(stdin, bytes.NewBufferString(creds))
-	stdin.Close()
-	output, err = cmd.CombinedOutput()
+	if _, err := io.Copy(in, bytes.NewBufferString(stdin)); err != nil {
+		return "", err
+	}
+	if err := in.Close(); err != nil {
+		return "", err
+	}
+
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("command timed out: %v: %q", err, string(output))
+	}
 	if err != nil {
-		return fmt.Errorf("error setting up git credentials %v: %s", err, string(output))
+		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
+	}
+
+	return string(output), nil
+}
+
+func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
+	log.V(1).Info("setting up git credential cache")
+
+	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "cache")
+	if err != nil {
+		return fmt.Errorf("error setting up git credentials: %v", err)
+	}
+
+	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
+	_, err = runCommandWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
+	if err != nil {
+		return fmt.Errorf("error setting up git credentials: %v", err)
 	}
 
 	return nil
@@ -677,7 +710,7 @@ func setupGitSSH(setupKnownHosts bool) error {
 	return nil
 }
 
-func setupGitCookieFile() error {
+func setupGitCookieFile(ctx context.Context) error {
 	log.V(1).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
@@ -687,10 +720,9 @@ func setupGitCookieFile() error {
 		return fmt.Errorf("error: could not access git cookie file: %v", err)
 	}
 
-	cmd := exec.Command(*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error configuring git cookie file %v: %s", err, string(output))
+	if _, err = runCommand(ctx, "",
+		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+		return fmt.Errorf("error configuring git cookie file: %v", err)
 	}
 
 	return nil
