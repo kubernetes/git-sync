@@ -525,7 +525,8 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	return nil
 }
 
-func hashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
+// localHashForRev returns the locally known hash for a given rev.
+func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 	output, err := runCommand(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
@@ -558,7 +559,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = hashForRev(ctx, rev, gitRoot)
+	output, err = localHashForRev(ctx, rev, gitRoot)
 	if err != nil {
 		return false, err
 	}
@@ -578,7 +579,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = hashForRev(ctx, rev, gitRoot)
+		hash, err = localHashForRev(ctx, rev, gitRoot)
 		if err != nil {
 			return false, "", err
 		}
@@ -604,7 +605,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 // getRevs returns the local and upstream hashes for rev.
 func getRevs(ctx context.Context, localDir, branch, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := hashForRev(ctx, rev, localDir)
+	local, err := localHashForRev(ctx, rev, localDir)
 	if err != nil {
 		return "", "", err
 	}
