@@ -735,8 +735,6 @@ GIT_SYNC \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
-    --branch=master \
-    --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
