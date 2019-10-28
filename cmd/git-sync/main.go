@@ -476,11 +476,11 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Update submodules
 	// NOTICE: it works for repo with or without submodules
-	submodules_args := []string{"submodule", "update", "--init", "--recursive"}
+	submodulesArgs := []string{"submodule", "update", "--init", "--recursive"}
 	if depth != 0 {
-		submodules_args = append(submodules_args, "--depth", strconv.Itoa(depth))
+		submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
 	}
-	_, err = runCommand(ctx, worktreePath, *flGitCmd, submodules_args...)
+	_, err = runCommand(ctx, worktreePath, *flGitCmd, submodulesArgs...)
 	if err != nil {
 		return err
 	}
