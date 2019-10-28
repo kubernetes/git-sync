@@ -575,6 +575,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
+		// First time. Just clone it and get the hash.
 		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return false, "", err
@@ -586,6 +587,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	case err != nil:
 		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
+		// Not the first time. Figure out if the ref has changed.
 		local, remote, err := getRevs(ctx, target, branch, rev)
 		if err != nil {
 			return false, "", err
