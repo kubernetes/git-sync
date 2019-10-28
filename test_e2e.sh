@@ -130,7 +130,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
@@ -153,7 +153,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -190,7 +190,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
@@ -232,7 +232,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
     --dest="link" \
@@ -276,7 +276,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" \
@@ -325,7 +325,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" \
@@ -377,7 +377,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
     --dest="link" \
@@ -439,7 +439,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" \
@@ -478,7 +478,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" \
@@ -500,7 +500,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
@@ -514,7 +514,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
@@ -537,7 +537,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
@@ -550,7 +550,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -582,7 +582,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --dest="link" \
@@ -632,7 +632,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
     --dest="link" \
@@ -677,7 +677,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
     --http-metrics \
@@ -734,7 +734,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
@@ -827,7 +827,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --dest="link" \
