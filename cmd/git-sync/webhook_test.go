@@ -14,11 +14,11 @@ func TestWebhookData(t *testing.T) {
 	t.Run("webhhook consumes first hash value", func(t *testing.T) {
 		whd := NewWebhookData()
 
-		whd.UpdateAndTrigger(hash1)
+		whd.send(hash1)
 
-		<-whd.Events()
+		<-whd.events()
 
-		hash := whd.Hash()
+		hash := whd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
@@ -29,13 +29,13 @@ func TestWebhookData(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			h := fmt.Sprintf("111111111111111111111111111111111111111%d", i)
-			whd.UpdateAndTrigger(h)
+			whd.send(h)
 		}
-		whd.UpdateAndTrigger(hash2)
+		whd.send(hash2)
 
-		<-whd.Events()
+		<-whd.events()
 
-		hash := whd.Hash()
+		hash := whd.get()
 		if hash2 != hash {
 			t.Fatalf("expected hash %s but got %s", hash2, hash)
 		}
@@ -43,20 +43,20 @@ func TestWebhookData(t *testing.T) {
 
 	t.Run("same hash value", func(t *testing.T) {
 		whd := NewWebhookData()
-		events := whd.Events()
+		events := whd.events()
 
-		whd.UpdateAndTrigger(hash1)
+		whd.send(hash1)
 		<-events
 
-		hash := whd.Hash()
+		hash := whd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
 
-		whd.UpdateAndTrigger(hash1)
+		whd.send(hash1)
 		<-events
 
-		hash = whd.Hash()
+		hash = whd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}

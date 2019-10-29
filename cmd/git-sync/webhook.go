@@ -22,6 +22,7 @@ type Webhook struct {
 	// Backoff for failed webhook calls
 	Backoff time.Duration
 
+	// Holds the data as it crosses from producer to consumer.
 	Data *webhookData
 }
 
@@ -37,29 +38,36 @@ func NewWebhookData() *webhookData {
 	}
 }
 
-func (d *webhookData) Events() chan struct{} {
+func (d *webhookData) events() chan struct{} {
 	return d.ch
 }
 
-func (d *webhookData) update(newHash string) {
+func (d *webhookData) get() string {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.hash
+}
+
+func (d *webhookData) set(newHash string) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	d.hash = newHash
 }
 
-func (d *webhookData) UpdateAndTrigger(newHash string) {
-	d.update(newHash)
+func (d *webhookData) send(newHash string) {
+	d.set(newHash)
 
+	// Non-blocking write.  If the channel is full, the consumer will see the
+	// newest value.  If the channel was not full, the consumer will get another
+	// event.
 	select {
 	case d.ch <- struct{}{}:
 	default:
 	}
 }
 
-func (d *webhookData) Hash() string {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	return d.hash
+func (w *Webhook) Send(hash string) {
+	w.Data.send(hash)
 }
 
 func (w *Webhook) Do(hash string) error {
@@ -73,6 +81,7 @@ func (w *Webhook) Do(hash string) error {
 	defer cancel()
 	req = req.WithContext(ctx)
 
+	log.V(0).Info("sending webhook", "hash", hash, "url", w.URL, "method", w.Method, "timeout", w.Timeout)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -91,20 +100,22 @@ func (w *Webhook) Do(hash string) error {
 func (w *Webhook) run() {
 	var lastHash string
 
-	// Wait for trigger from webhookData.UpdateAndTrigger
-	for range w.Data.Events() {
-
+	// Wait for trigger from webhookData.Send
+	for range w.Data.events() {
+		// Retry in case of error
 		for {
-			hash := w.Data.Hash()
+			// Always get the latest value, in case we fail-and-retry and the
+			// value changed in the meantime.  This means that we might not send
+			// every single hash.
+			hash := w.Data.get()
 			if hash == lastHash {
 				break
 			}
 
 			if err := w.Do(hash); err != nil {
-				log.Error(err, "error calling webhook", "url", w.URL)
+				log.Error(err, "webhook failed", "url", w.URL, "method", w.Method, "timeout", w.Timeout)
 				time.Sleep(w.Backoff)
 			} else {
-				log.V(0).Info("success calling webhook", "url", w.URL)
 				lastHash = hash
 				break
 			}
