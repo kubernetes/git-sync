@@ -297,16 +297,17 @@ func main() {
 	log.V(0).Info("starting up", "args", os.Args)
 
 	// Startup webhooks goroutine
-	webhookTriggerChan := make(chan struct{}, 1)
+	var webhook *Webhook
 	if *flWebhookURL != "" {
-		webhook := Webhook{
+		webhook = &Webhook{
 			URL:     *flWebhookURL,
 			Method:  *flWebhookMethod,
 			Success: *flWebhookStatusSuccess,
 			Timeout: *flWebhookTimeout,
 			Backoff: *flWebhookBackoff,
+			Data:    NewWebhookData(),
 		}
-		go webhook.run(webhookTriggerChan)
+		go webhook.run()
 	}
 
 	initialSync := true
@@ -329,14 +330,10 @@ func main() {
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
-		} else if changed {
-			// Trigger webhooks to be called. We do a non-blocking write to the channel as we
-			// don't want to backup the syncing locally because we can't complete a webhook call.
-			// Since the channel has a buffer of 1 we ensure that it is called for a change, but
-			// this allows us to de-dupe calls if they happen before the webhook call completes.
-			select {
-			case webhookTriggerChan <- struct{}{}:
-			default:
+		} else if changed && webhook != nil {
+			err := triggerWebhook(ctx, webhook, *flRev, *flRoot, *flDest)
+			if err != nil {
+				log.Error(err, "triggering webhook failed")
 			}
 		}
 		syncDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
@@ -743,6 +740,19 @@ func setupGitCookieFile(ctx context.Context) error {
 		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("error configuring git cookie file: %v", err)
 	}
+
+	return nil
+}
+
+func triggerWebhook(ctx context.Context, webhook *Webhook, rev, gitRoot, dest string) error {
+	target := path.Join(gitRoot, dest)
+
+	hash, err := hashForRev(ctx, rev, target)
+	if err != nil {
+		return err
+	}
+
+	webhook.Data.UpdateAndTrigger(hash)
 
 	return nil
 }

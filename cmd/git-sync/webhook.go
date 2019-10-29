@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -20,10 +21,50 @@ type Webhook struct {
 	Timeout time.Duration
 	// Backoff for failed webhook calls
 	Backoff time.Duration
+
+	Data *webhookData
 }
 
-func (w *Webhook) Do() error {
+type webhookData struct {
+	ch    chan struct{}
+	mutex sync.Mutex
+	hash  string
+}
+
+func NewWebhookData() *webhookData {
+	return &webhookData{
+		ch: make(chan struct{}, 1),
+	}
+}
+
+func (d *webhookData) Events() chan struct{} {
+	return d.ch
+}
+
+func (d *webhookData) update(newHash string) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	d.hash = newHash
+}
+
+func (d *webhookData) UpdateAndTrigger(newHash string) {
+	d.update(newHash)
+
+	select {
+	case d.ch <- struct{}{}:
+	default:
+	}
+}
+
+func (d *webhookData) Hash() string {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.hash
+}
+
+func (w *Webhook) Do(hash string) error {
 	req, err := http.NewRequest(w.Method, w.URL, nil)
+	req.Header.Set("Gitsync-Hash", hash)
 	if err != nil {
 		return err
 	}
@@ -47,17 +88,24 @@ func (w *Webhook) Do() error {
 }
 
 // Wait for trigger events from the channel, and send webhooks when triggered
-func (w *Webhook) run(ch chan struct{}) {
-	for {
-		// Wait for trigger
-		<-ch
+func (w *Webhook) run() {
+	var lastHash string
+
+	// Wait for trigger from webhookData.UpdateAndTrigger
+	for range w.Data.Events() {
 
 		for {
-			if err := w.Do(); err != nil {
+			hash := w.Data.Hash()
+			if hash == lastHash {
+				break
+			}
+
+			if err := w.Do(hash); err != nil {
 				log.Error(err, "error calling webhook", "url", w.URL)
 				time.Sleep(w.Backoff)
 			} else {
 				log.V(0).Info("success calling webhook", "url", w.URL)
+				lastHash = hash
 				break
 			}
 		}
