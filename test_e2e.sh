@@ -485,7 +485,6 @@ GIT_SYNC \
     --dest="link" \
     --one-time \
     > "$DIR"/log."$TESTCASE" 2>&1
-sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
@@ -506,8 +505,7 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -521,8 +519,7 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -545,8 +542,7 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
