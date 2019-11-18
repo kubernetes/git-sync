@@ -533,10 +533,10 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git=$SLOW_GIT \
-    --timeout=1 \
     --logtostderr \
     --v=5 \
     --one-time \
+    --timeout=1 \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -546,10 +546,10 @@ assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
     --git=$SLOW_GIT \
-    --timeout=16 \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
+    --timeout=16 \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -642,7 +642,7 @@ GIT_SYNC \
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook not called, server still running"
+    fail "webhook 1 not called, server still running"
 fi
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
@@ -652,14 +652,14 @@ git -C "$REPO" commit -qam "$TESTCASE 2"
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "2 webhook not called, server still running"
+    fail "webhook 2 not called, server still running"
 fi
 # Now return 200, ensure that it gets called
 { (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "3 webhook not called, server still running"
+    fail "webhook 3 not called, server still running"
 fi
 # Wrap up
 remove_sync_container
