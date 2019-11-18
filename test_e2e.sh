@@ -133,7 +133,8 @@ GIT_SYNC \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    --one-time > "$DIR"/log."$TESTCASE" 2>&1
+    --one-time \
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
@@ -151,7 +152,8 @@ GIT_SYNC \
     --wait=0.1 \
     --repo="$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -187,7 +189,8 @@ GIT_SYNC \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -225,7 +228,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -266,7 +270,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -312,7 +317,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -361,7 +367,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -420,7 +427,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -457,7 +465,8 @@ GIT_SYNC \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" \
-    --one-time > "$DIR"/log."$TESTCASE" 2>&1
+    --one-time \
+    > "$DIR"/log."$TESTCASE" 2>&1
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -476,7 +485,8 @@ GIT_SYNC \
     --one-time \
     --repo="$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -490,7 +500,8 @@ GIT_SYNC \
     --one-time \
     --repo="$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -511,7 +522,8 @@ GIT_SYNC \
     --one-time \
     --repo="$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 # check for failure
 assert_file_absent "$ROOT"/link/file
@@ -524,7 +536,8 @@ GIT_SYNC \
     --wait=0.1 \
     --repo="$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 10
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -554,7 +567,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -601,7 +615,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
 { (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
 NCPID=$!
@@ -645,7 +660,8 @@ GIT_SYNC \
     --http-bind=":$BINDPORT" \
     --http-metrics \
     --http-pprof \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 2
 # check that health endpoint is alive
 if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
@@ -698,7 +714,8 @@ GIT_SYNC \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -787,7 +804,8 @@ GIT_SYNC \
     --repo="$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
