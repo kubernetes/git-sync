@@ -119,7 +119,9 @@ touch "$REPO"/file
 git -C "$REPO" add file
 git -C "$REPO" commit -aqm "init file"
 
+##############################################
 # Test HEAD one-time
+##############################################
 testcase "head-once"
 # First sync
 echo "$TESTCASE" > "$REPO"/file
@@ -141,7 +143,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+##############################################
 # Test default syncing
+##############################################
 testcase "default-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -176,7 +180,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test HEAD syncing
+##############################################
 testcase "head-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -213,7 +219,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test branch syncing
+##############################################
 testcase "branch-sync"
 BRANCH="$TESTCASE"--BRANCH
 # First sync
@@ -256,7 +264,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test tag syncing
+##############################################
 testcase "tag-sync"
 TAG="$TESTCASE"--TAG
 # First sync
@@ -303,7 +313,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test tag syncing with annotated tags
+##############################################
 testcase "tag-sync-annotated"
 TAG="$TESTCASE"--TAG
 # First sync
@@ -350,7 +362,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test cross-branch tag syncing
+##############################################
 testcase "cross-branch-tag-sync"
 BRANCH="$TESTCASE"--BRANCH
 TAG="$TESTCASE"--TAG
@@ -414,7 +428,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test rev syncing
+##############################################
 testcase "rev-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -451,7 +467,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test rev-sync one-time
+##############################################
 testcase "rev-once"
 # First sync
 echo "$TESTCASE" > "$REPO"/file
@@ -474,7 +492,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+##############################################
 # Test syncing after a crash
+##############################################
 testcase "crash-cleanup-retry"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -509,7 +529,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 pass
 
+##############################################
 # Test sync loop timeout
+##############################################
 testcase "sync-loop-timeout"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -554,7 +576,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test depth syncing
+##############################################
 testcase "depth"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -603,7 +627,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test webhook
+##############################################
 testcase "webhook"
 NCPORT=8888
 # First sync
@@ -646,7 +672,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test http handler
+##############################################
 testcase "http"
 BINDPORT=8888
 # First sync
@@ -680,7 +708,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test submodule sync
+##############################################
 testcase "submodule-sync"
 
 # Init submodule repo
@@ -779,7 +809,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test submodules depth syncing
+##############################################
 testcase "submodule-sync-depth"
 
 # Init submodule repo
