@@ -61,7 +61,7 @@ make container REGISTRY=e2e VERSION=$(make -s version)
 
 DIR=""
 for i in $(seq 1 10); do
-    DIR="/tmp/git-sync-test.$RANDOM"
+    DIR="/tmp/git-sync-test.$RANDOM$RANDOM"
     mkdir "$DIR" && break
 done
 if [[ -z "$DIR" ]]; then
@@ -80,7 +80,7 @@ function finish() {
 
 trap finish INT EXIT
 
-CONTAINER_NAME=git-sync-$RANDOM
+CONTAINER_NAME=git-sync-$RANDOM$RANDOM
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
     docker run \
