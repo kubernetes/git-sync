@@ -129,13 +129,12 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --one-time \
     --repo="$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    --one-time \
     > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -478,12 +477,11 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --one-time \
     --repo="$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" \
-    --one-time \
     > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -542,7 +540,7 @@ GIT_SYNC \
     --repo="$REPO" \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    > "$DIR"/log."$TESTCASE" 2>&1 || true
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
