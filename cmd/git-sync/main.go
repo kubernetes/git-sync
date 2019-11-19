@@ -399,15 +399,15 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	}
 
 	const tmplink = "tmp-link"
+	log.V(1).Info("creating tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
 	if _, err := runCommand(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
-	log.V(1).Info("created tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
 
+	log.V(1).Info("renaming symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 	if _, err := runCommand(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
-	log.V(1).Info("renamed symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 
 	return currentDir, nil
 }
@@ -435,10 +435,10 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// Make a worktree for this exact git hash.
 	worktreePath := path.Join(gitRoot, "rev-"+hash)
 	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
+	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
 	}
-	log.V(0).Info("added worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
@@ -461,7 +461,8 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	// Update submodules
-	// NOTICE: it works for repo with or without submodules
+	// NOTE: this works for repo with or without submodules.
+	log.V(0).Info("updating submodules")
 	submodulesArgs := []string{"submodule", "update", "--init", "--recursive"}
 	if depth != 0 {
 		submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
@@ -470,7 +471,6 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if err != nil {
 		return err
 	}
-	log.V(0).Info("updated submodules")
 
 	// Change the file permissions, if requested.
 	if *flChmod != 0 {
@@ -487,13 +487,13 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	} else if oldWorktree != "" {
 		// Clean up previous worktree
+		log.V(1).Info("removing old worktree", "path", oldWorktree)
 		if err := os.RemoveAll(oldWorktree); err != nil {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
 		if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
 			return err
 		}
-		log.V(1).Info("pruned old worktrees")
 	}
 
 	return nil
@@ -505,6 +505,8 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
 	args = append(args, repo, gitRoot)
+	log.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
+
 	_, err := runCommand(ctx, "", *flGitCmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
@@ -522,7 +524,6 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 			return err
 		}
 	}
-	log.V(0).Info("cloned repo", "origin", repo)
 
 	return nil
 }
@@ -591,12 +592,11 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		if err != nil {
 			return false, "", err
 		}
-		log.V(2).Info("git state", "local", local, "remote", remote)
 		if local == remote {
-			log.V(1).Info("no update required")
+			log.V(1).Info("no update required", "rev", rev, "local", local, "remote", remote)
 			return false, "", nil
 		}
-		log.V(0).Info("update required")
+		log.V(0).Info("update required", "rev", rev, "local", local, "remote", remote)
 		hash = remote
 	}
 
