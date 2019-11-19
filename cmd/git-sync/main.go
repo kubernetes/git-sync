@@ -315,7 +315,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -331,10 +331,7 @@ func main() {
 			time.Sleep(waitTime(*flWait))
 			continue
 		} else if changed && webhook != nil {
-			err := triggerWebhook(ctx, webhook, *flRev, *flRoot, *flDest)
-			if err != nil {
-				log.Error(err, "triggering webhook failed")
-			}
+			webhook.Send(hash)
 		}
 		syncDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 		syncCount.WithLabelValues("success").Inc()
@@ -549,8 +546,8 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 }
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
-// returns (1) whether a change occured and (2) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, error) {
+// returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, string, error) {
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	var hash string
@@ -559,29 +556,29 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	case os.IsNotExist(err):
 		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		hash, err = hashForRev(ctx, rev, gitRoot)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 	case err != nil:
-		return false, fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
+		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
 		local, remote, err := getRevs(ctx, target, branch, rev)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		log.V(2).Info("git state", "local", local, "remote", remote)
 		if local == remote {
 			log.V(1).Info("no update required")
-			return false, nil
+			return false, "", nil
 		}
 		log.V(0).Info("update required")
 		hash = remote
 	}
 
-	return true, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
+	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
 }
 
 // getRevs returns the local and upstream hashes for rev.
@@ -740,19 +737,6 @@ func setupGitCookieFile(ctx context.Context) error {
 		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("error configuring git cookie file: %v", err)
 	}
-
-	return nil
-}
-
-func triggerWebhook(ctx context.Context, webhook *Webhook, rev, gitRoot, dest string) error {
-	target := path.Join(gitRoot, dest)
-
-	hash, err := hashForRev(ctx, rev, target)
-	if err != nil {
-		return err
-	}
-
-	webhook.Data.UpdateAndTrigger(hash)
 
 	return nil
 }
