@@ -61,7 +61,7 @@ make container REGISTRY=e2e VERSION=$(make -s version)
 
 DIR=""
 for i in $(seq 1 10); do
-    DIR="/tmp/git-sync-test.$RANDOM"
+    DIR="/tmp/git-sync-test.$RANDOM$RANDOM"
     mkdir "$DIR" && break
 done
 if [[ -z "$DIR" ]]; then
@@ -80,7 +80,7 @@ function finish() {
 
 trap finish INT EXIT
 
-CONTAINER_NAME=git-sync-$RANDOM
+CONTAINER_NAME=git-sync-$RANDOM$RANDOM
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
     docker run \
@@ -119,7 +119,9 @@ touch "$REPO"/file
 git -C "$REPO" add file
 git -C "$REPO" commit -aqm "init file"
 
+##############################################
 # Test HEAD one-time
+##############################################
 testcase "head-once"
 # First sync
 echo "$TESTCASE" > "$REPO"/file
@@ -127,20 +129,22 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
-    --repo="$REPO" \
+    --one-time \
+    --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    --one-time > "$DIR"/log."$TESTCASE" 2>&1
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+##############################################
 # Test default syncing
+##############################################
 testcase "default-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -149,9 +153,10 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -174,7 +179,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test HEAD syncing
+##############################################
 testcase "head-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -183,11 +190,12 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -210,7 +218,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test branch syncing
+##############################################
 testcase "branch-sync"
 BRANCH="$TESTCASE"--BRANCH
 # First sync
@@ -222,10 +232,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -252,7 +263,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test tag syncing
+##############################################
 testcase "tag-sync"
 TAG="$TESTCASE"--TAG
 # First sync
@@ -263,10 +276,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -298,7 +312,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test tag syncing with annotated tags
+##############################################
 testcase "tag-sync-annotated"
 TAG="$TESTCASE"--TAG
 # First sync
@@ -309,10 +325,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -344,7 +361,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test cross-branch tag syncing
+##############################################
 testcase "cross-branch-tag-sync"
 BRANCH="$TESTCASE"--BRANCH
 TAG="$TESTCASE"--TAG
@@ -358,10 +377,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -407,7 +427,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test rev syncing
+##############################################
 testcase "rev-sync"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -417,10 +439,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -443,7 +466,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test rev-sync one-time
+##############################################
 testcase "rev-once"
 # First sync
 echo "$TESTCASE" > "$REPO"/file
@@ -452,20 +477,21 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
-    --repo="$REPO" \
+    --one-time \
+    --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
     --dest="link" \
-    --one-time > "$DIR"/log."$TESTCASE" 2>&1
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+##############################################
 # Test syncing after a crash
+##############################################
 testcase "crash-cleanup-retry"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -474,10 +500,10 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -488,43 +514,46 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
 pass
 
+##############################################
 # Test sync loop timeout
+##############################################
 testcase "sync-loop-timeout"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git=$SLOW_GIT \
-    --timeout=1 \
     --logtostderr \
     --v=5 \
     --one-time \
-    --repo="$REPO" \
+    --timeout=1 \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 || true
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
     --git=$SLOW_GIT \
-    --timeout=16 \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --timeout=16 \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 10
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -541,7 +570,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test depth syncing
+##############################################
 testcase "depth"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -551,10 +582,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -589,7 +621,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test webhook
+##############################################
 testcase "webhook"
 NCPORT=8888
 # First sync
@@ -598,16 +632,17 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
 { (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook not called, server still running"
+    fail "webhook 1 not called, server still running"
 fi
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
@@ -617,21 +652,23 @@ git -C "$REPO" commit -qam "$TESTCASE 2"
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "2 webhook not called, server still running"
+    fail "webhook 2 not called, server still running"
 fi
 # Now return 200, ensure that it gets called
 { (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
 NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "3 webhook not called, server still running"
+    fail "webhook 3 not called, server still running"
 fi
 # Wrap up
 remove_sync_container
 wait
 pass
 
+##############################################
 # Test http handler
+##############################################
 testcase "http"
 BINDPORT=8888
 # First sync
@@ -640,12 +677,13 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
     --http-metrics \
     --http-pprof \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 2
 # check that health endpoint is alive
 if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
@@ -664,7 +702,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test submodule sync
+##############################################
 testcase "submodule-sync"
 
 # Init submodule repo
@@ -694,11 +734,10 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
-    --branch=master \
-    --rev=HEAD \
+    --repo="file://$REPO" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -762,7 +801,9 @@ remove_sync_container
 wait
 pass
 
+##############################################
 # Test submodules depth syncing
+##############################################
 testcase "submodule-sync-depth"
 
 # Init submodule repo
@@ -784,10 +825,11 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
-    --repo="$REPO" \
+    --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
-    --dest="link" > "$DIR"/log."$TESTCASE" 2>&1 &
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
