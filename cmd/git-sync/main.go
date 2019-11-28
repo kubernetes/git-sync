@@ -385,14 +385,14 @@ func sleepForever() {
 // worktree, this returns the path to it.
 func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	fullpath := path.Join(gitRoot, link)
-	currentDir, err := filepath.EvalSymlinks(fullpath)
+	linkPath := path.Join(gitRoot, link)
+	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
 	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("error accessing symlink: %v", err)
+		return "", fmt.Errorf("error accessing current worktree: %v", err)
 	}
 
-	// newDir is /git/rev-..., we need to change it to relative path.
-	// Volume in other container may not be mounted at /git, so the symlink can't point to /git.
+	// newDir is absolute, so we need to change it to a relative path.  This is
+	// so it can be volume-mounted at another path and the symlink still works.
 	newDirRelative, err := filepath.Rel(gitRoot, newDir)
 	if err != nil {
 		return "", fmt.Errorf("error converting to relative path: %v", err)
@@ -409,7 +409,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	}
 	log.V(1).Info("renamed symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
 
-	return currentDir, nil
+	return oldWorktreePath, nil
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
@@ -525,7 +525,8 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	return nil
 }
 
-func hashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
+// localHashForRev returns the locally known hash for a given rev.
+func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 	output, err := runCommand(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
@@ -558,7 +559,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = hashForRev(ctx, rev, gitRoot)
+	output, err = localHashForRev(ctx, rev, gitRoot)
 	if err != nil {
 		return false, err
 	}
@@ -574,17 +575,19 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	_, err := os.Stat(gitRepoPath)
 	switch {
 	case os.IsNotExist(err):
+		// First time. Just clone it and get the hash.
 		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = hashForRev(ctx, rev, gitRoot)
+		hash, err = localHashForRev(ctx, rev, gitRoot)
 		if err != nil {
 			return false, "", err
 		}
 	case err != nil:
 		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
+		// Not the first time. Figure out if the ref has changed.
 		local, remote, err := getRevs(ctx, target, branch, rev)
 		if err != nil {
 			return false, "", err
@@ -604,7 +607,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 // getRevs returns the local and upstream hashes for rev.
 func getRevs(ctx context.Context, localDir, branch, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := hashForRev(ctx, rev, localDir)
+	local, err := localHashForRev(ctx, rev, localDir)
 	if err != nil {
 		return "", "", err
 	}
