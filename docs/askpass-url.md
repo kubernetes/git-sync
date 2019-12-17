@@ -4,7 +4,7 @@
 
 The GIT ASKPASS Service expose via HTTP and provide the answer to GIT_ASKPASS.
 
-Example of the servcie's output, see more at https://git-scm.com/docs/gitcredentials
+Example of the servcie's output, see more at <https://git-scm.com/docs/gitcredentials>
 
 ```json
 username=xxx@example.com
@@ -20,7 +20,7 @@ and GIT ASKPASS Service are secure.
 
 The recommended way is the ASKPASS Service running within the same pod as git-sync.
 
-See https://github.com/cydu-cloud/git-askpass-gce-node as a full example which use GCE Node Service Account credential to access Google Cloud Source Repo.
+See <https://github.com/cydu-cloud/git-askpass-gce-node> as a full example which use GCE Node Service Account credential to access Google Cloud Source Repo.
 
 ```json
 {
