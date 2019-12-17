@@ -11,7 +11,7 @@ This can be done one of two ways:
 
 Obtain the host keys for your git server:
 
-```
+```bash
 ssh-keyscan $YOUR_GIT_HOST > /tmp/known_hosts
 ```
 
@@ -19,8 +19,7 @@ Use the `kubectl create secret` command and point to the file on your
 filesystem that stores the key. Ensure that the file is mapped to "ssh" as
 shown (the file can be located anywhere).
 
-
-```
+```bash
 kubectl create secret generic git-creds \
     --from-file=ssh=$HOME/.ssh/id_rsa \
     --from-file=known_hosts=/tmp/known_hosts
@@ -31,7 +30,7 @@ kubectl create secret generic git-creds \
 Write a config file for a Secret that holds your SSH private key, with the key
 (pasted in base64 encoded plaintext) mapped to the "ssh" field.
 
-```
+```json
 {
   "kind": "Secret",
   "apiVersion": "v1",
@@ -47,7 +46,7 @@ Write a config file for a Secret that holds your SSH private key, with the key
 
 Create the Secret using `kubectl create -f`.
 
-```
+```bash
 kubectl create -f /path/to/secret-config.json
 ```
 
@@ -57,7 +56,7 @@ In your Pod or Deployment configuration, specify a volume for mounting the
 Secret. Ensure that secretName matches the name you used when creating the
 Secret (e.g. "git-creds" used in both above examples).
 
-```
+```yaml
       # ...
       volumes:
       - name: git-secret
@@ -76,7 +75,7 @@ git@github.com/foo/bar) , and set the `-ssh` flags (or set GIT_SYNC_SSH to
 "true").  You will also need to set your container's `securityContext` to run
 as user ID "65533" which is created for running git-sync as non-root.
 
-```
+```yaml
       # ...
       containers:
       - name: git-sync
@@ -97,7 +96,7 @@ as user ID "65533" which is created for running git-sync as non-root.
 Lastly, you need to tell your Pod to run with the git-sync FS group.  Note
 that this is a Pod-wide setting, unlike the container `securityContext` above.
 
-```
+```yaml
       # ...
       securityContext:
         fsGroup: 65533 # to make SSH key readable
@@ -113,7 +112,7 @@ restrictive enough to be used as an SSH key), so make sure you set the
 In case the above YAML snippets are confusing (because whitespace matters in
 YAML), here is a full example:
 
-```
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
