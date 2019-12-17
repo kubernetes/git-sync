@@ -98,8 +98,8 @@ var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
-var flAuthURL = flag.String("auth-url", envString("GIT_SYNC_AUTH_URL", ""),
-	"the URL for git auth callback")
+var flAskPassURL = flag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
+	"the URL for GIT_ASKPASS callback")
 
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
@@ -236,7 +236,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAuthURL != "") && *flSSH {
+	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
 		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --auth-url, or --cookie-file were provided\n")
 		os.Exit(1)
 	}
@@ -266,9 +266,9 @@ func main() {
 		}
 	}
 
-	if *flAuthURL != "" {
-		if err := setupGitAuthURL(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't set auth callback url: %v\n", err)
+	if *flAskPassURL != "" {
+		if err := setupGitAskPassURL(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -325,7 +325,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAuthURL); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -585,8 +585,8 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	if authUrl != "" {
 		// For Auth Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
-		if err := setupGitAuthURL(ctx); err != nil {
-			return false, "", fmt.Errorf("can't set auth callback url: %v", err)
+		if err := setupGitAskPassURL(ctx); err != nil {
+			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
 		}
 	}
 
@@ -775,11 +775,12 @@ func setupGitCookieFile(ctx context.Context) error {
 	return nil
 }
 
-// The expected output of the auth URL are:
+// The expected ASKPASS callback output are below,
+// see https://git-scm.com/docs/gitcredentials for more examples:
 // username=xxx@example.com
 // password=ya29.xxxyyyzzz
-func setupGitAuthURL(ctx context.Context) error {
-	log.V(1).Info("configuring auth callback URL")
+func setupGitAskPassURL(ctx context.Context) error {
+	log.V(1).Info("configuring GIT_ASKPASS_URL")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
@@ -787,7 +788,7 @@ func setupGitAuthURL(ctx context.Context) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", *flAuthURL, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", *flAskPassURL, nil)
 	if err != nil {
 		return fmt.Errorf("error create auth request: %v", err)
 	}
