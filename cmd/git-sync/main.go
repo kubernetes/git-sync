@@ -237,7 +237,7 @@ func main() {
 	}
 
 	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
-		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --auth-url, or --cookie-file were provided\n")
+		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --askpass-url, or --cookie-file were provided\n")
 		os.Exit(1)
 	}
 
