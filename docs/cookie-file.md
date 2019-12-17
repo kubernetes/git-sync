@@ -34,7 +34,7 @@ volumes: [
 ],
 ```
 
-# Step 2: Configure git-sync container
+# Step 3: Configure git-sync container
 
 In your git-sync container configuration, mount your volume at
 "/etc/git-secret". Make sure to pass the `--cookie-file` flag or set the

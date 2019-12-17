@@ -98,6 +98,9 @@ var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
+var flAuthURL = flag.String("auth-url", envString("GIT_SYNC_AUTH_URL", ""),
+	"the URL for git auth callback")
+
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
 
@@ -233,8 +236,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if (*flUsername != "" || *flPassword != "" || *flCookieFile) && *flSSH {
-		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, or --cookie-file were provided\n")
+	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAuthURL != "") && *flSSH {
+		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --auth-url, or --cookie-file were provided\n")
 		os.Exit(1)
 	}
 
@@ -259,6 +262,13 @@ func main() {
 	if *flCookieFile {
 		if err := setupGitCookieFile(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *flAuthURL != "" {
+		if err := setupGitAuthURL(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't set auth callback url: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -315,7 +325,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAuthURL); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -571,7 +581,15 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string) (bool, string, error) {
+	if authUrl != "" {
+		// For Auth Callback URL, the credentials behind is dynamic, it needs to be
+		// re-fetched each time.
+		if err := setupGitAuthURL(ctx); err != nil {
+			return false, "", fmt.Errorf("can't set auth callback url: %v", err)
+		}
+	}
+
 	target := path.Join(gitRoot, dest)
 	gitRepoPath := path.Join(target, ".git")
 	var hash string
@@ -752,6 +770,57 @@ func setupGitCookieFile(ctx context.Context) error {
 	if _, err = runCommand(ctx, "",
 		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("error configuring git cookie file: %v", err)
+	}
+
+	return nil
+}
+
+// The expected output of the auth URL are:
+// username=xxx@example.com
+// password=ya29.xxxyyyzzz
+func setupGitAuthURL(ctx context.Context) error {
+	log.V(1).Info("configuring auth callback URL")
+
+	var netClient = &http.Client{
+		Timeout: time.Second * 1,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", *flAuthURL, nil)
+	if err != nil {
+		return fmt.Errorf("error create auth request: %v", err)
+	}
+	resp, err := netClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("error access auth url: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("access auth url: %v", err)
+	}
+	authData, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("error read auth response: %v", err)
+	}
+
+	username := ""
+	password := ""
+	for _, line := range strings.Split(string(authData), "\n") {
+		keyValues := strings.SplitN(line, "=", 2)
+		if len(keyValues) != 2 {
+			continue
+		}
+		switch keyValues[0] {
+		case "username":
+			username = keyValues[1]
+		case "password":
+			password = keyValues[1]
+		}
+	}
+
+	if err := setupGitAuth(ctx, username, password, *flRepo); err != nil {
+		return fmt.Errorf("error setup git auth: %v", err)
 	}
 
 	return nil
