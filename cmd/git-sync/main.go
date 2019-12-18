@@ -583,7 +583,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
 func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string) (bool, string, error) {
 	if authUrl != "" {
-		// For Auth Callback URL, the credentials behind is dynamic, it needs to be
+		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
 		if err := setupGitAskPassURL(ctx); err != nil {
 			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
