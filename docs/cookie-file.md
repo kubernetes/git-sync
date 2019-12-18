@@ -22,16 +22,12 @@ In your Pod or Deployment configuration, specify a Volume for mounting the
 cookie-file Secret. Make sure to set `secretName` to the same name you used to
 create the secret (`git-cookie-file` in the example above).
 
-```json
-volumes: [
-    {
-        "name": "git-secret",
-        "secret": {
-          "secretName": "git-cookie-file",
-        }
-    },
-    ...
-],
+```yaml
+volumes:
+  - name: git-secret
+    secret:
+      secretName: git-cookie-file
+      defaultMode: 0440
 ```
 
 ## Step 3: Configure git-sync container
@@ -42,26 +38,16 @@ environment variable `GIT_COOKIE_FILE` to "true", and to use a git repo
 (`--repo` flag or `GIT_SYNC_REPO` env) is set to use a URL with the HTTP
 protocol.
 
-```json
-{
-    name: "git-sync",
-    ...
-    env: [
-        {
-            name: "GIT_SYNC_REPO",
-            value: "https://github.com/kubernetes/kubernetes.git"
-        }, {
-            name: "GIT_COOKIE_FILE",
-            value: "true",
-        },
-    ...
-    ]
-    volumeMounts: [
-        {
-            "name": "git-secret",
-            "mountPath": "/etc/git-secret"
-        },
-        ...
-    ],
-}
+```yaml
+name: "git-sync"
+...
+env:
+  - name: GIT_SYNC_REPO
+    value: https://github.com/kubernetes/kubernetes.git
+  - name: GIT_COOKIE_FILE
+    value: true
+volumeMounts:
+  - name: git-secret
+    mountPath: /etc/git-secret
+    readOnly: true
 ```

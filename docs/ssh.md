@@ -130,7 +130,7 @@ spec:
       - name: git-secret
         secret:
           secretName: git-creds
-          defaultMode: 288 # = mode 0440
+          defaultMode: 0440
       containers:
       - name: git-sync
         image: k8s.gcr.io/git-sync:v3.1.1
@@ -145,6 +145,7 @@ spec:
         volumeMounts:
         - name: git-secret
           mountPath: /etc/git-secret
+          readOnly: true
       securityContext:
         fsGroup: 65533 # to make SSH key readable
 ```
