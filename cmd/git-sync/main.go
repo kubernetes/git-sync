@@ -695,7 +695,7 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
 	log.V(1).Info("setting up git credential cache")
 
-	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "cache")
+	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
 		return fmt.Errorf("error setting up git credentials: %v", err)
 	}
