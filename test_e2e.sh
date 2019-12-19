@@ -66,6 +66,7 @@ function freencport() {
 
 # Build it
 make container REGISTRY=e2e VERSION=$(make -s version)
+make test-tools REGISTRY=e2e
 
 RUNID="${RANDOM}${RANDOM}"
 DIR=""
@@ -95,6 +96,12 @@ function clean_root() {
     mkdir -p "$ROOT"
 }
 
+# Init SSH for test cases.
+DOT_SSH="$DIR/dot_ssh"
+mkdir -p "$DOT_SSH"
+ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
+cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
+
 function finish() {
   if [ $? -ne 0 ]; then
     echo "The directory $DIR was not removed as it contains"\
@@ -118,8 +125,10 @@ function GIT_SYNC() {
         -v "$DIR":"$DIR":rw \
         -v "$(pwd)/slow_git.sh":"$SLOW_GIT":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
+        -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
+        --add-user \
         "$@"
 }
 
@@ -961,6 +970,39 @@ if [ $expected_depth != $submodule_depth ]; then
 fi
 # Wrap up
 rm -rf $SUBMODULE
+pass
+
+##############################################
+# Test SSH
+##############################################
+testcase "ssh"
+echo "$TESTCASE" > "$REPO"/file
+# Run a git-over-SSH server
+CTR=$(docker run \
+    -d \
+    --rm \
+    --label git-sync-e2e="$RUNID" \
+    -v "$DOT_SSH":/dot_ssh:ro \
+    -v "$REPO":/src:ro \
+    e2e/test/test-sshd)
+IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --ssh \
+    --ssh-known-hosts=false \
+    --repo="test@$IP:/src" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
 pass
 
 echo "cleaning up $DIR"

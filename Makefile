@@ -177,6 +177,9 @@ test: $(BUILD_DIRS)
 	    "
 	@./test_e2e.sh
 
+test-tools:
+	@docker build -t $(REGISTRY)/test/test-sshd _test_tools/sshd
+
 $(BUILD_DIRS):
 	@mkdir -p $@
 
