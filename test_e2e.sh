@@ -116,8 +116,8 @@ function GIT_SYNC() {
         --network="host" \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR":rw \
-        -v "$(pwd)/slow_git.sh":"/slow_git.sh":ro \
-        -v "$(pwd)/askpass_git.sh":"/askpass_git.sh":ro \
+        -v "$(pwd)/slow_git.sh":"$SLOW_GIT":ro \
+        -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         "$@"
@@ -529,7 +529,7 @@ testcase "sync-loop-timeout"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --git=$SLOW_GIT \
+    --git="$SLOW_GIT" \
     --logtostderr \
     --v=5 \
     --one-time \
@@ -542,7 +542,7 @@ GIT_SYNC \
 assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
-    --git=$SLOW_GIT \
+    --git="$SLOW_GIT" \
     --logtostderr \
     --v=5 \
     --wait=0.1 \
@@ -622,7 +622,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run with askpass_git but with wrong password
 GIT_SYNC \
-    --git=$ASKPASS_GIT \
+    --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="wrong" \
     --logtostderr \
@@ -638,7 +638,7 @@ GIT_SYNC \
 assert_file_absent "$ROOT"/link/file
 # run with askpass_git with correct password
 GIT_SYNC \
-    --git=$ASKPASS_GIT \
+    --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="my-password" \
     --logtostderr \
@@ -672,7 +672,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
   ) &
 }
 GIT_SYNC \
-    --git=$ASKPASS_GIT \
+    --git="$ASKPASS_GIT" \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
     --logtostderr \
     --v=5 \
@@ -694,7 +694,7 @@ assert_file_absent "$ROOT"/link/file
   ) &
 }
 GIT_SYNC \
-    --git=$ASKPASS_GIT \
+    --git="$ASKPASS_GIT" \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
     --logtostderr \
     --v=5 \
