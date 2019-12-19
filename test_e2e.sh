@@ -671,7 +671,7 @@ pass
 ##############################################
 testcase "askpass_url"
 echo "$TESTCASE 1" > "$REPO"/file
-NCPORT=8888
+NCPORT=$(($RANDOM+2000))
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
 # Need to run it twice one for setup another for real clone
@@ -715,7 +715,7 @@ pass
 # Test webhook
 ##############################################
 testcase "webhook"
-NCPORT=8888
+NCPORT=$(($RANDOM+2000))
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
