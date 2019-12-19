@@ -7,6 +7,7 @@ set -o pipefail
 TESTCASE=""
 function testcase() {
     clean_root
+    init_repo
     echo -n "testcase $1: "
     TESTCASE="$1"
 }
@@ -21,7 +22,6 @@ function fail() {
 function pass() {
     echo "PASS"
     TESTCASE=""
-    git -C "$REPO" checkout -q master
 }
 
 function assert_link_exists() {
@@ -115,20 +115,20 @@ SLOW_GIT=/slow_git.sh
 ASKPASS_GIT=/askpass_git.sh
 
 REPO="$DIR/repo"
-mkdir "$REPO"
+function init_repo() {
+    rm -rf "$REPO"
+    mkdir -p "$REPO"
+    git -C "$REPO" init -q
+    touch "$REPO"/file
+    git -C "$REPO" add file
+    git -C "$REPO" commit -aqm "init file"
+}
 
 ROOT="$DIR/root"
 function clean_root() {
     rm -rf "$ROOT"
-    mkdir "$ROOT"
+    mkdir -p "$ROOT"
 }
-
-# Init the temp repo.
-TESTCASE=init
-git -C "$REPO" init
-touch "$REPO"/file
-git -C "$REPO" add file
-git -C "$REPO" commit -aqm "init file"
 
 ##############################################
 # Test HEAD one-time
