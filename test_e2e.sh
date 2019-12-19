@@ -643,7 +643,7 @@ GIT_SYNC \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    > "$DIR"/log."$TESTCASE" 2>&1 || true
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with askpass_git with correct password
@@ -664,8 +664,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
