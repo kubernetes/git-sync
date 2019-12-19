@@ -78,6 +78,22 @@ if [[ -z "$DIR" ]]; then
 fi
 echo "test root is $DIR"
 
+REPO="$DIR/repo"
+function init_repo() {
+    rm -rf "$REPO"
+    mkdir -p "$REPO"
+    git -C "$REPO" init -q
+    touch "$REPO"/file
+    git -C "$REPO" add file
+    git -C "$REPO" commit -aqm "init file"
+}
+
+ROOT="$DIR/root"
+function clean_root() {
+    rm -rf "$ROOT"
+    mkdir -p "$ROOT"
+}
+
 function finish() {
   if [ $? -ne 0 ]; then
     echo "The directory $DIR was not removed as it contains"\
@@ -85,8 +101,10 @@ function finish() {
     remove_sync_container
   fi
 }
-
 trap finish INT EXIT
+
+SLOW_GIT=/slow_git.sh
+ASKPASS_GIT=/askpass_git.sh
 
 CONTAINER_NAME=git-sync-$RANDOM$RANDOM
 function GIT_SYNC() {
@@ -109,25 +127,6 @@ function remove_sync_container() {
     # Verify the container is running using 'docker top' before removing
     docker top $CONTAINER_NAME >/dev/null 2>&1 && \
     docker rm -f $CONTAINER_NAME >/dev/null 2>&1
-}
-
-SLOW_GIT=/slow_git.sh
-ASKPASS_GIT=/askpass_git.sh
-
-REPO="$DIR/repo"
-function init_repo() {
-    rm -rf "$REPO"
-    mkdir -p "$REPO"
-    git -C "$REPO" init -q
-    touch "$REPO"/file
-    git -C "$REPO" add file
-    git -C "$REPO" commit -aqm "init file"
-}
-
-ROOT="$DIR/root"
-function clean_root() {
-    rm -rf "$ROOT"
-    mkdir -p "$ROOT"
 }
 
 ##############################################
