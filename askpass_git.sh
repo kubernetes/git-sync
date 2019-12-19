@@ -14,6 +14,8 @@ if [ "$1" != "clone" ]; then
   exit $?
 fi
 
+# `git credential fill` requires the repo url match to consume the credentials stored by git-sync.
+# Askpass git only support repo started with "file://" which is used in test_e2e.sh.
 REPO=$(echo "$@" | grep -o "file://[^ ]*")
 PASSWD=$(echo "url=${REPO}" | git credential fill | grep -o "password=.*")
 # Test case much match the magic password below.

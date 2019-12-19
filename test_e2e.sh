@@ -637,14 +637,13 @@ GIT_SYNC \
     --password="I have no idea what the password is." \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --one-time \
     --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with askpass_git with correct password
@@ -654,14 +653,13 @@ GIT_SYNC \
     --password="Lov3!k0os" \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --one-time \
     --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
-sleep 3
+    > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
