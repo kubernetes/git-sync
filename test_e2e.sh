@@ -14,13 +14,13 @@ function testcase() {
 
 function fail() {
     echo "FAIL: " "$@"
-    sleep 3
-    remove_sync_container || true
+    remove_containers || true
     exit 1
 }
 
 function pass() {
     echo "PASS"
+    remove_containers || true
     TESTCASE=""
 }
 
@@ -67,9 +67,10 @@ function freencport() {
 # Build it
 make container REGISTRY=e2e VERSION=$(make -s version)
 
+RUNID="${RANDOM}${RANDOM}"
 DIR=""
 for i in $(seq 1 10); do
-    DIR="/tmp/git-sync-test.$RANDOM$RANDOM"
+    DIR="/tmp/git-sync-e2e.$RUNID"
     mkdir "$DIR" && break
 done
 if [[ -z "$DIR" ]]; then
@@ -98,35 +99,35 @@ function finish() {
   if [ $? -ne 0 ]; then
     echo "The directory $DIR was not removed as it contains"\
          "log files useful for debugging"
-    remove_sync_container
   fi
+  remove_containers
 }
 trap finish INT EXIT
 
 SLOW_GIT=/slow_git.sh
 ASKPASS_GIT=/askpass_git.sh
 
-CONTAINER_NAME=git-sync-$RANDOM$RANDOM
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
     docker run \
-        --name $CONTAINER_NAME \
         -i \
-        -u $(id -u):$(id -g) \
-        -v "$DIR":"$DIR" \
-        -v "$(pwd)/slow_git.sh":"/slow_git.sh" \
-        -v "$(pwd)/askpass_git.sh":"/askpass_git.sh" \
-        --env XDG_CONFIG_HOME=$DIR \
-        --network="host" \
         --rm \
+        --label git-sync-e2e="$RUNID" \
+        --network="host" \
+        -u $(id -u):$(id -g) \
+        -v "$DIR":"$DIR":rw \
+        -v "$(pwd)/slow_git.sh":"/slow_git.sh":ro \
+        -v "$(pwd)/askpass_git.sh":"/askpass_git.sh":ro \
+        --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
         "$@"
 }
 
-function remove_sync_container() {
-    # Verify the container is running using 'docker top' before removing
-    docker top $CONTAINER_NAME >/dev/null 2>&1 && \
-    docker rm -f $CONTAINER_NAME >/dev/null 2>&1
+function remove_containers() {
+    docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+        | while read CTR; do
+            docker kill "$CTR" >/dev/null
+        done
 }
 
 ##############################################
@@ -185,8 +186,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -224,8 +223,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -269,8 +266,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -318,8 +313,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -367,8 +360,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -433,8 +424,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 3"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -472,8 +461,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -576,8 +563,6 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -627,8 +612,6 @@ if [ $expected_depth != $depth ]; then
     fail "backward depth mismatch expected=$expected_depth actual=$depth"
 fi
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -769,8 +752,6 @@ if kill -0 $NCPID > /dev/null 2>&1; then
     fail "webhook 3 not called, server still running"
 fi
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -805,8 +786,6 @@ if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localho
     fail "pprof endpoint failed"
 fi
 # Wrap up
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -904,8 +883,6 @@ assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
 # Wrap up
 rm -rf $SUBMODULE
 rm -rf $NESTED_SUBMODULE
-remove_sync_container
-wait
 pass
 
 ##############################################
@@ -984,8 +961,6 @@ if [ $expected_depth != $submodule_depth ]; then
 fi
 # Wrap up
 rm -rf $SUBMODULE
-remove_sync_container
-wait
 pass
 
 echo "cleaning up $DIR"
