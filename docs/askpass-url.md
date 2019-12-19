@@ -6,7 +6,7 @@ The GIT ASKPASS Service is exposed via HTTP and provide the answer to GIT_ASKPAS
 
 Example of the service's output, see more at <https://git-scm.com/docs/gitcredentials>
 
-```json
+```
 username=xxx@example.com
 password=ya29.mysecret
 ```
@@ -18,12 +18,7 @@ In your git-sync container configuration, specify the GIT_ASKPASS_URL
 The credentials will pass in plain text, make sure the connection between git-sync
 and GIT ASKPASS Service are secure.
 
-The recommended situation are:
-
-* ASKPASS Service running within the same pod as git-sync.
-* ASKPASS Service rely on [GCE metadata](https://cloud.google.com/compute/docs/storing-retrieving-metadata) to get service account's credential to access Google Cloud Source Repo.
-
-See <https://github.com/cydu-cloud/git-askpass-gce-node> as a full example.
+See askpass_url e2e test as an example.
 
 ```yaml
 name: "git-sync"

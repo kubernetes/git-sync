@@ -667,6 +667,51 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
+# Test askpass_url
+##############################################
+testcase "askpass_url"
+echo "$TESTCASE 1" > "$REPO"/file
+NCPORT=8888
+git -C "$REPO" commit -qam "$TESTCASE 1"
+# run the askpass_url service with wrong password
+# Need to run it twice one for setup another for real clone
+{ (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=dummypw' | nc -N -l $NCPORT > /dev/null; done) &}
+GIT_SYNC \
+    --git=$ASKPASS_GIT \
+    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 || true
+# check for failure
+assert_file_absent "$ROOT"/link/file
+# run with askpass_url service with correct password
+# Need to run it twice one for setup another for real clone
+{ (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=Lov3!k0os' | nc -N -l $NCPORT > /dev/null; done) &}
+GIT_SYNC \
+    --git=$ASKPASS_GIT \
+    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
 # Test webhook
 ##############################################
 testcase "webhook"
