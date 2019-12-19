@@ -89,6 +89,8 @@ function GIT_SYNC() {
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR" \
         -v "$(pwd)/slow_git.sh":"/slow_git.sh" \
+        -v "$(pwd)/askpass_git.sh":"/askpass_git.sh" \
+        --env XDG_CONFIG_HOME=$DIR \
         --network="host" \
         --rm \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
@@ -102,6 +104,7 @@ function remove_sync_container() {
 }
 
 SLOW_GIT=/slow_git.sh
+ASKPASS_GIT=/askpass_git.sh
 
 REPO="$DIR/repo"
 mkdir "$REPO"
@@ -622,6 +625,48 @@ wait
 pass
 
 ##############################################
+# Test password
+##############################################
+testcase "password"
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+# run with askpass_git but with wrong password
+GIT_SYNC \
+    --git=$ASKPASS_GIT \
+    --username="you@example.com" \
+    --password="I have no idea what the password is." \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 || true
+# check for failure
+assert_file_absent "$ROOT"/link/file
+# run with askpass_git with correct password
+GIT_SYNC \
+    --git=$ASKPASS_GIT \
+    --username="you@example.com" \
+    --password="Lov3!k0os" \
+    --logtostderr \
+    --v=5 \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
 # Test webhook
 ##############################################
 testcase "webhook"
@@ -788,7 +833,7 @@ assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME
 # Remove submodule
 git -C "$REPO" submodule deinit -q $SUBMODULE_REPO_NAME
 rm -rf "$REPO"/.git/modules/$SUBMODULE_REPO_NAME
-git -C "$REPO" rm -qf $SUBMODULE_REPO_NAME 
+git -C "$REPO" rm -qf $SUBMODULE_REPO_NAME
 git -C "$REPO" commit -aqm "delete submodule"
 sleep 3
 assert_link_exists "$ROOT"/link
