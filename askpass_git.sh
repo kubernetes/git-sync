@@ -17,10 +17,12 @@ fi
 # `git credential fill` requires the repo url match to consume the credentials stored by git-sync.
 # Askpass git only support repo started with "file://" which is used in test_e2e.sh.
 REPO=$(echo "$@" | grep -o "file://[^ ]*")
-PASSWD=$(echo "url=${REPO}" | git credential fill | grep -o "password=.*")
-# Test case much match the magic password below.
-if [ "${PASSWD}" != "password=Lov3!k0os" ]; then
-  echo "invalid password ${PASSWD}, try Lov3!k0os next time."
+OUTPUT=$(echo "url=${REPO}" | git credential fill)
+USERNAME=$(echo ${OUTPUT} | grep -o "username=.*")
+PASSWD=$(echo ${OUTPUT} | grep -o "password=.*")
+# Test case must match the magic username and password below.
+if [ "${PASSWD}" != "password=Lov3!k0os" || "${USERNAME}" != "gitsync@example.com" ]; then
+  echo "invalid username/password pair: ${USERNAME}:${PASSWD}, try gitsync@example.com:Lov3!k0os next time."
   exit 1
 fi
 

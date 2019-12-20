@@ -641,7 +641,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 # run with askpass_git but with wrong password
 GIT_SYNC \
     --git=$ASKPASS_GIT \
-    --username="you@example.com" \
+    --username="gitsync@example.com" \
     --password="I have no idea what the password is." \
     --logtostderr \
     --v=5 \
@@ -657,7 +657,7 @@ assert_file_absent "$ROOT"/link/file
 # run with askpass_git with correct password
 GIT_SYNC \
     --git=$ASKPASS_GIT \
-    --username="you@example.com" \
+    --username="gitsync@example.com" \
     --password="Lov3!k0os" \
     --logtostderr \
     --v=5 \
