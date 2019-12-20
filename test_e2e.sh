@@ -52,6 +52,14 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
+NCPORT=8888
+function freencport() {
+  while :; do
+    NCPORT=$((RANDOM+2000))
+    ss -lpn | grep -q ":$NCPORT " || break
+  done
+}
+
 # #####################
 # main
 # #####################
@@ -671,10 +679,9 @@ pass
 ##############################################
 testcase "askpass_url"
 echo "$TESTCASE 1" > "$REPO"/file
-NCPORT=$(($RANDOM+2000))
+freencport
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
-# Need to run it twice one for setup another for real clone
 { (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=dummypw' | nc -N -l $NCPORT > /dev/null; done) &}
 GIT_SYNC \
     --git=$ASKPASS_GIT \
@@ -691,7 +698,6 @@ GIT_SYNC \
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with askpass_url service with correct password
-# Need to run it twice one for setup another for real clone
 { (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=Lov3!k0os' | nc -N -l $NCPORT > /dev/null; done) &}
 GIT_SYNC \
     --git=$ASKPASS_GIT \
@@ -715,7 +721,7 @@ pass
 # Test webhook
 ##############################################
 testcase "webhook"
-NCPORT=$(($RANDOM+2000))
+freencport
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
