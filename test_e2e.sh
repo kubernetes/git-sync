@@ -641,8 +641,8 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 # run with askpass_git but with wrong password
 GIT_SYNC \
     --git=$ASKPASS_GIT \
-    --username="gitsync@example.com" \
-    --password="I have no idea what the password is." \
+    --username="my-username" \
+    --password="wrong" \
     --logtostderr \
     --v=5 \
     --one-time \
@@ -657,8 +657,8 @@ assert_file_absent "$ROOT"/link/file
 # run with askpass_git with correct password
 GIT_SYNC \
     --git=$ASKPASS_GIT \
-    --username="gitsync@example.com" \
-    --password="Lov3!k0os" \
+    --username="my-username" \
+    --password="my-password" \
     --logtostderr \
     --v=5 \
     --one-time \
@@ -682,7 +682,13 @@ echo "$TESTCASE 1" > "$REPO"/file
 freencport
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
-{ (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=dummypw' | nc -N -l $NCPORT > /dev/null; done) &}
+{ (
+    for i in 1 2; do
+        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong' \
+            | nc -N -l $NCPORT > /dev/null;
+    done
+  ) &
+}
 GIT_SYNC \
     --git=$ASKPASS_GIT \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
@@ -698,7 +704,13 @@ GIT_SYNC \
 # check for failure
 assert_file_absent "$ROOT"/link/file
 # run with askpass_url service with correct password
-{ (for i in 1 2; do echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=you@example.com\npassword=Lov3!k0os' | nc -N -l $NCPORT > /dev/null; done) &}
+{ (
+    for i in 1 2; do
+        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password' \
+            | nc -N -l $NCPORT > /dev/null;
+    done
+  ) &
+}
 GIT_SYNC \
     --git=$ASKPASS_GIT \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
