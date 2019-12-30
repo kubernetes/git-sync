@@ -18,11 +18,11 @@ fi
 # Askpass git only support repo started with "file://" which is used in test_e2e.sh.
 REPO=$(echo "$@" | grep -o "file://[^ ]*")
 OUTPUT=$(echo "url=${REPO}" | git credential fill)
-USERNAME=$(echo ${OUTPUT} | grep -o "username=.*")
-PASSWD=$(echo ${OUTPUT} | grep -o "password=.*")
+USERNAME=$(echo "${OUTPUT}" | grep "^username=.*")
+PASSWD=$(echo "${OUTPUT}" | grep "^password=.*")
 # Test case must match the magic username and password below.
-if [ "${PASSWD}" != "password=Lov3!k0os" || "${USERNAME}" != "gitsync@example.com" ]; then
-  echo "invalid username/password pair: ${USERNAME}:${PASSWD}, try gitsync@example.com:Lov3!k0os next time."
+if [ "${USERNAME}" != "username=my-username" -o "${PASSWD}" != "password=my-password" ]; then
+  echo "invalid test username/password pair: ${USERNAME}:${PASSWD}"
   exit 1
 fi
 
