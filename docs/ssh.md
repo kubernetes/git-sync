@@ -62,7 +62,7 @@ Secret (e.g. "git-creds" used in both above examples).
       - name: git-secret
         secret:
           secretName: git-creds
-          defaultMode: 288 # 0440
+          defaultMode: 0400
       # ...
 ```
 
@@ -135,7 +135,7 @@ spec:
       - name: git-secret
         secret:
           secretName: git-creds
-          defaultMode: 0440
+          defaultMode: 0400
       containers:
       - name: git-sync
         image: k8s.gcr.io/git-sync:v3.1.1
