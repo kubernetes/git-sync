@@ -94,6 +94,8 @@ var flSSHKnownHosts = flag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", tr
 	"enable SSH known_hosts verification")
 var flSSHKnownHostsFile = flag.String("ssh-known-hosts-file", envString("GIT_SSH_KNOWN_HOSTS_FILE", "/etc/git-secret/known_hosts"),
 	"the known_hosts file to use")
+var flAddUser = flag.Bool("add-user", envBool("GIT_SYNC_ADD_USER", false),
+	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with a different UID)")
 
 var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
@@ -239,6 +241,13 @@ func main() {
 	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
 		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --askpass-url, or --cookie-file were provided\n")
 		os.Exit(1)
+	}
+
+	if *flAddUser {
+		if err := addUser(); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't write to /etc/passwd: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -388,6 +397,29 @@ func sleepForever() {
 	signal.Notify(c, os.Interrupt, os.Kill)
 	<-c
 	os.Exit(0)
+}
+
+// Put the current UID/GID into /etc/passwd so SSH can look it up.  This
+// assumes that we have the permissions to write to it.
+func addUser() error {
+	home := os.Getenv("HOME")
+	if home == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("can't get current working directory: %v", err)
+		}
+		home = cwd
+	}
+
+	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	str := fmt.Sprintf("git-sync:x:%d:%d::%s:/sbin/nologin\n", os.Getuid(), os.Getgid(), home)
+	_, err = f.WriteString(str)
+	return err
 }
 
 // updateSymlink atomically swaps the symlink to point at the specified
