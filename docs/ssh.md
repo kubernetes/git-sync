@@ -62,7 +62,7 @@ Secret (e.g. "git-creds" used in both above examples).
       - name: git-secret
         secret:
           secretName: git-creds
-          defaultMode: 288 # 0440
+          defaultMode: 0400
       # ...
 ```
 
@@ -103,6 +103,11 @@ that this is a Pod-wide setting, unlike the container `securityContext` above.
       # ...
 ```
 
+If you want git-sync to run as a different (non-root) UID and GID, you can
+change these last blocks to any UID/GID you like.  SSH demands that the current
+UID be present in /etc/passwd, so in this case you will need to add the
+`--add-user` flag to git-sync's args array.
+
 **Note:** Kubernetes mounts the Secret with permissions 0444 by default (not
 restrictive enough to be used as an SSH key), so make sure you set the
 `defaultMode`.
@@ -130,7 +135,7 @@ spec:
       - name: git-secret
         secret:
           secretName: git-creds
-          defaultMode: 0440
+          defaultMode: 0400
       containers:
       - name: git-sync
         image: k8s.gcr.io/git-sync:v3.1.1
