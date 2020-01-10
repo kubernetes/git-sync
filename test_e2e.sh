@@ -133,6 +133,7 @@ function GIT_SYNC() {
 }
 
 function remove_containers() {
+    sleep 2 # Let docker finish saving container metadata
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
         | while read CTR; do
             docker kill "$CTR" >/dev/null
@@ -772,6 +773,7 @@ BINDPORT=8888
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
+    --git="$SLOW_GIT" \
     --logtostderr \
     --v=5 \
     --repo="file://$REPO" \
@@ -781,6 +783,14 @@ GIT_SYNC \
     --http-pprof \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
+while ! curl --silent --output /dev/null http://localhost:$BINDPORT; do
+    # do nothing, just wait for the HTTP to come up
+    true
+done
+# check that health endpoint fails
+if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 503 ]] ; then
+    fail "health endpoint should have failed: $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT)"
+fi
 sleep 2
 # check that health endpoint is alive
 if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
