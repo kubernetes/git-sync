@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/glogr"
@@ -307,7 +308,12 @@ func main() {
 
 			// This is a dumb liveliness check endpoint. Currently this checks
 			// nothing and will always return 200 if the process is live.
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				if !getRepoReady() {
+					http.Error(w, "repo is not ready", http.StatusServiceUnavailable)
+				}
+				// Otherwise success
+			})
 			http.Serve(ln, mux)
 		}()
 	}
@@ -454,6 +460,22 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	return oldWorktreePath, nil
 }
 
+// repoReady indicates that the repo has been cloned and synced.
+var readyLock sync.Mutex
+var repoReady = false
+
+func getRepoReady() bool {
+	readyLock.Lock()
+	defer readyLock.Unlock()
+	return repoReady
+}
+
+func setRepoReady() {
+	readyLock.Lock()
+	defer readyLock.Unlock()
+	repoReady = true
+}
+
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
@@ -525,9 +547,12 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 
 	// Flip the symlink.
-	if oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath); err != nil {
+	oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath)
+	if err != nil {
 		return err
-	} else if oldWorktree != "" {
+	}
+	setRepoReady()
+	if oldWorktree != "" {
 		// Clean up previous worktree
 		log.V(1).Info("removing old worktree", "path", oldWorktree)
 		if err := os.RemoveAll(oldWorktree); err != nil {
