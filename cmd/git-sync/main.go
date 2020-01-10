@@ -114,6 +114,11 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
+var flProcName = flag.String("process", envString("GIT_SYNC_PROCESS", ""),
+	"comm name to send signal on changes. Default is \"\" which disables signalling. Should be the first 15 characters of the command(s) to signal")
+var flProcSignal = flag.String("signal", envString("GIT_SYNC_SIGNAL", "SIGHUP"),
+	"signal name/number to send to matched processes.  Default is 1 (SIGHUP)")
+
 var log = glogr.New()
 
 // Total pull/error, summary on pull duration
@@ -283,6 +288,11 @@ func main() {
 		}
 	}
 
+	procSignal, err := ConvertSignal(*flProcSignal)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to convert signal: %v\n", err)
+	}
+
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
 	cancel()
 
@@ -355,8 +365,14 @@ func main() {
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
-		} else if changed && webhook != nil {
-			webhook.Send(hash)
+		} else {
+			if changed && webhook != nil {
+				webhook.Send(hash)
+			}
+			if changed && *flProcName != "" {
+				log.V(0).Info("Sending signals", "procname", *flProcName, "signal", procSignal)
+				go SignalProcs(*flProcName, procSignal)
+			}
 		}
 		syncDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 		syncCount.WithLabelValues("success").Inc()
