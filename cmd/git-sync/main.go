@@ -480,7 +480,7 @@ func setRepoReady() {
 func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
-	args := []string{"fetch", "--tags"}
+	args := []string{"fetch", "-f", "--tags"}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
