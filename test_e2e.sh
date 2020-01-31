@@ -995,6 +995,7 @@ CTR=$(docker run \
     -v "$DOT_SSH":/dot_ssh:ro \
     -v "$REPO":/src:ro \
     e2e/test/test-sshd)
+sleep 3 # wait for sshd to come up
 IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
