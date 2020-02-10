@@ -76,4 +76,38 @@ docker run -d \
         --webhook-url="http://localhost:9090/-/reload"
 ```
 
+## Parameters
+
+| Environment Variable            | Flag                       | Description                                                                                                                            | Default                       |
+|---------------------------------|----------------------------|----------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
+| GIT_SYNC_REPO                   | `--repo`                   | the git repository to clone                                                                                                            | ""                            |
+| GIT_SYNC_BRANCH                 | `--branch`                 | the git branch to check out                                                                                                            | "master"                      |
+| GIT_SYNC_REV                    | `--rev`                    | the git revision (tag or hash) to check out                                                                                            | "HEAD"                        |
+| GIT_SYNC_DEPTH                  | `--depth`                  | use a shallow clone with a history truncated to the specified number of commits                                                        | 0                             |
+| GIT_SYNC_ROOT                   | `--root`                   | the root directory for git-sync operations, under which --dest will be created                                                         | "$HOME/git"                   |
+| GIT_SYNC_DEST                   | `--dest`                   | the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)                   | ""                            |
+| GIT_SYNC_WAIT                   | `--wait`                   | the number of seconds between syncs                                                                                                    | 0                             |
+| GIT_SYNC_TIMEOUT                | `--timeout`                | the max number of seconds allowed for a complete sync                                                                                  | 120                           |
+| GIT_SYNC_ONE_TIME               | `--one-time`               | exit after the first sync                                                                                                              | false                         |
+| GIT_SYNC_MAX_SYNC_FAILURES      | `--max-sync-failures`      | the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync) | 0                             |
+| GIT_SYNC_PERMISSIONS            | `--change-permissions`     | the file permissions to apply to the checked-out files (0 will not change permissions at all)                                          | 0                             |
+| GIT_SYNC_WEBHOOK_URL            | `--webhook-url`            | the URL for a webook notification when syncs complete                                                                                  | ""                            |
+| GIT_SYNC_WEBHOOK_METHOD         | `--webhook-method`         | the HTTP method for the webhook                                                                                                        | "POST"                        |
+| GIT_SYNC_WEBHOOK_SUCCESS_STATUS | `--webhook-success-status` | the HTTP status code indicating a successful webhook (-1 disables success checks to make webhooks fire-and-forget)                     | 200                           |
+| GIT_SYNC_WEBHOOK_TIMEOUT        | `--webhook-timeout`        | the timeout for the webhook                                                                                                            | 1 (second)                    |
+| GIT_SYNC_WEBHOOK_BACKOFF        | `--webhook-backoff`        | the time to wait before retrying a failed webhook                                                                                      | 3 (seconds)                   |
+| GIT_SYNC_USERNAME               | `--username`               | the username to use for git auth                                                                                                       | ""                            |
+| GIT_SYNC_PASSWORD               | `--password`               | the password to use for git auth (users should prefer env vars for passwords)                                                          | ""                            |
+| GIT_SYNC_SSH                    | `--ssh`                    | use SSH for git operations                                                                                                             | false                         |
+| GIT_SSH_KEY_FILE                | `--ssh-key-file`           | the SSH key to use                                                                                                                     | "/etc/git-secret/ssh"         |
+| GIT_KNOWN_HOSTS                 | `--ssh-known-hosts`        | enable SSH known_hosts verification                                                                                                    | true                          |
+| GIT_SSH_KNOWN_HOSTS_FILE        | `--ssh-known-hosts-file`   | the known_hosts file to use                                                                                                            | "/etc/git-secret/known_hosts" |
+| GIT_SYNC_ADD_USER               | `--add-user`               | add a record to /etc/passwd for the current UID/GID (needed to use SSH with a different UID)                                           | false                         |
+| GIT_COOKIE_FILE                 | `--cookie-file`            | use git cookiefile                                                                                                                     | false                         |
+| GIT_ASKPASS_URL                 | `--askpass-url`            | the URL for GIT_ASKPASS callback                                                                                                       | ""                            |
+| GIT_SYNC_GIT                    | `--git`                    | the git command to run (subject to PATH search, mostly for testing                                                                     | "git"                         |
+| GIT_SYNC_HTTP_BIND              | `--http-bind`              | the bind address (including port) for git-sync's HTTP endpoint                                                                         | ""                            |
+| GIT_SYNC_HTTP_METRICS           | `--http-metrics`           | enable metrics on git-sync's HTTP endpoint                                                                                             | true                          |
+| GIT_SYNC_HTTP_PPROF             | `--http-pprof`             | enable the pprof debug endpoints on git-sync's HTTP endpoint                                                                           | false                         |
+
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
