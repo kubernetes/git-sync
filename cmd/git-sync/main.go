@@ -319,7 +319,7 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "args", os.Args)
+	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
 	var webhook *Webhook
