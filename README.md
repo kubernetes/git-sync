@@ -109,5 +109,6 @@ docker run -d \
 | GIT_SYNC_HTTP_BIND              | `--http-bind`              | the bind address (including port) for git-sync's HTTP endpoint                                                                         | ""                            |
 | GIT_SYNC_HTTP_METRICS           | `--http-metrics`           | enable metrics on git-sync's HTTP endpoint                                                                                             | true                          |
 | GIT_SYNC_HTTP_PPROF             | `--http-pprof`             | enable the pprof debug endpoints on git-sync's HTTP endpoint                                                                           | false                         |
+| GIT_CONFIGS                     | `--git-configs`            | add additional git config in 'key1:value1,key2:value2' format (ex - http.sslCAInfo:/path/to/cert/file,http.version:HTTP/2)             | ""                            |
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()

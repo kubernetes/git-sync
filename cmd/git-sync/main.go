@@ -114,6 +114,9 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
+var flGitConfigs = flag.String("git-configs", envString("GIT_CONFIGS", ""),
+	"add additional git configs in 'key1:value1,key2:value2' format (ex - http.sslCAInfo:/path/to/cert/file,http.version:HTTP/2)")
+
 var log = glogr.New()
 
 // Total pull/error, summary on pull duration
@@ -279,6 +282,13 @@ func main() {
 	if *flAskPassURL != "" {
 		if err := setupGitAskPassURL(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *flGitConfigs != "" {
+		if err := setupGitConfigs(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't set additional git configs: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -879,6 +889,26 @@ func setupGitAskPassURL(ctx context.Context) error {
 
 	if err := setupGitAuth(ctx, username, password, *flRepo); err != nil {
 		return fmt.Errorf("error setup git auth: %v", err)
+	}
+
+	return nil
+}
+
+
+func setupGitConfigs(ctx context.Context) error {
+	log.V(1).Info("adding git configs from flag")
+
+	for _, config := range strings.Split(*flGitConfigs, ",") {
+		keyValues := strings.SplitN(config, ":", 2)
+		if len(keyValues) != 2 {
+			return fmt.Errorf("git configs must be in `key1:value1,key2:value2` format")
+		}
+
+		if _, err := runCommand(ctx, "",
+			*flGitCmd, "config", "--global", keyValues[0], keyValues[1]); err != nil {
+			return fmt.Errorf("error configuring git configs %s %s: %v", keyValues[0], keyValues[1], err)
+		}
+
 	}
 
 	return nil
