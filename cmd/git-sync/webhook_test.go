@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 const (
@@ -59,6 +60,23 @@ func TestWebhookData(t *testing.T) {
 		hash = whd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
+		}
+	})
+}
+
+func TestDo(t *testing.T) {
+	t.Run("test invalid urls are handled", func(t *testing.T) {
+		wh := Webhook{
+			URL:     ":http://localhost:601426/hooks/webhook",
+			Method:  "POST",
+			Success: 200,
+			Timeout: time.Second,
+			Backoff: time.Second * 3,
+			Data:    NewWebhookData(),
+		}
+		err := wh.Do("hash")
+		if err == nil {
+			t.Fatalf("expected error for invalid url but got none")
 		}
 	})
 }

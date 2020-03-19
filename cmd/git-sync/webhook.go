@@ -72,10 +72,10 @@ func (w *Webhook) Send(hash string) {
 
 func (w *Webhook) Do(hash string) error {
 	req, err := http.NewRequest(w.Method, w.URL, nil)
-	req.Header.Set("Gitsync-Hash", hash)
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Gitsync-Hash", hash)
 
 	ctx, cancel := context.WithTimeout(context.Background(), w.Timeout)
 	defer cancel()
