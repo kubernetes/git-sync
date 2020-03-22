@@ -25,27 +25,30 @@ func ReRun() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	go runInit(cmd.Process.Pid)
-	return cmd.Wait()
+	runInit(cmd.Process.Pid)
+	return nil
 }
 
-// runInit runs a bare-bones init process.  This will never return.  In case of
-// truly unknown errors it will panic.
-func runInit(pid int) {
+// runInit runs a bare-bones init process.  This will return when firstborn
+// exits.  In case of truly unknown errors it will panic.
+func runInit(firstborn int) {
 	sigs := make(chan os.Signal, 8)
 	signal.Notify(sigs)
 	for sig := range sigs {
-		if sig == syscall.SIGCHLD {
-			sigchld()
-		} else {
+		if sig != syscall.SIGCHLD {
 			// Pass it on to the real process.
-			syscall.Kill(pid, sig.(syscall.Signal))
+			syscall.Kill(firstborn, sig.(syscall.Signal))
+		}
+		// Always try to reap a child - empirically, sometimes this gets missed.
+		if sigchld(firstborn) {
+			return
 		}
 	}
 }
 
-// sigchld handles a SIGCHLD.
-func sigchld() {
+// sigchld handles a SIGCHLD.  This will return true when firstborn exits.  In
+// case of truly unknown errors it will panic.
+func sigchld(firstborn int) bool {
 	// Loop to handle multiple child processes.
 	for {
 		var status syscall.WaitStatus
@@ -53,10 +56,15 @@ func sigchld() {
 		if err != nil {
 			panic(fmt.Sprintf("failed to wait4(): %v\n", err))
 		}
+
+		if pid == firstborn {
+			return true
+		}
 		if pid <= 0 {
 			// No more children to reap.
 			break
 		}
 		// Must have found one, see if there are more.
 	}
+	return false
 }

@@ -23,7 +23,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -319,7 +318,7 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "args", os.Args)
+	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
 	var webhook *Webhook
@@ -719,22 +718,7 @@ func cmdForLog(command string, args ...string) string {
 }
 
 func runCommand(ctx context.Context, cwd, command string, args ...string) (string, error) {
-	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdForLog(command, args...))
-
-	cmd := exec.CommandContext(ctx, command, args...)
-	if cwd != "" {
-		cmd.Dir = cwd
-	}
-	output, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("command timed out: %v: %q", err, string(output))
-
-	}
-	if err != nil {
-		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
-	}
-
-	return string(output), nil
+	return runCommandWithStdin(ctx, cwd, "", command, args...)
 }
 
 func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
@@ -744,27 +728,23 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
+	outbuf := bytes.NewBuffer(nil)
+	errbuf := bytes.NewBuffer(nil)
+	cmd.Stdout = outbuf
+	cmd.Stderr = errbuf
+	cmd.Stdin = bytes.NewBufferString(stdin)
 
-	in, err := cmd.StdinPipe()
-	if err != nil {
-		return "", err
-	}
-	if _, err := io.Copy(in, bytes.NewBufferString(stdin)); err != nil {
-		return "", err
-	}
-	if err := in.Close(); err != nil {
-		return "", err
-	}
-
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
+	stdout := outbuf.String()
+	stderr := errbuf.String()
 	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("command timed out: %v: %q", err, string(output))
+		return "", fmt.Errorf("command timed out: %v: { stdout: %q, stderr: %q }", err, stdout, stderr)
 	}
 	if err != nil {
-		return "", fmt.Errorf("error running command: %v: %q", err, string(output))
+		return "", fmt.Errorf("error running command: %v: { stdout: %q, stderr: %q }", err, stdout, stderr)
 	}
 
-	return string(output), nil
+	return stdout, nil
 }
 
 func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
