@@ -59,7 +59,7 @@ var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", ""
 	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
-var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 3),
+var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 1),
 	"the number of seconds between syncs")
 var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
 	"the max number of seconds allowed for a complete sync")
