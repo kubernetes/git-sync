@@ -55,6 +55,8 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 	"the git revision (tag or hash) to check out")
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
+var flRecurseSubmodules = flag.Bool("submodule-recurse", envBool("GIT_SYNC_SUBMODULE_RECURSE", true),
+	"recursively clone submodules")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git-sync operations, under which --dest will be created")
@@ -340,7 +342,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flRecurseSubmodules); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -477,7 +479,7 @@ func setRepoReady() {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleRecurse bool) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -527,7 +529,10 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
 	log.V(0).Info("updating submodules")
-	submodulesArgs := []string{"submodule", "update", "--init", "--recursive"}
+	submodulesArgs := []string{"submodule", "update", "--init"}
+	if submoduleRecurse {
+		submodulesArgs = append(submodulesArgs, "--recursive")
+	}
 	if depth != 0 {
 		submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
 	}
@@ -638,7 +643,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string, submoduleRecurse bool) (bool, string, error) {
 	if authUrl != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -678,7 +683,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash)
+	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleRecurse)
 }
 
 // getRevs returns the local and upstream hashes for rev.
@@ -800,7 +805,6 @@ func setupGitSSH(setupKnownHosts bool) error {
 		if err != nil {
 			return fmt.Errorf("error: could not access SSH known_hosts file: %v", err)
 		}
-
 		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
 	} else {
 		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
