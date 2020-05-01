@@ -55,8 +55,8 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 	"the git revision (tag or hash) to check out")
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
-var flRecurseSubmodules = flag.Bool("submodule-recurse", envBool("GIT_SYNC_SUBMODULE_RECURSE", true),
-	"recursively clone submodules")
+var flSubmoduleMode = flag.String("submodule-mode", envString("GIT_SYNC_SUBMODULE_MODE", "recursive"),
+	"Submodule clone directive. Options are 'recursive', 'shallow' and 'off'. Default is recursive")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git-sync operations, under which --dest will be created")
@@ -134,6 +134,12 @@ var (
 
 // initTimeout is a timeout for initialization, like git credentials setup.
 const initTimeout = time.Second * 30
+
+const (
+	SubmoduleModeRecursive = "recursive"
+	SubmoduleModeOff       = "off"
+	SubmoduleModeShallow   = "shallow"
+)
 
 func init() {
 	prometheus.MustRegister(syncDuration)
@@ -253,6 +259,11 @@ func main() {
 		}
 	}
 
+	if *flSubmoduleMode != SubmoduleModeRecursive && *flSubmoduleMode != SubmoduleModeOff && *flSubmoduleMode != SubmoduleModeShallow {
+		fmt.Fprintf(os.Stderr, "ERROR: --submodule-mode must be one of %s, %s or %s, but recieved %s", SubmoduleModeRecursive, SubmoduleModeOff, SubmoduleModeShallow, *flSubmoduleMode)
+		os.Exit(1)
+	}
+
 	// This context is used only for git credentials initialization. There are no long-running operations like
 	// `git clone`, so initTimeout set to 30 seconds should be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
@@ -342,7 +353,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flRecurseSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmoduleMode); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -479,7 +490,7 @@ func setRepoReady() {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleRecurse bool) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -528,17 +539,19 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
-	log.V(0).Info("updating submodules")
-	submodulesArgs := []string{"submodule", "update", "--init"}
-	if submoduleRecurse {
-		submodulesArgs = append(submodulesArgs, "--recursive")
-	}
-	if depth != 0 {
-		submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
-	}
-	_, err = runCommand(ctx, worktreePath, *flGitCmd, submodulesArgs...)
-	if err != nil {
-		return err
+	if submoduleMode != SubmoduleModeOff {
+		log.V(0).Info("updating submodules")
+		submodulesArgs := []string{"submodule", "update", "--init"}
+		if submoduleMode == SubmoduleModeRecursive {
+			submodulesArgs = append(submodulesArgs, "--recursive")
+		}
+		if depth != 0 {
+			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
+		}
+		_, err = runCommand(ctx, worktreePath, *flGitCmd, submodulesArgs...)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Change the file permissions, if requested.
@@ -643,7 +656,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string, submoduleRecurse bool) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string, submoduleMode string) (bool, string, error) {
 	if authUrl != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -683,7 +696,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleRecurse)
+	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
 }
 
 // getRevs returns the local and upstream hashes for rev.
