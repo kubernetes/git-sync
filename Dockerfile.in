@@ -32,5 +32,5 @@ RUN chmod 0666 /etc/passwd
 ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 
 WORKDIR /tmp
-USER git-sync:nogroup
+USER 65533:65533
 ENTRYPOINT ["/{ARG_BIN}"]
