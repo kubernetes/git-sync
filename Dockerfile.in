@@ -14,13 +14,15 @@
 
 FROM {ARG_FROM}
 
-RUN apt-get update \
+RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
+        /etc/apt/sources.list.d/backports.list \
+    && apt-get update \
     && apt-get -y upgrade \
     && apt-get -y install \
         ca-certificates \
         coreutils \
-        git \
         openssh-client \
+    && apt-get -y -t buster-backports install git \
     && rm -rf /var/lib/apt/lists/*
 
 # By default we will run as this user...
