@@ -12,7 +12,7 @@ const (
 )
 
 func TestWebhookData(t *testing.T) {
-	t.Run("webhhook consumes first hash value", func(t *testing.T) {
+	t.Run("webhook consumes first hash value", func(t *testing.T) {
 		whd := NewWebhookData()
 
 		whd.send(hash1)
