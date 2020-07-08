@@ -85,7 +85,8 @@ var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use for git auth")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 	"the password to use for git auth (users should prefer env vars for passwords)")
-
+var flPasswordFile = flag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
+	"the file from which password for git auth has to be sourced")
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKeyFile = flag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
@@ -238,8 +239,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
-		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --askpass-url, or --cookie-file were provided\n")
+	if (*flUsername != "" || *flPassword != "" || *flPasswordFile != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
+		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --password-file, --askpass-url, or --cookie-file were provided\n")
 		os.Exit(1)
 	}
 
@@ -254,7 +255,14 @@ func main() {
 	// `git clone`, so initTimeout set to 30 seconds should be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 
-	if *flUsername != "" && *flPassword != "" {
+	if *flUsername != "" && ( *flPassword != "" ||  *flPasswordFile != "") {
+		if *flPasswordFile != "" {
+			flPassword, err := ioutil.ReadFile(*flPasswordFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ERROR: error reading password from file: %v\n", err)
+			        os.Exit(1)
+			}
+		}
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
 			os.Exit(1)
