@@ -1004,7 +1004,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --submodule-mode=off \
+    --submodules=off \
     --wait=0.1 \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -1048,7 +1048,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --submodule-mode=shallow \
+    --submodules=shallow \
     --wait=0.1 \
     --repo="file://$REPO" \
     --root="$ROOT" \

@@ -55,8 +55,8 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 	"the git revision (tag or hash) to check out")
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
-var flSubmoduleMode = flag.String("submodule-mode", envString("GIT_SYNC_SUBMODULE_MODE", "recursive"),
-	"Submodule clone directive. Options are 'recursive', 'shallow' and 'off'. Default is recursive")
+var flSubmodules = flag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
+	"Configure submodule behavior - options are 'recursive', 'shallow' and 'off'.")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git-sync operations, under which --dest will be created")
@@ -259,8 +259,10 @@ func main() {
 		}
 	}
 
-	if *flSubmoduleMode != SubmoduleModeRecursive && *flSubmoduleMode != SubmoduleModeOff && *flSubmoduleMode != SubmoduleModeShallow {
-		fmt.Fprintf(os.Stderr, "ERROR: --submodule-mode must be one of %s, %s or %s, but recieved %s", SubmoduleModeRecursive, SubmoduleModeOff, SubmoduleModeShallow, *flSubmoduleMode)
+	switch *flSubmodules {
+	case SubmoduleModeRecursive, SubmoduleModeShallow, SubmoduleModeOff:
+	default:
+		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %s, %s or %s, but recieved %s", SubmoduleModeRecursive, SubmoduleModeOff, SubmoduleModeShallow, *flSubmodules)
 		os.Exit(1)
 	}
 
@@ -353,7 +355,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmoduleMode); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
 			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
