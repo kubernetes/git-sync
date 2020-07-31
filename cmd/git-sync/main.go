@@ -234,7 +234,27 @@ func main() {
 	}
 
 	if *flRepo == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: --repo must be provided\n")
+		fmt.Fprintf(os.Stderr, "ERROR: --repo must be specified\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *flDepth < 0 { // 0 means "no limit"
+		fmt.Fprintf(os.Stderr, "ERROR: --depth must be greater than or equal to 0\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	switch *flSubmodules {
+	case submodulesRecursive, submodulesShallow, submodulesOff:
+	default:
+		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *flRoot == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --root must be provided\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -245,9 +265,39 @@ func main() {
 	}
 
 	if strings.Contains(*flDest, "/") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a bare name\n")
+		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a leaf name, not a path\n")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	if *flWait < 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: --wait must be greater than or equal to 0\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *flSyncTimeout < 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: --timeout must be greater than 0\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *flWebhookURL != "" {
+		if *flWebhookStatusSuccess <= 0 {
+			fmt.Fprintf(os.Stderr, "ERROR: --webhook-success-status must be greater than 0\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+		if *flWebhookTimeout < time.Second {
+			fmt.Fprintf(os.Stderr, "ERROR: --webhook-timeout must be at least 1s\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+		if *flWebhookBackoff < time.Second {
+			fmt.Fprintf(os.Stderr, "ERROR: --webhook-backoff must be at least 1s\n")
+			flag.Usage()
+			os.Exit(1)
+		}
 	}
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
@@ -255,9 +305,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	if (*flUsername != "" || *flPassword != "" || *flCookieFile || *flAskPassURL != "") && *flSSH {
-		fmt.Fprintf(os.Stderr, "ERROR: --ssh is set but --username, --password, --askpass-url, or --cookie-file were provided\n")
-		os.Exit(1)
+	if *flSSH {
+		if *flUsername != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --username may be specified\n")
+			os.Exit(1)
+		}
+		if *flPassword != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --password may be specified\n")
+			os.Exit(1)
+		}
+		if *flAskPassURL != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --askpass-url may be specified\n")
+			os.Exit(1)
+		}
+		if *flCookieFile {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --cookie-file may be specified\n")
+			os.Exit(1)
+		}
+		if *flSSHKeyFile == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: --ssh-key-file must be specified when --ssh is specified\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+		if *flSSHKnownHosts {
+			if *flSSHKnownHostsFile == "" {
+				fmt.Fprintf(os.Stderr, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified\n")
+				flag.Usage()
+				os.Exit(1)
+			}
+		}
 	}
 
 	if *flAddUser {
@@ -265,13 +341,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERROR: can't write to /etc/passwd: %v\n", err)
 			os.Exit(1)
 		}
-	}
-
-	switch *flSubmodules {
-	case submodulesRecursive, submodulesShallow, submodulesOff:
-	default:
-		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
-		os.Exit(1)
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
