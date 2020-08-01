@@ -810,7 +810,8 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 }
 
 func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
-	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdForLog(command, args...))
+	cmdStr := cmdForLog(command, args...)
+	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
@@ -826,11 +827,12 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 	stdout := outbuf.String()
 	stderr := errbuf.String()
 	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("command timed out: %v: { stdout: %q, stderr: %q }", err, stdout, stderr)
+		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
 	}
 	if err != nil {
-		return "", fmt.Errorf("error running command: %v: { stdout: %q, stderr: %q }", err, stdout, stderr)
+		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
+	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
 
 	return stdout, nil
 }
