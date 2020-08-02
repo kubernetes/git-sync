@@ -30,7 +30,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -535,7 +534,7 @@ func addUser() error {
 // worktree, this returns the path to it.
 func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	linkPath := path.Join(gitRoot, link)
+	linkPath := filepath.Join(gitRoot, link)
 	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error accessing current worktree: %v", err)
@@ -599,7 +598,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 
 	// Make a worktree for this exact git hash.
-	worktreePath := path.Join(gitRoot, "rev-"+hash)
+	worktreePath := filepath.Join(gitRoot, "rev-"+hash)
 	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
@@ -614,8 +613,8 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if err != nil {
 		return err
 	}
-	gitDirRef := []byte(path.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
-	if err = ioutil.WriteFile(path.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
+	if err = ioutil.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
 		return err
 	}
 
@@ -756,8 +755,8 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := path.Join(gitRoot, dest)
-	gitRepoPath := path.Join(target, ".git")
+	target := filepath.Join(gitRoot, dest)
+	gitRepoPath := filepath.Join(target, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
 	switch {
