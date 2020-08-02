@@ -129,6 +129,17 @@ var (
 		Name: "git_sync_count_total",
 		Help: "How many git syncs completed, partitioned by success",
 	}, []string{"status"})
+
+	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_askpass_calls",
+		Help: "How many git syncs completed, partitioned by success",
+	}, []string{"status"})
+)
+
+const (
+	metricKeySuccess = "success"
+	metricKeyError   = "error"
+	metricKeyNoOp    = "noop"
 )
 
 // initTimeout is a timeout for initialization, like git credentials setup.
@@ -143,6 +154,7 @@ const (
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
+	prometheus.MustRegister(askpassCount)
 }
 
 func envString(key, def string) string {
@@ -370,9 +382,11 @@ func main() {
 
 	if *flAskPassURL != "" {
 		if err := setupGitAskPassURL(ctx); err != nil {
+			askpassCount.WithLabelValues(metricKeyError).Inc()
 			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
 			os.Exit(1)
 		}
+		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
@@ -433,8 +447,7 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
-			syncDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
-			syncCount.WithLabelValues("error").Inc()
+			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "failed to sync repo, aborting")
@@ -449,9 +462,11 @@ func main() {
 			continue
 		} else if changed && webhook != nil {
 			webhook.Send(hash)
+		} else if changed {
+			updateSyncMetrics(metricKeySuccess, start)
+		} else {
+			updateSyncMetrics(metricKeyNoOp, start)
 		}
-		syncDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
-		syncCount.WithLabelValues("success").Inc()
 
 		if initialSync {
 			if *flOneTime {
@@ -472,6 +487,11 @@ func main() {
 		cancel()
 		time.Sleep(waitTime(*flWait))
 	}
+}
+
+func updateSyncMetrics(key string, start time.Time) {
+	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
+	syncCount.WithLabelValues(key).Inc()
 }
 
 func waitTime(seconds float64) time.Duration {
@@ -730,8 +750,10 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
 		if err := setupGitAskPassURL(ctx); err != nil {
+			askpassCount.WithLabelValues(metricKeyError).Inc()
 			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
 		}
+		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
 	target := path.Join(gitRoot, dest)
