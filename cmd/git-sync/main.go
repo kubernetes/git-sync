@@ -359,7 +359,7 @@ func main() {
 			syncCount.WithLabelValues("error").Inc()
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
-				log.Error(err, "failed to sync repo, aborting")
+				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
 			}
 
@@ -426,7 +426,7 @@ func addUser() error {
 	if home == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("can't get current working directory: %v", err)
+			return fmt.Errorf("can't get working directory and $HOME is not set: %w", err)
 		}
 		home = cwd
 	}
@@ -772,13 +772,13 @@ func setupGitAuth(ctx context.Context, username, password, gitURL string) error 
 
 	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
-		return fmt.Errorf("error setting up git credentials: %v", err)
+		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
 	_, err = runCommandWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
 	if err != nil {
-		return fmt.Errorf("error setting up git credentials: %v", err)
+		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
 
 	return nil
@@ -792,22 +792,22 @@ func setupGitSSH(setupKnownHosts bool) error {
 
 	_, err := os.Stat(pathToSSHSecret)
 	if err != nil {
-		return fmt.Errorf("error: could not access SSH key Secret: %v", err)
+		return fmt.Errorf("can't access SSH key: %w", err)
 	}
 
 	if setupKnownHosts {
 		_, err = os.Stat(pathToSSHKnownHosts)
 		if err != nil {
-			return fmt.Errorf("error: could not access SSH known_hosts file: %v", err)
+			return fmt.Errorf("can't access SSH known_hosts: %w", err)
 		}
 		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
 	} else {
 		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
 	}
 
-	//set env variable GIT_SSH_COMMAND to force git use customized ssh command
+	// set env variable GIT_SSH_COMMAND to force git use customized ssh command
 	if err != nil {
-		return fmt.Errorf("Failed to set the GIT_SSH_COMMAND env var: %v", err)
+		return fmt.Errorf("can't set $GIT_SSH_COMMAND: %w", err)
 	}
 
 	return nil
@@ -820,12 +820,12 @@ func setupGitCookieFile(ctx context.Context) error {
 
 	_, err := os.Stat(pathToCookieFile)
 	if err != nil {
-		return fmt.Errorf("error: could not access git cookie file: %v", err)
+		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
 	if _, err = runCommand(ctx, "",
 		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
-		return fmt.Errorf("error configuring git cookie file: %v", err)
+		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
 	return nil
@@ -846,19 +846,19 @@ func setupGitAskPassURL(ctx context.Context) error {
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", *flAskPassURL, nil)
 	if err != nil {
-		return fmt.Errorf("error create auth request: %v", err)
+		return fmt.Errorf("can't create auth request: %w", err)
 	}
 	resp, err := netClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("error access auth url: %v", err)
+		return fmt.Errorf("can't access auth URL: %w", err)
 	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("access auth url: %v", err)
+		return fmt.Errorf("auth URL returned status %d", resp.StatusCode)
 	}
 	authData, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return fmt.Errorf("error read auth response: %v", err)
+		return fmt.Errorf("can't read auth response: %w", err)
 	}
 
 	username := ""
@@ -877,7 +877,7 @@ func setupGitAskPassURL(ctx context.Context) error {
 	}
 
 	if err := setupGitAuth(ctx, username, password, *flRepo); err != nil {
-		return fmt.Errorf("error setup git auth: %v", err)
+		return err
 	}
 
 	return nil
