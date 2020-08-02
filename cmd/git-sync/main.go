@@ -380,7 +380,7 @@ func main() {
 	}
 
 	if *flAskPassURL != "" {
-		if err := setupGitAskPassURL(ctx); err != nil {
+		if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
 			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
 			os.Exit(1)
@@ -744,11 +744,11 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authUrl string, submoduleMode string) (bool, string, error) {
-	if authUrl != "" {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authURL string, submoduleMode string) (bool, string, error) {
+	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
-		if err := setupGitAskPassURL(ctx); err != nil {
+		if err := callGitAskPassURL(ctx, authURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
 			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
 		}
@@ -926,8 +926,8 @@ func setupGitCookieFile(ctx context.Context) error {
 // see https://git-scm.com/docs/gitcredentials for more examples:
 // username=xxx@example.com
 // password=ya29.xxxyyyzzz
-func setupGitAskPassURL(ctx context.Context) error {
-	log.V(1).Info("configuring GIT_ASKPASS_URL")
+func callGitAskPassURL(ctx context.Context, url string) error {
+	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
@@ -935,7 +935,7 @@ func setupGitAskPassURL(ctx context.Context) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", *flAskPassURL, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("can't create auth request: %w", err)
 	}
