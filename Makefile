@@ -127,7 +127,9 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    -e 's|{ARG_OS}|$(OS)|g' \
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
-	@docker build \
+	@docker buildx build \
+	    --load \
+	    --platform "$(OS)/$(ARCH)" \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY) \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY) \
 	    -t $(IMAGE):$(TAG) \
@@ -180,13 +182,26 @@ test: $(BUILD_DIRS)
 test-tools:
 	@docker build -t $(REGISTRY)/test/test-sshd _test_tools/sshd
 
+# Help set up multi-arch build tools.  This assumes you have the tools
+# installed.  If you already have a buildx builder available, you don't need
+# this.  See https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
+# for great context.
+multiarch-build-tools: .qemu-initialized
+	@docker buildx create --name git-sync --node git-sync-0
+	@docker buildx use git-sync
+	@docker buildx inspect --bootstrap
+
+.qemu-initialized:
+	@docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	@date > $@
+
 $(BUILD_DIRS):
 	@mkdir -p $@
 
 clean: container-clean bin-clean
 
 container-clean:
-	rm -rf .container-* .dockerfile-* .push-*
+	rm -rf .container-* .dockerfile-* .push-* .qemu-initialized
 
 bin-clean:
 	rm -rf .go bin
