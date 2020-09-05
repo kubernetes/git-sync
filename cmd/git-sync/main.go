@@ -200,6 +200,16 @@ func envDuration(key string, def time.Duration) time.Duration {
 	return def
 }
 
+func setFlagDefaults() {
+	// Force logging to stderr (from glog).
+	stderrFlag := flag.Lookup("logtostderr")
+	if stderrFlag == nil {
+		fmt.Fprintf(os.Stderr, "ERROR: can't find flag 'logtostderr'\n")
+		os.Exit(1)
+	}
+	stderrFlag.Value.Set("true")
+}
+
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
@@ -216,7 +226,6 @@ func main() {
 	}
 
 	setFlagDefaults()
-
 	flag.Parse()
 
 	if *flVer {
@@ -398,16 +407,6 @@ func main() {
 
 func waitTime(seconds float64) time.Duration {
 	return time.Duration(int(seconds*1000)) * time.Millisecond
-}
-
-func setFlagDefaults() {
-	// Force logging to stderr.
-	stderrFlag := flag.Lookup("logtostderr")
-	if stderrFlag == nil {
-		fmt.Fprintf(os.Stderr, "can't find flag 'logtostderr'\n")
-		os.Exit(1)
-	}
-	stderrFlag.Value.Set("true")
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
