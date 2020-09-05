@@ -274,9 +274,13 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flDest = parts[len(parts)-1]
 	}
-
 	if strings.Contains(*flDest, "/") {
 		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a leaf name, not a path\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if strings.HasPrefix(*flDest, ".") {
+		fmt.Fprintf(os.Stderr, "ERROR: --dest must not start with '.'\n")
 		flag.Usage()
 		os.Exit(1)
 	}
