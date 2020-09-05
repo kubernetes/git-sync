@@ -21,7 +21,7 @@ spec:
         env:
         - name: GIT_SYNC_REPO
           value: https://github.com/kubernetes/git-sync.git
-        - name: GIT_SYNC_DEST
+        - name: GIT_SYNC_LEAF
           value: git-sync
       - name: hugo
         image: k8s.gcr.io/hugo

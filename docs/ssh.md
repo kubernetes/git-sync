@@ -83,7 +83,7 @@ as user ID "65533" which is created for running git-sync as non-root.
         args:
          - "-ssh"
          - "-repo=git@github.com:foo/bar"
-         - "-dest=bar"
+         - "-leaf=bar"
          - "-branch=master"
         volumeMounts:
         - name: git-secret
@@ -142,7 +142,7 @@ spec:
         args:
          - "-ssh"
          - "-repo=git@github.com:torvalds/linux"
-         - "-dest=linux"
+         - "-leaf=linux"
          - "-branch=master"
          - "-depth=1"
         securityContext:

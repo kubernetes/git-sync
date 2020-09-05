@@ -57,8 +57,10 @@ var flSubmodules = flag.String("submodules", envString("GIT_SYNC_SUBMODULES", "r
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", ""),
-	"the root directory for git-sync operations, under which --dest will be created")
+	"the root directory for git-sync operations, under which --leaf will be created")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
+	"OBSOLETE: use --leaf instead")
+var flLeaf = flag.String("leaf", envString("GIT_SYNC_LEAF", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"the number of seconds between syncs")
@@ -270,17 +272,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flDest == "" {
-		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
-		*flDest = parts[len(parts)-1]
-	}
-	if strings.Contains(*flDest, "/") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a leaf name, not a path\n")
+	if *flDest != "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --dest is OBSOLETE, see --leaf instead\n")
 		flag.Usage()
 		os.Exit(1)
 	}
-	if strings.HasPrefix(*flDest, ".") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must not start with '.'\n")
+	if *flLeaf == "" {
+		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		*flLeaf = parts[len(parts)-1]
+	}
+	if strings.Contains(*flLeaf, "/") {
+		fmt.Fprintf(os.Stderr, "ERROR: --leaf must be a leaf name, not a path\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if strings.HasPrefix(*flLeaf, ".") {
+		fmt.Fprintf(os.Stderr, "ERROR: --leaf must not start with '.'\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -449,7 +456,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flLeaf, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -582,7 +589,7 @@ func setRepoReady() {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, leaf, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -657,7 +664,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 
 	// Flip the symlink.
-	oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath)
+	oldWorktree, err := updateSymlink(ctx, gitRoot, leaf, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -746,9 +753,9 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	return strings.HasPrefix(output, rev), nil
 }
 
-// syncRepo syncs the branch of a given repository to the destination at the given rev.
+// syncRepo syncs the branch of a given repository to the leaf destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authURL string, submoduleMode string) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, leaf string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -759,7 +766,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := filepath.Join(gitRoot, dest)
+	target := filepath.Join(gitRoot, leaf)
 	gitRepoPath := filepath.Join(target, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
@@ -790,7 +797,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
+	return true, hash, addWorktreeAndSwap(ctx, gitRoot, leaf, branch, rev, depth, hash, submoduleMode)
 }
 
 // getRevs returns the local and upstream hashes for rev.
