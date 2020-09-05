@@ -66,8 +66,10 @@ var flWait = flag.String("wait", envString("GIT_SYNC_WAIT", ""),
 	"OBSOLETE: use --period instead")
 var flPeriod = flag.Duration("period", envDuration("GIT_SYNC_PERIOD", time.Second),
 	"how often to run syncs (e.g. 10s, 1m30s), must be >= 10ms")
-var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
-	"the max number of seconds allowed for a complete sync")
+var flTimeout = flag.String("timeout", envString("GIT_SYNC_TIMEOUT", ""),
+	"OBSOLETE: use --sync-timeout instead")
+var flSyncTimeout = flag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TIMEOUT", 120*time.Second),
+	"the total time allowed for one complete sync (e.g. 10s, 1m30s), must be >= 1s")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the first sync (overrides --period)")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
@@ -294,8 +296,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flSyncTimeout < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --timeout must be greater than 0\n")
+	if *flTimeout != "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --timeout is OBSOLETE, see --sync-timeout instead\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if *flSyncTimeout < time.Second {
+		fmt.Fprintf(os.Stderr, "ERROR: --sync-timeout must be at least 1s\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -451,7 +458,7 @@ func main() {
 	failCount := 0
 	for {
 		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flLeaf, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {

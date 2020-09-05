@@ -479,7 +479,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --one-time \
-    --timeout=1 \
+    --sync-timeout=1s \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
@@ -492,7 +492,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --period=100ms \
-    --timeout=16 \
+    --sync-timeout=16s \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
