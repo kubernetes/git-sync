@@ -55,7 +55,7 @@ var flRev = flag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 var flDepth = flag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"use a shallow clone with a history truncated to the specified number of commits")
 var flSubmodules = flag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
-	"Configure submodule behavior - options are 'recursive', 'shallow' and 'off'.")
+	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
 
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git-sync operations, under which --dest will be created")
@@ -135,9 +135,9 @@ var (
 const initTimeout = time.Second * 30
 
 const (
-	SubmoduleModeRecursive = "recursive"
-	SubmoduleModeOff       = "off"
-	SubmoduleModeShallow   = "shallow"
+	submodulesRecursive = "recursive"
+	submodulesShallow   = "shallow"
+	submodulesOff       = "off"
 )
 
 func init() {
@@ -259,9 +259,9 @@ func main() {
 	}
 
 	switch *flSubmodules {
-	case SubmoduleModeRecursive, SubmoduleModeShallow, SubmoduleModeOff:
+	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
-		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %s, %s or %s, but recieved %s", SubmoduleModeRecursive, SubmoduleModeOff, SubmoduleModeShallow, *flSubmodules)
+		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
 		os.Exit(1)
 	}
 
@@ -540,10 +540,10 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
-	if submoduleMode != SubmoduleModeOff {
+	if submoduleMode != submodulesOff {
 		log.V(0).Info("updating submodules")
 		submodulesArgs := []string{"submodule", "update", "--init"}
-		if submoduleMode == SubmoduleModeRecursive {
+		if submoduleMode == submodulesRecursive {
 			submodulesArgs = append(submodulesArgs, "--recursive")
 		}
 		if depth != 0 {
