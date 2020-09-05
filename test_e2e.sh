@@ -173,7 +173,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
@@ -208,7 +208,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
@@ -248,7 +248,7 @@ git -C "$REPO" checkout -q master
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
@@ -290,7 +290,7 @@ git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -337,7 +337,7 @@ git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -383,7 +383,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
@@ -491,7 +491,7 @@ GIT_SYNC \
     --git="$SLOW_GIT" \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --timeout=16 \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -522,7 +522,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
@@ -774,7 +774,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
@@ -863,7 +863,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --logtostderr \
     --v=5 \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
@@ -941,7 +941,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --submodules=off \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \
@@ -985,7 +985,7 @@ GIT_SYNC \
     --logtostderr \
     --v=5 \
     --submodules=shallow \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --leaf="link" \

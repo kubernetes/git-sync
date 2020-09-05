@@ -62,12 +62,14 @@ var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"OBSOLETE: use --leaf instead")
 var flLeaf = flag.String("leaf", envString("GIT_SYNC_LEAF", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
-var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
-	"the number of seconds between syncs")
+var flWait = flag.String("wait", envString("GIT_SYNC_WAIT", ""),
+	"OBSOLETE: use --period instead")
+var flPeriod = flag.Duration("period", envDuration("GIT_SYNC_PERIOD", time.Second),
+	"how often to run syncs (e.g. 10s, 1m30s), must be >= 10ms")
 var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
 	"the max number of seconds allowed for a complete sync")
 var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
-	"exit after the first sync")
+	"exit after the first sync (overrides --period)")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
@@ -189,18 +191,6 @@ func envInt(key string, def int) int {
 	return def
 }
 
-func envFloat(key string, def float64) float64 {
-	if env := os.Getenv(key); env != "" {
-		val, err := strconv.ParseFloat(env, 64)
-		if err != nil {
-			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
-			return def
-		}
-		return val
-	}
-	return def
-}
-
 func envDuration(key string, def time.Duration) time.Duration {
 	if env := os.Getenv(key); env != "" {
 		val, err := time.ParseDuration(env)
@@ -292,8 +282,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flWait < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --wait must be greater than or equal to 0\n")
+	if *flWait != "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --wait is OBSOLETE, see --period instead\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *flOneTime == false && *flPeriod < 10*time.Millisecond {
+		fmt.Fprintf(os.Stderr, "ERROR: --period must be at least 10ms\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -466,9 +462,9 @@ func main() {
 
 			failCount++
 			log.Error(err, "unexpected error syncing repo, will retry")
-			log.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
+			log.V(0).Info("waiting before retrying", "wait_time", flPeriod.String())
 			cancel()
-			time.Sleep(waitTime(*flWait))
+			time.Sleep(*flPeriod)
 			continue
 		} else if changed && webhook != nil {
 			webhook.Send(hash)
@@ -493,19 +489,15 @@ func main() {
 		}
 
 		failCount = 0
-		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
+		log.V(1).Info("next sync", "wait_time", flPeriod.String())
 		cancel()
-		time.Sleep(waitTime(*flWait))
+		time.Sleep(*flPeriod)
 	}
 }
 
 func updateSyncMetrics(key string, start time.Time) {
 	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
 	syncCount.WithLabelValues(key).Inc()
-}
-
-func waitTime(seconds float64) time.Duration {
-	return time.Duration(int(seconds*1000)) * time.Millisecond
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
