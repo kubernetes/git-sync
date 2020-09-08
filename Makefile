@@ -16,7 +16,7 @@
 BIN := git-sync
 
 # Where to push the docker image.
-REGISTRY ?= staging-k8s.gcr.io
+REGISTRY ?= gcr.io/k8s-staging-git-sync
 
 # This version-strategy uses git tags to set the version string
 VERSION := $(shell git describe --tags --always --dirty)
