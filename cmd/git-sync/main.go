@@ -87,6 +87,13 @@ var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 	"the password to use for git auth (users should prefer env vars for passwords)")
 
+var flGHAppID = flag.String("gh-app-id", envString("GIT_SYNC_APP_ID", ""),
+	"the ID of the GitHub App to use for git auth")
+var flGHAppInstID = flag.String("gh-app-inst-id", envString("GIT_SYNC_APP_INST_ID", ""),
+	"the ID of the GitHub App installation to use for git auth")
+var flGHAppPem = flag.String("gh-app-pem", envString("GIT_SYNC_APP_PEM", ""),
+	"the path of the pem file of the GitHub App to use for git auth")
+
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
 var flSSHKeyFile = flag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
@@ -333,6 +340,18 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --cookie-file may be specified\n")
 			os.Exit(1)
 		}
+		if *flGHAppID != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --app-id may be specified\n")
+			os.Exit(1)
+		}
+		if *flGHAppPem != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --app-pem may be specified\n")
+			os.Exit(1)
+		}
+		if *flGHAppInstID != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --app-inst-id may be specified\n")
+			os.Exit(1)
+		}
 		if *flSSHKeyFile == "" {
 			fmt.Fprintf(os.Stderr, "ERROR: --ssh-key-file must be specified when --ssh is specified\n")
 			flag.Usage()
@@ -359,10 +378,27 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 
 	if *flUsername != "" && *flPassword != "" {
+		if *flGHAppID != "" && *flGHAppPem != "" && *flGHAppInstID != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: can only use one of user and app for git auth\n")
+			os.Exit(1)
+		}
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
 			os.Exit(1)
 		}
+	}
+
+	var tokenExpirationTime time.Time
+	originalRepoURL := *flRepo
+	usingGHAppToken := false
+	if *flGHAppID != "" && *flGHAppPem != "" && *flGHAppInstID != "" {
+		var err error
+		*flRepo, tokenExpirationTime, err = getGitURLWithAppAuthToken(ctx, *flGHAppID, *flGHAppPem, *flGHAppInstID, *flRepo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't authenticate with GitHub App: %+v\n", err)
+			os.Exit(1)
+		}
+		usingGHAppToken = true
 	}
 
 	if *flSSH {
@@ -442,7 +478,23 @@ func main() {
 
 	initialSync := true
 	failCount := 0
+
 	for {
+		// refresh token
+		if usingGHAppToken && time.Now().After(tokenExpirationTime) {
+			log.V(0).Info("github app installation token expired, refreshing")
+
+			var err error
+
+			*flRepo, tokenExpirationTime, err = getGitURLWithAppAuthToken(ctx, *flGHAppID, *flGHAppPem, *flGHAppInstID, originalRepoURL)
+
+			if err != nil {
+				log.Error(err, "failed to refresh GitHUb App Installation Token")
+				os.Exit(1)
+			}
+
+			log.V(0).Info("refreshed github app installation token", "expiresAt", tokenExpirationTime)
+		}
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
