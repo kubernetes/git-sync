@@ -110,5 +110,9 @@ docker run -d \
 | GIT_SYNC_HTTP_BIND              | `--http-bind`              | the bind address (including port) for git-sync's HTTP endpoint                                                                         | ""                            |
 | GIT_SYNC_HTTP_METRICS           | `--http-metrics`           | enable metrics on git-sync's HTTP endpoint                                                                                             | true                          |
 | GIT_SYNC_HTTP_PPROF             | `--http-pprof`             | enable the pprof debug endpoints on git-sync's HTTP endpoint                                                                           | false                         |
+| GIT_SYNC_APP_ID                 | `--gh-app-id`              | the ID of the GitHub App to use for git auth                                                                                           | ""                            |
+| GIT_SYNC_APP_INST_ID            | `--gh-app-inst-id`         | the ID of the GitHub App installation to use for git auth                                                                              | ""                            | 
+| GIT_SYNC_APP_PEM                | `--gh-app-pem`             | the path of the pem file of the GitHub App to use for git auth                                                                         | ""                            | 
+
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
