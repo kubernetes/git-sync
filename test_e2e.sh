@@ -658,9 +658,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
-# Test webhook
+# Test webhook success
 ##############################################
-testcase "webhook"
+testcase "webhook-success"
 freencport
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
@@ -671,6 +671,7 @@ GIT_SYNC \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-success-status=200 \
     --dest="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
@@ -696,6 +697,33 @@ NCPID=$!
 sleep 3
 if kill -0 $NCPID > /dev/null 2>&1; then
     fail "webhook 3 not called, server still running"
+fi
+# Wrap up
+pass
+
+##############################################
+# Test webhook fire-and-forget
+##############################################
+testcase "webhook-fire-and-forget"
+freencport
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --logtostderr \
+    --v=5 \
+    --repo="file://$REPO" \
+    --root="$ROOT" \
+    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-success-status=-1 \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+# check that basic call works
+{ (echo -e "HTTP/1.1 404 Not Found\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
+NCPID=$!
+sleep 3
+if kill -0 $NCPID > /dev/null 2>&1; then
+    fail "webhook 1 not called, server still running"
 fi
 # Wrap up
 pass
