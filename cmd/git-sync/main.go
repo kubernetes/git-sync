@@ -294,8 +294,8 @@ func main() {
 	}
 
 	if *flWebhookURL != "" {
-		if *flWebhookStatusSuccess <= 0 {
-			fmt.Fprintf(os.Stderr, "ERROR: --webhook-success-status must be greater than 0\n")
+		if *flWebhookStatusSuccess < -1 {
+			fmt.Fprintf(os.Stderr, "ERROR: --webhook-success-status must be a valid HTTP code or -1\n")
 			flag.Usage()
 			os.Exit(1)
 		}
