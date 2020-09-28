@@ -148,7 +148,6 @@ testcase "head-once"
 echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -171,7 +170,6 @@ testcase "default-sync"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -206,7 +204,6 @@ testcase "head-sync"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -246,7 +243,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" checkout -q master
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -288,7 +284,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -335,7 +330,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -381,7 +375,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -418,7 +411,6 @@ echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
 REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -440,7 +432,6 @@ testcase "crash-cleanup-retry"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -454,7 +445,6 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 rm -f "$ROOT"/link
 # Try again
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -476,7 +466,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
     --v=5 \
     --one-time \
     --timeout=1 \
@@ -489,7 +478,6 @@ assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --timeout=16 \
@@ -520,7 +508,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 expected_depth="1"
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -571,7 +558,6 @@ GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="wrong" \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -587,7 +573,6 @@ GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --username="my-username" \
     --password="my-password" \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -620,7 +605,6 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -642,7 +626,6 @@ assert_file_absent "$ROOT"/link/file
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
     --askpass-url="http://localhost:$NCPORT/git_askpass" \
-    --logtostderr \
     --v=5 \
     --one-time \
     --repo="file://$REPO" \
@@ -666,7 +649,6 @@ freencport
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -710,7 +692,6 @@ freencport
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -738,7 +719,6 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --logtostderr \
     --v=5 \
     --repo="file://$REPO" \
     --root="$ROOT" \
@@ -800,7 +780,6 @@ git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
 git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -889,7 +868,6 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --wait=0.1 \
     --repo="file://$REPO" \
@@ -966,7 +944,6 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --submodules=off \
     --wait=0.1 \
@@ -1010,7 +987,6 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --submodules=shallow \
     --wait=0.1 \
@@ -1044,7 +1020,6 @@ sleep 3 # wait for sshd to come up
 IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
-    --logtostderr \
     --v=5 \
     --one-time \
     --ssh \
