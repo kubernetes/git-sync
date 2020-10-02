@@ -71,7 +71,8 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
-	"the command executed after cloning the new hash of repote repository")
+	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
+		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
 	"the URL for a webook notification when syncs complete (default is no webook)")
@@ -658,15 +659,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// Execute the command, if requested.
 	if *flSyncHookCommand != "" {
 		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
-		splitData := strings.Fields(*flSyncHookCommand)
-		cmd := splitData[0]
-		args := []string{}
-		if len(splitData) > 1 {
-			for _, v := range splitData[1:] {
-				args = append(args, v)
-			}
-		}
-		_, err = runCommand(ctx, worktreePath, cmd, args...)
+		_, err = runCommand(ctx, worktreePath, *flSyncHookCommand)
 		if err != nil {
 			return err
 		}
