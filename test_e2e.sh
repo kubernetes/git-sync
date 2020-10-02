@@ -113,6 +113,7 @@ trap finish INT EXIT
 
 SLOW_GIT=/slow_git.sh
 ASKPASS_GIT=/askpass_git.sh
+SYNC_HOOK_COMMAND=/test_sync_hook_command.sh
 
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
@@ -125,6 +126,7 @@ function GIT_SYNC() {
         -v "$DIR":"$DIR":rw \
         -v "$(pwd)/slow_git.sh":"$SLOW_GIT":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
+        -v "$(pwd)/test_sync_hook_command.sh":"$SYNC_HOOK_COMMAND":ro \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
@@ -637,6 +639,39 @@ GIT_SYNC \
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
+# Test sync_hook_command
+##############################################
+testcase "sync_hook_command"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --v=5 \
+    --wait=0.1 \
+    --repo="file://$REPO" \
+    --root="$ROOT" \
+    --dest="link" \
+    --sync-hook-command="$SYNC_HOOK_COMMAND" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/sync-hook
+assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 1"
+# Move forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_exists "$ROOT"/link/sync-hook
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
+assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 2"
 # Wrap up
 pass
 
