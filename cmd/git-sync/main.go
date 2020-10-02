@@ -70,6 +70,8 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
+var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
+	"the command executed after cloning the new hash of repote repository")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
 	"the URL for a webook notification when syncs complete (default is no webook)")
@@ -648,6 +650,23 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		mode := fmt.Sprintf("%#o", *flChmod)
 		log.V(0).Info("changing file permissions", "mode", mode)
 		_, err = runCommand(ctx, "", "chmod", "-R", mode, worktreePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Execute the command, if requested.
+	if *flSyncHookCommand != "" {
+		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
+		splitData := strings.Fields(*flSyncHookCommand)
+		cmd := splitData[0]
+		args := []string{}
+		if len(splitData) > 1 {
+			for _, v := range splitData[1:] {
+				args = append(args, v)
+			}
+		}
+		_, err = runCommand(ctx, worktreePath, cmd, args...)
 		if err != nil {
 			return err
 		}
