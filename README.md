@@ -44,8 +44,8 @@ make container REGISTRY=registry VERSION=tag \
 docker run -d \
     -v /tmp/git-data:/tmp/git \
     registry/git-sync:tag \
-        --repo=https://github.com/kubernetes/git-sync
-        --branch=master
+        --repo=https://github.com/kubernetes/git-sync \
+        --branch=master \
         --wait=30
 
 # run an nginx container to serve the content
@@ -70,9 +70,9 @@ A webhook is configured using a set of CLI flags. At its most basic only `webhoo
 docker run -d \
     -v /tmp/git-data:/git \
     registry/git-sync:tag \
-        --repo=https://github.com/kubernetes/git-sync
-        --branch=master
-        --wait=30
+        --repo=https://github.com/kubernetes/git-sync \
+        --branch=master \
+        --wait=30 \
         --webhook-url="http://localhost:9090/-/reload"
 ```
 
