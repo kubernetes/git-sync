@@ -18,6 +18,8 @@ synchronization. The call is made after the symlink is updated.
 
 ## Building it
 
+We use [docker buildx](https://github.com/docker/buildx) to build images.
+
 ```
 # build the container
 make container REGISTRY=registry VERSION=tag
