@@ -63,9 +63,9 @@ var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
 
 var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
-	"the root directory for git-sync operations, under which --dest will be created")
-var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
+	"the root directory for git-sync operations, under which --link will be created")
+var flLink = pflag.String("link", envString("GIT_SYNC_LINK", ""),
+	"the name of a symlink, under --root, which points to a directory in which --repo is checked out (defaults to the leaf dir of --repo)")
 var flPeriod = pflag.Duration("period", envDuration("GIT_SYNC_PERIOD", 10*time.Second),
 	"how long to wait between syncs, must be >= 10ms; --wait overrides this")
 var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TIMEOUT", 120*time.Second),
@@ -128,10 +128,13 @@ var flWait = pflag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"DEPRECATED: use --period instead")
 var flTimeout = pflag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 0),
 	"DEPRECATED: use --sync-timeout instead")
+var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
+	"DEPRECATED: use --link instead")
 
 func init() {
 	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
 	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
 }
 
 var log = glogr.New()
@@ -305,13 +308,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flDest == "" {
-		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
-		*flDest = parts[len(parts)-1]
+	if *flDest != "" {
+		*flLink = *flDest
 	}
-
-	if strings.Contains(*flDest, "/") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a leaf name, not a path\n")
+	if *flLink == "" {
+		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+		*flLink = parts[len(parts)-1]
+	}
+	if strings.Contains(*flLink, "/") {
+		fmt.Fprintf(os.Stderr, "ERROR: --link must not contain '/'\n")
+		pflag.Usage()
+		os.Exit(1)
+	}
+	if strings.HasPrefix(*flLink, ".") {
+		fmt.Fprintf(os.Stderr, "ERROR: --link must not start with '.'\n")
 		pflag.Usage()
 		os.Exit(1)
 	}
@@ -486,7 +496,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -616,7 +626,7 @@ func setRepoReady() {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
+func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -700,7 +710,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 
 	// Flip the symlink.
-	oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath)
+	oldWorktree, err := updateSymlink(ctx, gitRoot, link, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -789,9 +799,9 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	return strings.HasPrefix(output, rev), nil
 }
 
-// syncRepo syncs the branch of a given repository to the destination at the given rev.
+// syncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authURL string, submoduleMode string) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, link string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -802,7 +812,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := filepath.Join(gitRoot, dest)
+	target := filepath.Join(gitRoot, link)
 	gitRepoPath := filepath.Join(target, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
@@ -833,7 +843,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
+	return true, hash, addWorktreeAndSwap(ctx, gitRoot, link, branch, rev, depth, hash, submoduleMode)
 }
 
 // getRevs returns the local and upstream hashes for rev.
@@ -1083,9 +1093,10 @@ OPTIONS
             Create a shallow clone with history truncated to the specified
             number of commits.
 
-    --dest <string>, $GIT_SYNC_DEST
+    --link <string>, $GIT_SYNC_LINK
             The name of the final symlink (under --root) which will point to the
-            current git worktree. (default: the leaf dir of --repo)
+            current git worktree. This must be a filename, not a path, and may
+            not start with a period. (default: the leaf dir of --repo)
 
     --git <string>, $GIT_SYNC_GIT
             The git command to run (subject to PATH search, mostly for testing).
@@ -1135,7 +1146,7 @@ OPTIONS
             The git revision (tag or hash) to check out. (default: HEAD)
 
     --root <string>, $GIT_SYNC_ROOT
-            The root directory for git-sync operations, under which --dest will
+            The root directory for git-sync operations, under which --link will
             be created. This flag is required.
 
     --ssh, $GIT_SYNC_SSH
