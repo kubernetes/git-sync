@@ -81,7 +81,7 @@ func (w *Webhook) Do(hash string) error {
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	log.V(0).Info("sending webhook", "hash", hash, "url", w.URL, "method", w.Method, "timeout", w.Timeout)
+	log.V(0).Info("sending webhook", "hash", hash, "url", w.URL, "method", w.Method, "timeout", w.Timeout.String())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (w *Webhook) run() {
 			}
 
 			if err := w.Do(hash); err != nil {
-				log.Error(err, "webhook failed", "url", w.URL, "method", w.Method, "timeout", w.Timeout)
+				log.Error(err, "webhook failed", "url", w.URL, "method", w.Method, "timeout", w.Timeout.String())
 				time.Sleep(w.Backoff)
 			} else {
 				lastHash = hash

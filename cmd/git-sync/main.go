@@ -66,10 +66,10 @@ var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "
 	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
-var flWait = pflag.Float64("wait", envFloat("GIT_SYNC_WAIT", 1),
-	"the number of seconds between syncs")
-var flSyncTimeout = pflag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
-	"the number of seconds allowed for a complete sync")
+var flPeriod = pflag.Duration("period", envDuration("GIT_SYNC_PERIOD", 10*time.Second),
+	"how long to wait between syncs, must be >= 10ms; --wait overrides this")
+var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TIMEOUT", 120*time.Second),
+	"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
 var flOneTime = pflag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the first sync")
 var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
@@ -123,6 +123,17 @@ var flHTTPMetrics = pflag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", 
 var flHTTPprof = pflag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
+// Obsolete flags, kept for compat.
+var flWait = pflag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
+	"DEPRECATED: use --period instead")
+var flTimeout = pflag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 0),
+	"DEPRECATED: use --sync-timeout instead")
+
+func init() {
+	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
+	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+}
+
 var log = glogr.New()
 
 // Total pull/error, summary on pull duration
@@ -149,9 +160,6 @@ const (
 	metricKeyError   = "error"
 	metricKeyNoOp    = "noop"
 )
-
-// initTimeout is a timeout for initialization, like git credentials setup.
-const initTimeout = time.Second * 30
 
 const (
 	submodulesRecursive = "recursive"
@@ -308,14 +316,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flWait < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --wait must be greater than or equal to 0\n")
+	if *flWait != 0 {
+		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
+	}
+	if *flPeriod < 10*time.Millisecond {
+		fmt.Fprintf(os.Stderr, "ERROR: --period must be at least 10ms\n")
 		pflag.Usage()
 		os.Exit(1)
 	}
 
-	if *flSyncTimeout < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --timeout must be greater than 0\n")
+	if *flTimeout != 0 {
+		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
+	}
+	if *flSyncTimeout < 10*time.Millisecond {
+		fmt.Fprintf(os.Stderr, "ERROR: --sync-timeout must be at least 10ms\n")
 		pflag.Usage()
 		os.Exit(1)
 	}
@@ -382,8 +396,8 @@ func main() {
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
-	// `git clone`, so initTimeout set to 30 seconds should be enough.
-	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
+	// `git clone`, so hopefully 30 seconds will be enough.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
@@ -471,7 +485,7 @@ func main() {
 	failCount := 0
 	for {
 		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -482,9 +496,9 @@ func main() {
 
 			failCount++
 			log.Error(err, "unexpected error syncing repo, will retry")
-			log.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
+			log.V(0).Info("waiting before retrying", "waitTime", flPeriod.String())
 			cancel()
-			time.Sleep(waitTime(*flWait))
+			time.Sleep(*flPeriod)
 			continue
 		} else if changed {
 			if webhook != nil {
@@ -510,19 +524,15 @@ func main() {
 		}
 
 		failCount = 0
-		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
+		log.V(1).Info("next sync", "waitTime", flPeriod.String())
 		cancel()
-		time.Sleep(waitTime(*flWait))
+		time.Sleep(*flPeriod)
 	}
 }
 
 func updateSyncMetrics(key string, start time.Time) {
 	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
 	syncCount.WithLabelValues(key).Inc()
-}
-
-func waitTime(seconds float64) time.Duration {
-	return time.Duration(int(seconds*1000)) * time.Millisecond
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
@@ -1113,6 +1123,11 @@ OPTIONS
             users should prefer the environment variable for specifying the
             password.
 
+    --period <duration>, $GIT_SYNC_PERIOD
+            How long to wait between sync attempts.  This must be at least
+            10ms.  This flag obsoletes --wait, but if --wait is specifed, it
+            will take precedence. (default: 10s)
+
     --repo <string>, $GIT_SYNC_REPO
             The git repository to sync.
 
@@ -1145,11 +1160,13 @@ OPTIONS
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
-            execution is subject to the overall --timeout flag and will extend
-            the period between syncs attempts.
+            execution is subject to the overall --sync-timeout flag and will
+            extend the effective period between sync attempts.
 
-    --timeout <int>, $GIT_SYNC_TIMEOUT
-            The number of seconds allowed for a complete sync. (default: 120)
+    --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
+            The total time allowed for one complete sync.  This must be at least
+            10ms.  This flag obsoletes --timeout, but if --timeout is specified,
+            it will take precedence. (default: 120s)
 
     --username <string>, $GIT_SYNC_USERNAME
             The username to use for git authentication (see --password).
@@ -1160,9 +1177,6 @@ OPTIONS
 
     --version
             Print the version and exit.
-
-    --wait <float>, $GIT_SYNC_WAIT
-            The number of seconds between sync attempts. (default: 1)
 
     --webhook-backoff <duration>, $GIT_SYNC_WEBHOOK_BACKOFF
             The time to wait before retrying a failed --webhook-url).
@@ -1188,7 +1202,7 @@ EXAMPLE USAGE
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
         --rev=HEAD \
-        --wait=10 \
+        --period=10s \
         --root=/mnt/git
 
 AUTHENTICATION
