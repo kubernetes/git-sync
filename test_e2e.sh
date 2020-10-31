@@ -84,7 +84,7 @@ REPO="$DIR/repo"
 function init_repo() {
     rm -rf "$REPO"
     mkdir -p "$REPO"
-    git -C "$REPO" init -q
+    git -C "$REPO" init -q -b master
     touch "$REPO"/file
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
@@ -776,7 +776,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q
+git -C "$SUBMODULE" init -q -b master
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -786,7 +786,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q
+git -C "$NESTED_SUBMODULE" init -q -b master
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -871,7 +871,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init > /dev/null
+git -C "$SUBMODULE" init -q -b master
 
 # First sync
 expected_depth="1"
@@ -947,7 +947,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q
+git -C "$SUBMODULE" init -q -b master
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -978,7 +978,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q
+git -C "$SUBMODULE" init -q -b master
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -987,7 +987,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q
+git -C "$NESTED_SUBMODULE" init -q -b master
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
