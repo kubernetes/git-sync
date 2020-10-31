@@ -62,7 +62,7 @@ var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
 
-var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
+var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
 	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
@@ -1136,7 +1136,7 @@ OPTIONS
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --dest will
-            be created. (default: $HOME/git)
+            be created. This flag is required.
 
     --ssh, $GIT_SYNC_SSH
             Use SSH for git authentication and operations.
