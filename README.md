@@ -48,7 +48,7 @@ docker run -d \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
-        --wait=30
+        --period=30s
 
 # run an nginx container to serve the content
 docker run -d \
@@ -74,7 +74,7 @@ docker run -d \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
-        --wait=30 \
+        --period=30s \
         --webhook-url="http://localhost:9090/-/reload"
 ```
 
@@ -89,8 +89,8 @@ docker run -d \
 | GIT_SYNC_SUBMODULES             | `--submodules`             | git submodule behavior: one of 'recursive', 'shallow', or 'off'                                                                                                                                                                               | recursive                     |
 | GIT_SYNC_ROOT                   | `--root`                   | the root directory for git-sync operations, under which --dest will be created                                                                                                                                                                | "$HOME/git"                   |
 | GIT_SYNC_DEST                   | `--dest`                   | the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)                                                                                                                          | ""                            |
-| GIT_SYNC_WAIT                   | `--wait`                   | the number of seconds between syncs                                                                                                                                                                                                           | 1 (second)                    |
-| GIT_SYNC_TIMEOUT                | `--timeout`                | the max number of seconds allowed for a complete sync                                                                                                                                                                                         | 120                           |
+| GIT_SYNC_PERIOD                 | `--period`                 | how long to wait between syncs, must be >= 10ms                                                                                                                                                                                               | "10s"                         |
+| GIT_SYNC_SYNC_TIMEOUT           | `--sync-timeout`           | the total time allowed for one complete sync, must be >= 10ms                                                                                                                                                                                 | "120s"                        |
 | GIT_SYNC_ONE_TIME               | `--one-time`               | exit after the first sync                                                                                                                                                                                                                     | false                         |
 | GIT_SYNC_MAX_SYNC_FAILURES      | `--max-sync-failures`      | the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)                                                                                                        | 0                             |
 | GIT_SYNC_PERMISSIONS            | `--change-permissions`     | the file permissions to apply to the checked-out files (0 will not change permissions at all)                                                                                                                                                 | 0                             |

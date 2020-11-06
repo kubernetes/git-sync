@@ -172,7 +172,7 @@ testcase "default-sync"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -205,7 +205,7 @@ testcase "head-sync"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
@@ -243,7 +243,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" checkout -q master
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --branch="$BRANCH" \
     --root="$ROOT" \
@@ -283,7 +283,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -328,7 +328,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$TAG" \
     --root="$ROOT" \
@@ -372,7 +372,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --rev="$REV" \
     --root="$ROOT" \
@@ -460,7 +460,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
     --one-time \
-    --timeout=1 \
+    --sync-timeout=1s \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -470,8 +470,8 @@ assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
     --git="$SLOW_GIT" \
-    --wait=0.1 \
-    --timeout=16 \
+    --period=100ms \
+    --sync-timeout=16s \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -499,7 +499,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 expected_depth="1"
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
@@ -634,7 +634,7 @@ testcase "sync_hook_command"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -667,6 +667,7 @@ freencport
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
@@ -709,6 +710,7 @@ freencport
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --webhook-url="http://127.0.0.1:$NCPORT" \
@@ -735,6 +737,7 @@ echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --git="$SLOW_GIT" \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
@@ -795,7 +798,7 @@ git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
 git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
@@ -882,7 +885,7 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --depth="$expected_depth" \
     --root="$ROOT" \
@@ -957,11 +960,11 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --submodules=off \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
+    --submodules=off \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
@@ -999,11 +1002,11 @@ git -C "$REPO" submodule add -q file://$SUBMODULE
 git -C "$REPO" commit -aqm "add submodule"
 
 GIT_SYNC \
-    --submodules=shallow \
-    --wait=0.1 \
+    --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
     --dest="link" \
+    --submodules=shallow \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
@@ -1032,13 +1035,13 @@ IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
-    --ssh \
-    --ssh-known-hosts=false \
     --repo="test@$IP:/src" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
+    --ssh \
+    --ssh-known-hosts=false \
     > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
