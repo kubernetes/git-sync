@@ -249,6 +249,11 @@ func setGlogFlags() {
 	vFlag.Value.Set(strconv.Itoa(*flVerbose))
 }
 
+// repoSync represents the remote repo and the local sync of it.
+type repoSync struct {
+	cmd string // the git command to run
+}
+
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
@@ -425,12 +430,17 @@ func main() {
 		}
 	}
 
+	// Capture the various git parameters.
+	git := &repoSync{
+		cmd: *flGitCmd,
+	}
+
 	// This context is used only for git credentials initialization. There are no long-running operations like
 	// `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	if *flUsername != "" && *flPassword != "" {
-		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
+		if err := git.SetupAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			log.Error(err, "ERROR: can't set up git auth")
 			os.Exit(1)
 		}
@@ -444,14 +454,14 @@ func main() {
 	}
 
 	if *flCookieFile {
-		if err := setupGitCookieFile(ctx); err != nil {
+		if err := git.SetupCookieFile(ctx); err != nil {
 			log.Error(err, "ERROR: can't set up git cookie file")
 			os.Exit(1)
 		}
 	}
 
 	if *flAskPassURL != "" {
-		if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
+		if err := git.CallAskPassURL(ctx, *flAskPassURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
 			log.Error(err, "ERROR: failed to call ASKPASS callback URL", "url", *flAskPassURL)
 			os.Exit(1)
@@ -516,7 +526,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, absRoot, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, absRoot, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -543,7 +553,7 @@ func main() {
 			if *flOneTime {
 				os.Exit(0)
 			}
-			if isHash, err := revIsHash(ctx, *flRev, absRoot); err != nil {
+			if isHash, err := git.RevIsHash(ctx, *flRev, absRoot); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
 				os.Exit(1)
 			} else if isHash {
@@ -657,8 +667,8 @@ func setRepoReady() {
 	repoReady = true
 }
 
-// addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, depth int, hash string, submoduleMode string) error {
+// AddWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -668,18 +678,18 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, 
 	args = append(args, "origin", branch)
 
 	// Update from the remote.
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, args...); err != nil {
+	if _, err := runCommand(ctx, gitRoot, git.cmd, args...); err != nil {
 		return err
 	}
 
 	// GC clone
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
+	if _, err := runCommand(ctx, gitRoot, git.cmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(gitRoot, "rev-"+hash)
-	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
+	_, err := runCommand(ctx, gitRoot, git.cmd, "worktree", "add", worktreePath, "origin/"+branch)
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
@@ -699,7 +709,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, 
 	}
 
 	// Reset the worktree's working copy to the specific rev.
-	_, err = runCommand(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
+	_, err = runCommand(ctx, worktreePath, git.cmd, "reset", "--hard", hash)
 	if err != nil {
 		return err
 	}
@@ -716,7 +726,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, 
 		if depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
 		}
-		_, err = runCommand(ctx, worktreePath, *flGitCmd, submodulesArgs...)
+		_, err = runCommand(ctx, worktreePath, git.cmd, submodulesArgs...)
 		if err != nil {
 			return err
 		}
@@ -753,7 +763,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, 
 		if err := os.RemoveAll(oldWorktree); err != nil {
 			return fmt.Errorf("error removing directory: %v", err)
 		}
-		if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+		if _, err := runCommand(ctx, gitRoot, git.cmd, "worktree", "prune"); err != nil {
 			return err
 		}
 	}
@@ -761,7 +771,8 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, link, branch, rev string, 
 	return nil
 }
 
-func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
+// CloneRepo does an initial clone of the git repo.
+func (git *repoSync) CloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
@@ -769,7 +780,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	args = append(args, repo, gitRoot)
 	log.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
 
-	_, err := runCommand(ctx, "", *flGitCmd, args...)
+	_, err := runCommand(ctx, "", git.cmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
@@ -778,7 +789,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 			if err != nil {
 				return err
 			}
-			_, err = runCommand(ctx, "", *flGitCmd, args...)
+			_, err = runCommand(ctx, "", git.cmd, args...)
 			if err != nil {
 				return err
 			}
@@ -790,18 +801,18 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	return nil
 }
 
-// localHashForRev returns the locally known hash for a given rev.
-func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
+// LocalHashForRev returns the locally known hash for a given rev.
+func (git *repoSync) LocalHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
+	output, err := runCommand(ctx, gitRoot, git.cmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
 	return strings.Trim(string(output), "\n"), nil
 }
 
-// remoteHashForRef returns the upstream hash for a given ref.
-func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
+// RemoteHashForRef returns the upstream hash for a given ref.
+func (git *repoSync) RemoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
+	output, err := runCommand(ctx, gitRoot, git.cmd, "ls-remote", "-q", "origin", ref)
 	if err != nil {
 		return "", err
 	}
@@ -809,9 +820,9 @@ func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) 
 	return parts[0], nil
 }
 
-func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
+func (git *repoSync) RevIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "cat-file", "-t", rev)
+	output, err := runCommand(ctx, gitRoot, git.cmd, "cat-file", "-t", rev)
 	if err != nil {
 		return false, err
 	}
@@ -824,20 +835,20 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = localHashForRev(ctx, rev, gitRoot)
+	output, err = git.LocalHashForRev(ctx, rev, gitRoot)
 	if err != nil {
 		return false, err
 	}
 	return strings.HasPrefix(output, rev), nil
 }
 
-// syncRepo syncs the branch of a given repository to the link at the given rev.
+// SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, link string, authURL string, submoduleMode string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, link string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
-		if err := callGitAskPassURL(ctx, authURL); err != nil {
+		if err := git.CallAskPassURL(ctx, authURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
 			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
 		}
@@ -851,11 +862,11 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
-		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
+		err = git.CloneRepo(ctx, repo, branch, rev, depth, gitRoot)
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = localHashForRev(ctx, rev, gitRoot)
+		hash, err = git.LocalHashForRev(ctx, rev, gitRoot)
 		if err != nil {
 			return false, "", err
 		}
@@ -863,7 +874,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
-		local, remote, err := getRevs(ctx, target, branch, rev)
+		local, remote, err := git.GetRevs(ctx, target, branch, rev)
 		if err != nil {
 			return false, "", err
 		}
@@ -875,13 +886,13 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, link, branch, rev, depth, hash, submoduleMode)
+	return true, hash, git.AddWorktreeAndSwap(ctx, gitRoot, link, branch, rev, depth, hash, submoduleMode)
 }
 
-// getRevs returns the local and upstream hashes for rev.
-func getRevs(ctx context.Context, localDir, branch, rev string) (string, string, error) {
+// GetRevs returns the local and upstream hashes for rev.
+func (git *repoSync) GetRevs(ctx context.Context, localDir, branch, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := localHashForRev(ctx, rev, localDir)
+	local, err := git.LocalHashForRev(ctx, rev, localDir)
 	if err != nil {
 		return "", "", err
 	}
@@ -895,7 +906,7 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 	}
 
 	// Figure out what hash the remote resolves ref to.
-	remote, err := remoteHashForRef(ctx, ref, localDir)
+	remote, err := git.RemoteHashForRef(ctx, ref, localDir)
 	if err != nil {
 		return "", "", err
 	}
@@ -947,16 +958,18 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 	return stdout, nil
 }
 
-func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
+// SetupAuth configures the local git repo to use a username and password when
+// accessing the repo at gitURL.
+func (git *repoSync) SetupAuth(ctx context.Context, username, password, gitURL string) error {
 	log.V(1).Info("setting up git credential store")
 
-	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
+	_, err := runCommand(ctx, "", git.cmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
 		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
-	_, err = runCommandWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
+	_, err = runCommandWithStdin(ctx, "", creds, git.cmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -993,7 +1006,7 @@ func setupGitSSH(setupKnownHosts bool) error {
 	return nil
 }
 
-func setupGitCookieFile(ctx context.Context) error {
+func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 	log.V(1).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
@@ -1004,18 +1017,21 @@ func setupGitCookieFile(ctx context.Context) error {
 	}
 
 	if _, err = runCommand(ctx, "",
-		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+		git.cmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
 	return nil
 }
 
+// CallAskPassURL consults the specified URL looking for git credentials in the
+// response.
+//
 // The expected ASKPASS callback output are below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
-// username=xxx@example.com
-// password=ya29.xxxyyyzzz
-func callGitAskPassURL(ctx context.Context, url string) error {
+//   username=xxx@example.com
+//   password=ya29.xxxyyyzzz
+func (git *repoSync) CallAskPassURL(ctx context.Context, url string) error {
 	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
 	var netClient = &http.Client{
@@ -1056,7 +1072,7 @@ func callGitAskPassURL(ctx context.Context, url string) error {
 		}
 	}
 
-	if err := setupGitAuth(ctx, username, password, *flRepo); err != nil {
+	if err := git.SetupAuth(ctx, username, password, *flRepo); err != nil {
 		return err
 	}
 
