@@ -256,6 +256,7 @@ type repoSync struct {
 	repo   string // remote repo to sync
 	branch string // remote branch to sync
 	rev    string // the rev or SHA to sync
+	depth  int    // for shallow sync
 }
 
 func main() {
@@ -441,6 +442,7 @@ func main() {
 		repo:   *flRepo,
 		branch: *flBranch,
 		rev:    *flRev,
+		depth:  *flDepth,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -534,7 +536,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flDepth, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -676,12 +678,12 @@ func setRepoReady() {
 }
 
 // AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, depth int, hash string, submoduleMode string) error {
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
-	if depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
+	if git.depth != 0 {
+		args = append(args, "--depth", strconv.Itoa(git.depth))
 	}
 	args = append(args, "origin", git.branch)
 
@@ -731,8 +733,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, depth 
 		if submoduleMode == submodulesRecursive {
 			submodulesArgs = append(submodulesArgs, "--recursive")
 		}
-		if depth != 0 {
-			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
+		if git.depth != 0 {
+			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(git.depth))
 		}
 		_, err = runCommand(ctx, worktreePath, git.cmd, submodulesArgs...)
 		if err != nil {
@@ -787,10 +789,10 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, depth 
 }
 
 // CloneRepo does an initial clone of the git repo.
-func (git *repoSync) CloneRepo(ctx context.Context, depth int) error {
+func (git *repoSync) CloneRepo(ctx context.Context) error {
 	args := []string{"clone", "--no-checkout", "-b", git.branch}
-	if depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
+	if git.depth != 0 {
+		args = append(args, "--depth", strconv.Itoa(git.depth))
 	}
 	args = append(args, git.repo, git.root)
 	log.V(0).Info("cloning repo", "origin", git.repo, "path", git.root)
@@ -859,7 +861,7 @@ func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, depth int, link string, authURL string, submoduleMode string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -877,7 +879,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, depth int, link string, authU
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
-		err = git.CloneRepo(ctx, depth)
+		err = git.CloneRepo(ctx)
 		if err != nil {
 			return false, "", err
 		}
@@ -901,7 +903,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, depth int, link string, authU
 		hash = remote
 	}
 
-	return true, hash, git.AddWorktreeAndSwap(ctx, link, depth, hash, submoduleMode)
+	return true, hash, git.AddWorktreeAndSwap(ctx, link, hash, submoduleMode)
 }
 
 // GetRevs returns the local and upstream hashes for rev.
