@@ -260,6 +260,8 @@ type repoSync struct {
 	rev        string         // the rev or SHA to sync
 	depth      int            // for shallow sync
 	submodules submodulesMode // how to handle submodules
+	chmod      int            // mode to change repo to, or 0
+	link       string         // the name of the symlink to publish under `root`
 }
 
 func main() {
@@ -447,6 +449,8 @@ func main() {
 		rev:        *flRev,
 		depth:      *flDepth,
 		submodules: submodulesMode(*flSubmodules),
+		chmod:      *flChmod,
+		link:       *flLink,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -540,7 +544,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flLink, *flAskPassURL); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flAskPassURL); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -636,9 +640,9 @@ func addUser() error {
 // UpdateSymlink atomically swaps the symlink to point at the specified
 // directory and cleans up the previous worktree.  If there was a previous
 // worktree, this returns the path to it.
-func (git *repoSync) UpdateSymlink(ctx context.Context, link, newDir string) (string, error) {
+func (git *repoSync) UpdateSymlink(ctx context.Context, newDir string) (string, error) {
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	linkPath := filepath.Join(git.root, link)
+	linkPath := filepath.Join(git.root, git.link)
 	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error accessing current worktree: %v", err)
@@ -657,8 +661,8 @@ func (git *repoSync) UpdateSymlink(ctx context.Context, link, newDir string) (st
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
-	log.V(1).Info("renaming symlink", "root", git.root, "old_name", tmplink, "new_name", link)
-	if _, err := runCommand(ctx, git.root, "mv", "-T", tmplink, link); err != nil {
+	log.V(1).Info("renaming symlink", "root", git.root, "oldName", tmplink, "newName", git.link)
+	if _, err := runCommand(ctx, git.root, "mv", "-T", tmplink, git.link); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -682,7 +686,7 @@ func setRepoReady() {
 }
 
 // AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash string) error {
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error {
 	log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -747,8 +751,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash s
 	}
 
 	// Change the file permissions, if requested.
-	if *flChmod != 0 {
-		mode := fmt.Sprintf("%#o", *flChmod)
+	if git.chmod != 0 {
+		mode := fmt.Sprintf("%#o", git.chmod)
 		log.V(0).Info("changing file permissions", "mode", mode)
 		_, err = runCommand(ctx, "", "chmod", "-R", mode, worktreePath)
 		if err != nil {
@@ -773,7 +777,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash s
 	log.V(0).Info("reset root to hash", "path", git.root, "hash", hash)
 
 	// Flip the symlink.
-	oldWorktree, err := git.UpdateSymlink(ctx, link, worktreePath)
+	oldWorktree, err := git.UpdateSymlink(ctx, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -865,7 +869,7 @@ func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, authURL string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -876,7 +880,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string) 
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := filepath.Join(git.root, link)
+	target := filepath.Join(git.root, git.link)
 	gitRepoPath := filepath.Join(target, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
@@ -907,7 +911,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string) 
 		hash = remote
 	}
 
-	return true, hash, git.AddWorktreeAndSwap(ctx, link, hash)
+	return true, hash, git.AddWorktreeAndSwap(ctx, hash)
 }
 
 // GetRevs returns the local and upstream hashes for rev.
