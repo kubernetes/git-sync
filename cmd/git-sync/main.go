@@ -251,9 +251,11 @@ func setGlogFlags() {
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd  string // the git command to run
-	root string // absolute path to the root directory
-	repo string // remote repo to sync
+	cmd    string // the git command to run
+	root   string // absolute path to the root directory
+	repo   string // remote repo to sync
+	branch string // remote branch to sync
+	rev    string // the rev or SHA to sync
 }
 
 func main() {
@@ -434,9 +436,11 @@ func main() {
 
 	// Capture the various git parameters.
 	git := &repoSync{
-		cmd:  *flGitCmd,
-		root: absRoot,
-		repo: *flRepo,
+		cmd:    *flGitCmd,
+		root:   absRoot,
+		repo:   *flRepo,
+		branch: *flBranch,
+		rev:    *flRev,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -530,7 +534,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flBranch, *flRev, *flDepth, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flDepth, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -557,11 +561,11 @@ func main() {
 			if *flOneTime {
 				os.Exit(0)
 			}
-			if isHash, err := git.RevIsHash(ctx, *flRev); err != nil {
-				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
+			if isHash, err := git.RevIsHash(ctx); err != nil {
+				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", git.rev)
 				os.Exit(1)
 			} else if isHash {
-				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
+				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", git.rev)
 				sleepForever()
 			}
 			initialSync = false
@@ -672,14 +676,14 @@ func setRepoReady() {
 }
 
 // AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link, branch, rev string, depth int, hash string, submoduleMode string) error {
-	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, depth int, hash string, submoduleMode string) error {
+	log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	args = append(args, "origin", branch)
+	args = append(args, "origin", git.branch)
 
 	// Update from the remote.
 	if _, err := runCommand(ctx, git.root, git.cmd, args...); err != nil {
@@ -693,8 +697,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link, branch, rev s
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(git.root, "rev-"+hash)
-	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+branch)
-	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
+	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch)
+	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
 	if err != nil {
 		return err
 	}
@@ -783,8 +787,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link, branch, rev s
 }
 
 // CloneRepo does an initial clone of the git repo.
-func (git *repoSync) CloneRepo(ctx context.Context, branch, rev string, depth int) error {
-	args := []string{"clone", "--no-checkout", "-b", branch}
+func (git *repoSync) CloneRepo(ctx context.Context, depth int) error {
+	args := []string{"clone", "--no-checkout", "-b", git.branch}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
@@ -813,8 +817,8 @@ func (git *repoSync) CloneRepo(ctx context.Context, branch, rev string, depth in
 }
 
 // LocalHashForRev returns the locally known hash for a given rev.
-func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, error) {
-	output, err := runCommand(ctx, git.root, git.cmd, "rev-parse", rev)
+func (git *repoSync) LocalHashForRev(ctx context.Context) (string, error) {
+	output, err := runCommand(ctx, git.root, git.cmd, "rev-parse", git.rev)
 	if err != nil {
 		return "", err
 	}
@@ -831,9 +835,9 @@ func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, 
 	return parts[0], nil
 }
 
-func (git *repoSync) RevIsHash(ctx context.Context, rev string) (bool, error) {
+func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := runCommand(ctx, git.root, git.cmd, "cat-file", "-t", rev)
+	output, err := runCommand(ctx, git.root, git.cmd, "cat-file", "-t", git.rev)
 	if err != nil {
 		return false, err
 	}
@@ -846,16 +850,16 @@ func (git *repoSync) RevIsHash(ctx context.Context, rev string) (bool, error) {
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = git.LocalHashForRev(ctx, rev)
+	output, err = git.LocalHashForRev(ctx)
 	if err != nil {
 		return false, err
 	}
-	return strings.HasPrefix(output, rev), nil
+	return strings.HasPrefix(output, git.rev), nil
 }
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, branch, rev string, depth int, link string, authURL string, submoduleMode string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, depth int, link string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -873,11 +877,11 @@ func (git *repoSync) SyncRepo(ctx context.Context, branch, rev string, depth int
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
-		err = git.CloneRepo(ctx, branch, rev, depth)
+		err = git.CloneRepo(ctx, depth)
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = git.LocalHashForRev(ctx, rev)
+		hash, err = git.LocalHashForRev(ctx)
 		if err != nil {
 			return false, "", err
 		}
@@ -885,35 +889,35 @@ func (git *repoSync) SyncRepo(ctx context.Context, branch, rev string, depth int
 		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
-		local, remote, err := git.GetRevs(ctx, branch, rev)
+		local, remote, err := git.GetRevs(ctx)
 		if err != nil {
 			return false, "", err
 		}
 		if local == remote {
-			log.V(1).Info("no update required", "rev", rev, "local", local, "remote", remote)
+			log.V(1).Info("no update required", "rev", git.rev, "local", local, "remote", remote)
 			return false, "", nil
 		}
-		log.V(0).Info("update required", "rev", rev, "local", local, "remote", remote)
+		log.V(0).Info("update required", "rev", git.rev, "local", local, "remote", remote)
 		hash = remote
 	}
 
-	return true, hash, git.AddWorktreeAndSwap(ctx, link, branch, rev, depth, hash, submoduleMode)
+	return true, hash, git.AddWorktreeAndSwap(ctx, link, depth, hash, submoduleMode)
 }
 
 // GetRevs returns the local and upstream hashes for rev.
-func (git *repoSync) GetRevs(ctx context.Context, branch, rev string) (string, string, error) {
+func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := git.LocalHashForRev(ctx, rev)
+	local, err := git.LocalHashForRev(ctx)
 	if err != nil {
 		return "", "", err
 	}
 
 	// Build a ref string, depending on whether the user asked to track HEAD or a tag.
 	ref := ""
-	if rev == "HEAD" {
-		ref = "refs/heads/" + branch
+	if git.rev == "HEAD" {
+		ref = "refs/heads/" + git.branch
 	} else {
-		ref = "refs/tags/" + rev
+		ref = "refs/tags/" + git.rev
 	}
 
 	// Figure out what hash the remote resolves ref to.
