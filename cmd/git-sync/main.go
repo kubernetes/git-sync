@@ -262,6 +262,7 @@ type repoSync struct {
 	submodules submodulesMode // how to handle submodules
 	chmod      int            // mode to change repo to, or 0
 	link       string         // the name of the symlink to publish under `root`
+	authURL    string         // a URL to re-fetch credentials, or ""
 }
 
 func main() {
@@ -451,6 +452,7 @@ func main() {
 		submodules: submodulesMode(*flSubmodules),
 		chmod:      *flChmod,
 		link:       *flLink,
+		authURL:    *flAskPassURL,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -476,15 +478,6 @@ func main() {
 			log.Error(err, "ERROR: can't set up git cookie file")
 			os.Exit(1)
 		}
-	}
-
-	if *flAskPassURL != "" {
-		if err := git.CallAskPassURL(ctx, *flAskPassURL); err != nil {
-			askpassCount.WithLabelValues(metricKeyError).Inc()
-			log.Error(err, "ERROR: failed to call ASKPASS callback URL", "url", *flAskPassURL)
-			os.Exit(1)
-		}
-		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
@@ -544,7 +537,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flAskPassURL); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -869,11 +862,11 @@ func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, authURL string) (bool, string, error) {
-	if authURL != "" {
+func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
+	if git.authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
-		if err := git.CallAskPassURL(ctx, authURL); err != nil {
+		if err := git.CallAskPassURL(ctx); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
 			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
 		}
@@ -1056,7 +1049,7 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 // see https://git-scm.com/docs/gitcredentials for more examples:
 //   username=xxx@example.com
 //   password=ya29.xxxyyyzzz
-func (git *repoSync) CallAskPassURL(ctx context.Context, url string) error {
+func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
 	var netClient = &http.Client{
@@ -1065,7 +1058,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context, url string) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", git.authURL, nil)
 	if err != nil {
 		return fmt.Errorf("can't create auth request: %w", err)
 	}
