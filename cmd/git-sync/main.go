@@ -253,6 +253,7 @@ func setGlogFlags() {
 type repoSync struct {
 	cmd  string // the git command to run
 	root string // absolute path to the root directory
+	repo string // remote repo to sync
 }
 
 func main() {
@@ -435,6 +436,7 @@ func main() {
 	git := &repoSync{
 		cmd:  *flGitCmd,
 		root: absRoot,
+		repo: *flRepo,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -442,7 +444,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	if *flUsername != "" && *flPassword != "" {
-		if err := git.SetupAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
+		if err := git.SetupAuth(ctx, *flUsername, *flPassword); err != nil {
 			log.Error(err, "ERROR: can't set up git auth")
 			os.Exit(1)
 		}
@@ -528,7 +530,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flBranch, *flRev, *flDepth, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -781,13 +783,13 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link, branch, rev s
 }
 
 // CloneRepo does an initial clone of the git repo.
-func (git *repoSync) CloneRepo(ctx context.Context, repo, branch, rev string, depth int) error {
+func (git *repoSync) CloneRepo(ctx context.Context, branch, rev string, depth int) error {
 	args := []string{"clone", "--no-checkout", "-b", branch}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	args = append(args, repo, git.root)
-	log.V(0).Info("cloning repo", "origin", repo, "path", git.root)
+	args = append(args, git.repo, git.root)
+	log.V(0).Info("cloning repo", "origin", git.repo, "path", git.root)
 
 	_, err := runCommand(ctx, "", git.cmd, args...)
 	if err != nil {
@@ -853,7 +855,7 @@ func (git *repoSync) RevIsHash(ctx context.Context, rev string) (bool, error) {
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, repo, branch, rev string, depth int, link string, authURL string, submoduleMode string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, branch, rev string, depth int, link string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -871,7 +873,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, repo, branch, rev string, dep
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
-		err = git.CloneRepo(ctx, repo, branch, rev, depth)
+		err = git.CloneRepo(ctx, branch, rev, depth)
 		if err != nil {
 			return false, "", err
 		}
@@ -968,8 +970,8 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 }
 
 // SetupAuth configures the local git repo to use a username and password when
-// accessing the repo at gitURL.
-func (git *repoSync) SetupAuth(ctx context.Context, username, password, gitURL string) error {
+// accessing the repo.
+func (git *repoSync) SetupAuth(ctx context.Context, username, password string) error {
 	log.V(1).Info("setting up git credential store")
 
 	_, err := runCommand(ctx, "", git.cmd, "config", "--global", "credential.helper", "store")
@@ -977,7 +979,7 @@ func (git *repoSync) SetupAuth(ctx context.Context, username, password, gitURL s
 		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
-	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
+	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
 	_, err = runCommandWithStdin(ctx, "", creds, git.cmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
@@ -1081,7 +1083,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context, url string) error {
 		}
 	}
 
-	if err := git.SetupAuth(ctx, username, password, *flRepo); err != nil {
+	if err := git.SetupAuth(ctx, username, password); err != nil {
 		return err
 	}
 
