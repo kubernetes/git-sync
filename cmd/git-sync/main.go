@@ -164,10 +164,12 @@ const (
 	metricKeyNoOp    = "noop"
 )
 
+type submodulesMode string
+
 const (
-	submodulesRecursive = "recursive"
-	submodulesShallow   = "shallow"
-	submodulesOff       = "off"
+	submodulesRecursive submodulesMode = "recursive"
+	submodulesShallow   submodulesMode = "shallow"
+	submodulesOff       submodulesMode = "off"
 )
 
 func init() {
@@ -251,12 +253,13 @@ func setGlogFlags() {
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd    string // the git command to run
-	root   string // absolute path to the root directory
-	repo   string // remote repo to sync
-	branch string // remote branch to sync
-	rev    string // the rev or SHA to sync
-	depth  int    // for shallow sync
+	cmd        string         // the git command to run
+	root       string         // absolute path to the root directory
+	repo       string         // remote repo to sync
+	branch     string         // remote branch to sync
+	rev        string         // the rev or SHA to sync
+	depth      int            // for shallow sync
+	submodules submodulesMode // how to handle submodules
 }
 
 func main() {
@@ -308,7 +311,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch *flSubmodules {
+	switch submodulesMode(*flSubmodules) {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
 		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
@@ -437,12 +440,13 @@ func main() {
 
 	// Capture the various git parameters.
 	git := &repoSync{
-		cmd:    *flGitCmd,
-		root:   absRoot,
-		repo:   *flRepo,
-		branch: *flBranch,
-		rev:    *flRev,
-		depth:  *flDepth,
+		cmd:        *flGitCmd,
+		root:       absRoot,
+		repo:       *flRepo,
+		branch:     *flBranch,
+		rev:        *flRev,
+		depth:      *flDepth,
+		submodules: submodulesMode(*flSubmodules),
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -536,7 +540,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := git.SyncRepo(ctx, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, *flLink, *flAskPassURL); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -678,7 +682,7 @@ func setRepoReady() {
 }
 
 // AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash string, submoduleMode string) error {
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash string) error {
 	log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -727,10 +731,10 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, link string, hash s
 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
-	if submoduleMode != submodulesOff {
+	if git.submodules != submodulesOff {
 		log.V(0).Info("updating submodules")
 		submodulesArgs := []string{"submodule", "update", "--init"}
-		if submoduleMode == submodulesRecursive {
+		if git.submodules == submodulesRecursive {
 			submodulesArgs = append(submodulesArgs, "--recursive")
 		}
 		if git.depth != 0 {
@@ -861,7 +865,7 @@ func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string, submoduleMode string) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string) (bool, string, error) {
 	if authURL != "" {
 		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
 		// re-fetched each time.
@@ -903,7 +907,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, link string, authURL string, 
 		hash = remote
 	}
 
-	return true, hash, git.AddWorktreeAndSwap(ctx, link, hash, submoduleMode)
+	return true, hash, git.AddWorktreeAndSwap(ctx, link, hash)
 }
 
 // GetRevs returns the local and upstream hashes for rev.
