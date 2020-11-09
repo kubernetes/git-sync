@@ -18,6 +18,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,5 +142,11 @@ func TestEnvDuration(t *testing.T) {
 		if val != testCase.exp {
 			t.Fatalf("expected %v but %v returned", testCase.exp, val)
 		}
+	}
+}
+
+func TestManualHasNoTabs(t *testing.T) {
+	if strings.Contains(manual, "\t") {
+		t.Fatal("the manual text contains a tab")
 	}
 }
