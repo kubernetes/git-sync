@@ -19,6 +19,7 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 const (
@@ -93,6 +94,50 @@ func TestEnvInt(t *testing.T) {
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
 		val := envInt(testKey, testCase.def)
+		if val != testCase.exp {
+			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+		}
+	}
+}
+
+func TestEnvFloat(t *testing.T) {
+	cases := []struct {
+		value string
+		def   float64
+		exp   float64
+	}{
+		{"0.5", 0, 0.5},
+		{"", 0.5, 0.5},
+		{"-0.5", 0, -0.5},
+		{"abcd", 0.5, 0.5},
+		{"abcd", 1.5, 1.5},
+	}
+
+	for _, testCase := range cases {
+		os.Setenv(testKey, testCase.value)
+		val := envFloat(testKey, testCase.def)
+		if val != testCase.exp {
+			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+		}
+	}
+}
+
+func TestEnvDuration(t *testing.T) {
+	cases := []struct {
+		value string
+		def   time.Duration
+		exp   time.Duration
+	}{
+		{"1s", 0, time.Second},
+		{"", time.Minute, time.Minute},
+		{"1h", 0, time.Hour},
+		{"abcd", time.Second, time.Second},
+		{"abcd", time.Minute, time.Minute},
+	}
+
+	for _, testCase := range cases {
+		os.Setenv(testKey, testCase.value)
+		val := envDuration(testKey, testCase.def)
 		if val != testCase.exp {
 			t.Fatalf("expected %v but %v returned", testCase.exp, val)
 		}
