@@ -398,6 +398,16 @@ func main() {
 		}
 	}
 
+	if err := os.MkdirAll(*flRoot, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: can't make root dir: %v", err)
+		os.Exit(1)
+	}
+	absRoot, err := normalizePath(*flRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: can't normalize root path: %v", err)
+		os.Exit(1)
+	}
+
 	if *flAddUser {
 		if err := addUser(); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: can't write to /etc/passwd: %v\n", err)
@@ -496,7 +506,7 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flLink, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, absRoot, *flLink, *flAskPassURL, *flSubmodules); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
@@ -523,7 +533,7 @@ func main() {
 			if *flOneTime {
 				os.Exit(0)
 			}
-			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
+			if isHash, err := revIsHash(ctx, *flRev, absRoot); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
 				os.Exit(1)
 			} else if isHash {
@@ -538,6 +548,18 @@ func main() {
 		cancel()
 		time.Sleep(*flPeriod)
 	}
+}
+
+func normalizePath(path string) (string, error) {
+	delinked, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(delinked)
+	if err != nil {
+		return "", err
+	}
+	return abs, nil
 }
 
 func updateSyncMetrics(key string, start time.Time) {

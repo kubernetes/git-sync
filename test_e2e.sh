@@ -144,10 +144,30 @@ function remove_containers() {
 }
 
 ##############################################
-# Test HEAD one-time
+# Test HEAD one-time when root doesn't exist
 ##############################################
-testcase "head-once"
-# First sync
+testcase "head-once-root-doesnt-exist"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+rm -rf "$ROOT" # remove the root to test
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test HEAD one-time when root exists
+##############################################
+testcase "head-once-root-exists"
 echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
@@ -156,6 +176,47 @@ GIT_SYNC \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test HEAD one-time with a weird --root flag
+##############################################
+testcase "head-once-root-flag-is-weird"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="../../../../../$ROOT/../../../../../../$ROOT" \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test HEAD one-time with a symlink in --root
+##############################################
+testcase "head-once-root-flag-has-symlink"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+ln -s "$ROOT" "$DIR/rootlink" # symlink to test
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$DIR/rootlink" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
