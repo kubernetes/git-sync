@@ -264,6 +264,10 @@ func main() {
 		os.Exit(127)
 	}
 
+	//
+	// Parse and verify flags.  Errors here are fatal.
+	//
+
 	pflag.Parse()
 	flag.CommandLine.Parse(nil) // Otherwise glog complains
 	setGlogFlags()
@@ -362,11 +366,6 @@ func main() {
 		}
 	}
 
-	if _, err := exec.LookPath(*flGitCmd); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: git executable %q not found: %v\n", *flGitCmd, err)
-		os.Exit(1)
-	}
-
 	if *flSSH {
 		if *flUsername != "" {
 			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --username may be specified\n")
@@ -398,19 +397,30 @@ func main() {
 		}
 	}
 
+	// From here on, output goes through logging.
+	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
+
+	if _, err := exec.LookPath(*flGitCmd); err != nil {
+		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
+		os.Exit(1)
+	}
+
 	if err := os.MkdirAll(*flRoot, 0700); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't make root dir: %v", err)
+		log.Error(err, "ERROR: can't make root dir", "path", *flRoot)
 		os.Exit(1)
 	}
 	absRoot, err := normalizePath(*flRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't normalize root path: %v", err)
+		log.Error(err, "ERROR: can't normalize root path", "path", *flRoot)
 		os.Exit(1)
+	}
+	if absRoot != *flRoot {
+		log.V(0).Info("normalized root path", "path", *flRoot, "result", absRoot)
 	}
 
 	if *flAddUser {
 		if err := addUser(); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't write to /etc/passwd: %v\n", err)
+			log.Error(err, "ERROR: can't add user")
 			os.Exit(1)
 		}
 	}
@@ -421,21 +431,21 @@ func main() {
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
+			log.Error(err, "ERROR: can't set up git auth")
 			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
+			log.Error(err, "ERROR: can't set up git SSH")
 			os.Exit(1)
 		}
 	}
 
 	if *flCookieFile {
 		if err := setupGitCookieFile(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
+			log.Error(err, "ERROR: can't set up git cookie file")
 			os.Exit(1)
 		}
 	}
@@ -443,7 +453,7 @@ func main() {
 	if *flAskPassURL != "" {
 		if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
-			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
+			log.Error(err, "ERROR: failed to call ASKPASS callback URL", "url", *flAskPassURL)
 			os.Exit(1)
 		}
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
@@ -455,37 +465,37 @@ func main() {
 	if *flHTTPBind != "" {
 		ln, err := net.Listen("tcp", *flHTTPBind)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: unable to bind HTTP endpoint: %v\n", err)
+			log.Error(err, "ERROR: failed to bind HTTP endpoint", "endpoint", *flHTTPBind)
 			os.Exit(1)
 		}
 		mux := http.NewServeMux()
+		if *flHTTPMetrics {
+			mux.Handle("/metrics", promhttp.Handler())
+		}
+
+		if *flHTTPprof {
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		}
+
+		// This is a dumb liveliness check endpoint. Currently this checks
+		// nothing and will always return 200 if the process is live.
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if !getRepoReady() {
+				http.Error(w, "repo is not ready", http.StatusServiceUnavailable)
+			}
+			// Otherwise success
+		})
+		log.V(0).Info("serving HTTP", "endpoint", *flHTTPBind)
 		go func() {
-			if *flHTTPMetrics {
-				mux.Handle("/metrics", promhttp.Handler())
-			}
-
-			if *flHTTPprof {
-				mux.HandleFunc("/debug/pprof/", pprof.Index)
-				mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-				mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-				mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-				mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-			}
-
-			// This is a dumb liveliness check endpoint. Currently this checks
-			// nothing and will always return 200 if the process is live.
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				if !getRepoReady() {
-					http.Error(w, "repo is not ready", http.StatusServiceUnavailable)
-				}
-				// Otherwise success
-			})
-			http.Serve(ln, mux)
+			err := http.Serve(ln, mux)
+			log.Error(err, "HTTP server terminated")
+			os.Exit(1)
 		}()
 	}
-
-	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
 	var webhook *Webhook
