@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -237,5 +239,125 @@ func TestParseGitConfigs(t *testing.T) {
 				t.Errorf("bad result: expected %v, got %v", tc.expect, kvs)
 			}
 		})
+	}
+}
+
+func TestDirIsEmpty(t *testing.T) {
+	root, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("failed to make a temp dir: %v", err)
+	}
+
+	// Brand new should be empty.
+	if empty, err := dirIsEmpty(root); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if !empty {
+		t.Errorf("expected %q to be deemed empty", root)
+	}
+
+	// Holding normal files should not be empty.
+	dir := filepath.Join(root, "files")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatalf("failed to make a temp subdir: %v", err)
+	}
+	for _, file := range []string{"a", "b", "c"} {
+		path := filepath.Join(dir, file)
+		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+			t.Fatalf("failed to write a file: %v", err)
+		}
+		if empty, err := dirIsEmpty(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		} else if empty {
+			t.Errorf("expected %q to be deemed not-empty", dir)
+		}
+	}
+
+	// Holding dot-files should not be empty.
+	dir = filepath.Join(root, "dot-files")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatalf("failed to make a temp subdir: %v", err)
+	}
+	for _, file := range []string{".a", ".b", ".c"} {
+		path := filepath.Join(dir, file)
+		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+			t.Fatalf("failed to write a file: %v", err)
+		}
+		if empty, err := dirIsEmpty(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		} else if empty {
+			t.Errorf("expected %q to be deemed not-empty", dir)
+		}
+	}
+
+	// Holding dirs should not be empty.
+	dir = filepath.Join(root, "dirs")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatalf("failed to make a temp subdir: %v", err)
+	}
+	for _, subdir := range []string{"a", "b", "c"} {
+		path := filepath.Join(dir, subdir)
+		if err := os.Mkdir(path, 0755); err != nil {
+			t.Fatalf("failed to make a subdir: %v", err)
+		}
+		if empty, err := dirIsEmpty(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		} else if empty {
+			t.Errorf("expected %q to be deemed not-empty", dir)
+		}
+	}
+
+	// Test error path.
+	if _, err := dirIsEmpty(filepath.Join(root, "does-not-exist")); err == nil {
+		t.Errorf("unexpected success for non-existent dir")
+	}
+}
+
+func TestRemoveDirContents(t *testing.T) {
+	root, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("failed to make a temp dir: %v", err)
+	}
+
+	// Brand new should be empty.
+	if empty, err := dirIsEmpty(root); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if !empty {
+		t.Errorf("expected %q to be deemed empty", root)
+	}
+
+	// Test removal.
+	if err := removeDirContents(root); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Populate the dir.
+	for _, file := range []string{"f1", "f2", ".f3", ".f4"} {
+		path := filepath.Join(root, file)
+		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+			t.Fatalf("failed to write a file: %v", err)
+		}
+	}
+	for _, subdir := range []string{"d1", "d2", "d3"} {
+		path := filepath.Join(root, subdir)
+		if err := os.Mkdir(path, 0755); err != nil {
+			t.Fatalf("failed to make a subdir: %v", err)
+		}
+	}
+
+	// It should be deemed not-empty
+	if empty, err := dirIsEmpty(root); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if empty {
+		t.Errorf("expected %q to be deemed not-empty", root)
+	}
+
+	// Test removal.
+	if err := removeDirContents(root); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Test error path.
+	if err := removeDirContents(filepath.Join(root, "does-not-exist")); err == nil {
+		t.Errorf("unexpected success for non-existent dir")
 	}
 }
