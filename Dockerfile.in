@@ -24,14 +24,20 @@ RUN apt-get update \
         openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# By default we will run as this user...
+# Run as non-root by default.  There's simply no reason to run as root.
+USER 65533:65533
+
+# Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
-# ...but the user might choose a different UID and pass --add-user
-# which needs to be able to write to /etc/passwd.
+# A user might choose a different UID and set the --add-user flag, which needs
+# to be able to write to /etc/passwd.
 RUN chmod 0666 /etc/passwd
 
-ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
-
+# Setting HOME ensures that whatever UID this ultimately runs as can write to
+# files like ~/.gitconfig.
+ENV HOME=/tmp
 WORKDIR /tmp
-USER 65533:65533
+
+# Just dump the binary in the root.
+ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 ENTRYPOINT ["/{ARG_BIN}"]
