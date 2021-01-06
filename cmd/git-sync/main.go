@@ -414,7 +414,12 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
+	log.V(0).Info("starting up",
+		"pid", os.Getpid(),
+		"uid", os.Getuid(),
+		"gid", os.Getgid(),
+		"home", os.Getenv("HOME"),
+		"args", os.Args)
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
