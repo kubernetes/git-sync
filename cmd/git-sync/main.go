@@ -180,12 +180,12 @@ func envBool(key string, def bool) bool {
 
 func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
-		val, err := strconv.Atoi(env)
+		val, err := strconv.ParseInt(env, 0, 0)
 		if err != nil {
 			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
 			return def
 		}
-		return val
+		return int(val)
 	}
 	return def
 }
