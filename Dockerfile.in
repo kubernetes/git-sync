@@ -12,6 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# HOW TO USE THIS CONTAINER:
+#
+# For most users, the simplest way to use this container is to mount a volume
+# on /git.  The only commandline argument (or env var) that is really required
+# is `--repo` ($GIT_SYNC_REPO).  Everything else is optional (run this with
+# `--man` for details).
+#
+# This container will run as UID:GID 65533:65533 by default, and unless you
+# change that, you do not need to think about permissions much.  If you run
+# into permissions problems, this might help:
+#
+#  - User does not mount a volume
+#    => should work, but limited utility
+#
+#  - User mounts a new docker volume on /git
+#    => should work
+#
+#  - User mounts an existing docker volume on /git
+#    => if the volume already exists with compatible permissions it should work
+#    => if the volume already exists with different permissions you can either
+#       set the container UID or GID(s) or you can chown the volume
+#
+#  - User mounts an existing dir on /git
+#    => set container UID or GID(s) to be able to access that dir
+#
+#  - User sets a different UID and git-sync GID
+#    => should work
+#
+#  - User sets a different GID
+#    => either add the git-sync GID or else set --root, mount a volume,
+#       and manage volume permissions to access that volume
+
 FROM {ARG_FROM}
 
 RUN apt-get update \
@@ -24,14 +56,27 @@ RUN apt-get update \
         openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Run as non-root by default.  There's simply no reason to run as root.
-USER 65533:65533
-
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
 # A user might choose a different UID and set the --add-user flag, which needs
 # to be able to write to /etc/passwd.
 RUN chmod 0666 /etc/passwd
+
+# Add the default GID to /etc/group for completeness.
+RUN echo "git-sync:x:65533:git-sync" >> /etc/group
+
+# Make a directory that can be used to mount volumes.  Git-sync itself does not
+# default the --root ($GIT_SYNC_ROOT) flag, but we can set a default here,
+# which makes the container image easier to use.  Setting the mode to include
+# group-write allows users to run this image as a different user, as long as
+# they use our git-sync group.  If the user needs a different group or sets
+# $GIT_SYNC_ROOT or --root, their values will override this, and we assume they
+# are handling permissions themselves.
+ENV GIT_SYNC_ROOT=/git
+RUN mkdir -m 02775 /git && chown 65533:65533 /git
+
+# Run as non-root by default.  There's simply no reason to run as root.
+USER 65533:65533
 
 # Setting HOME ensures that whatever UID this ultimately runs as can write to
 # files like ~/.gitconfig.
