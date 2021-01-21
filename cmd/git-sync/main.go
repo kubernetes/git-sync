@@ -1517,6 +1517,12 @@ OPTIONS
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
+    --error-file, $GIT_SYNC_ERROR_FILE
+            The name of a file (under --root) into which errors will be
+            written. This must be a filename, not a path, and may not start
+            with a period. (default: "", which means error reporting will be
+            disabled)
+
     --depth <int>, $GIT_SYNC_DEPTH
             Create a shallow clone with history truncated to the specified
             number of commits.
@@ -1576,7 +1582,7 @@ OPTIONS
 
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
-            10ms.  This flag obsoletes --wait, but if --wait is specifed, it
+            10ms.  This flag obsoletes --wait, but if --wait is specified, it
             will take precedence. (default: 10s)
 
     --repo <string>, $GIT_SYNC_REPO
