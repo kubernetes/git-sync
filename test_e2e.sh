@@ -52,12 +52,31 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
-NCPORT=8888
-function freencport() {
-  while :; do
-    NCPORT=$((RANDOM+2000))
-    ss -lpn | grep -q ":$NCPORT " || break
-  done
+# Helper: run a docker container.
+function docker_run() {
+    docker run \
+        -d \
+        --rm \
+        --label git-sync-e2e="$RUNID" \
+        "$@"
+    sleep 2 # wait for it to come up
+}
+
+# Helper: get the IP of a docker container.
+function docker_ip() {
+    if [ -z "$1" ]; then
+        echo "usage: $0 <id>"
+        return 1
+    fi
+    docker inspect "$1" | jq -r .[0].NetworkSettings.IPAddress
+}
+
+function docker_kill() {
+    if [ -z "$1" ]; then
+        echo "usage: $0 <id>"
+        return 1
+    fi
+    docker kill "$1" >/dev/null
 }
 
 # #####################
@@ -78,7 +97,9 @@ if [[ -z "$DIR" ]]; then
     echo "Failed to make a temp dir"
     exit 1
 fi
+echo
 echo "test root is $DIR"
+echo
 
 REPO="$DIR/repo"
 function init_repo() {
@@ -104,7 +125,8 @@ cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 function finish() {
   if [ $? -ne 0 ]; then
-    echo "The directory $DIR was not removed as it contains"\
+    echo
+    echo "the directory $DIR was not removed as it contains"\
          "log files useful for debugging"
   fi
   remove_containers
@@ -641,19 +663,15 @@ pass
 ##############################################
 testcase "askpass_url"
 echo "$TESTCASE 1" > "$REPO"/file
-freencport
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker_run \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong"')
+IP=$(docker_ip "$CTR")
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
     --branch=master \
@@ -661,26 +679,26 @@ GIT_SYNC \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
+docker_kill "$CTR"
 # check for failure
 assert_file_absent "$ROOT"/link/file
+
 # run with askpass_url service with correct password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker_run \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password"')
+IP=$(docker_ip "$CTR")
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
     --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
+docker_kill "$CTR"
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -723,42 +741,86 @@ pass
 # Test webhook success
 ##############################################
 testcase "webhook-success"
-freencport
+HITLOG="$DIR/hitlog.$TESTCASE"
 # First sync
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n"')
+IP=$(docker_ip "$CTR")
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
-    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-url="http://$IP" \
     --webhook-success-status=200 \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 1 not called, server still running"
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 1 called $HITS times"
 fi
 # Move forward
+cat /dev/null > "$HITLOG"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-# return a failure to ensure that we try again
-{ (echo -e "HTTP/1.1 500 Internal Server Error\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 2 not called, server still running"
+# check that another call works
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 2 called $HITS times"
 fi
+docker_kill "$CTR"
+# Wrap up
+pass
+
+##############################################
+# Test webhook fail-retry
+##############################################
+testcase "webhook-fail-retry"
+HITLOG="$DIR/hitlog.$TESTCASE"
+# First sync - return a failure to ensure that we try again
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 500 Internal Server Error\r\n"')
+IP=$(docker_ip "$CTR")
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --period=100ms \
+    --repo="file://$REPO" \
+    --root="$ROOT" \
+    --webhook-url="http://$IP" \
+    --webhook-success-status=200 \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+# Check that webhook was called
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 1 called $HITS times"
+fi
+docker_kill "$CTR"
 # Now return 200, ensure that it gets called
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 3 not called, server still running"
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    --ip="$IP" \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n"')
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 2 called $HITS times"
 fi
+docker_kill "$CTR"
 # Wrap up
 pass
 
@@ -766,7 +828,14 @@ pass
 # Test webhook fire-and-forget
 ##############################################
 testcase "webhook-fire-and-forget"
-freencport
+HITLOG="$DIR/hitlog.$TESTCASE"
+# First sync
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 404 Not Found\r\n"')
+IP=$(docker_ip "$CTR")
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
@@ -774,17 +843,17 @@ GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
     --root="$ROOT" \
-    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-url="http://$IP" \
     --webhook-success-status=-1 \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
-{ (echo -e "HTTP/1.1 404 Not Found\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 1 not called, server still running"
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook called $HITS times"
 fi
+docker_kill "$CTR"
 # Wrap up
 pass
 
@@ -1084,15 +1153,11 @@ pass
 testcase "ssh"
 echo "$TESTCASE" > "$REPO"/file
 # Run a git-over-SSH server
-CTR=$(docker run \
-    -d \
-    --rm \
-    --label git-sync-e2e="$RUNID" \
+CTR=$(docker_run \
     -v "$DOT_SSH":/dot_ssh:ro \
     -v "$REPO":/src:ro \
     e2e/test/test-sshd)
-sleep 3 # wait for sshd to come up
-IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
+IP=$(docker_ip "$CTR")
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
@@ -1110,5 +1175,6 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
-echo "cleaning up $DIR"
+echo
+echo "all tests passed: cleaning up $DIR"
 rm -rf "$DIR"
