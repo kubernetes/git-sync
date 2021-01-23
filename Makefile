@@ -181,6 +181,7 @@ test: $(BUILD_DIRS)
 
 test-tools:
 	@docker build -t $(REGISTRY)/test/test-sshd _test_tools/sshd
+	@docker build -t $(REGISTRY)/test/test-ncsvr _test_tools/ncsvr
 
 # Help set up multi-arch build tools.  This assumes you have the tools
 # installed.  If you already have a buildx builder available, you don't need
