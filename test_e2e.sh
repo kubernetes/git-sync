@@ -52,12 +52,31 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
-NCPORT=8888
-function freencport() {
-  while :; do
-    NCPORT=$((RANDOM+2000))
-    ss -lpn | grep -q ":$NCPORT " || break
-  done
+# Helper: run a docker container.
+function docker_run() {
+    docker run \
+        -d \
+        --rm \
+        --label git-sync-e2e="$RUNID" \
+        "$@"
+    sleep 2 # wait for it to come up
+}
+
+# Helper: get the IP of a docker container.
+function docker_ip() {
+    if [ -z "$1" ]; then
+        echo "usage: $0 <id>"
+        return 1
+    fi
+    docker inspect "$1" | jq -r .[0].NetworkSettings.IPAddress
+}
+
+function docker_kill() {
+    if [ -z "$1" ]; then
+        echo "usage: $0 <id>"
+        return 1
+    fi
+    docker kill "$1" >/dev/null
 }
 
 # #####################
@@ -78,13 +97,15 @@ if [[ -z "$DIR" ]]; then
     echo "Failed to make a temp dir"
     exit 1
 fi
+echo
 echo "test root is $DIR"
+echo
 
 REPO="$DIR/repo"
 function init_repo() {
     rm -rf "$REPO"
     mkdir -p "$REPO"
-    git -C "$REPO" init -q -b master
+    git -C "$REPO" init -q -b e2e-branch
     touch "$REPO"/file
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
@@ -104,7 +125,8 @@ cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 function finish() {
   if [ $? -ne 0 ]; then
-    echo "The directory $DIR was not removed as it contains"\
+    echo
+    echo "the directory $DIR was not removed as it contains"\
          "log files useful for debugging"
   fi
   remove_containers
@@ -153,7 +175,7 @@ rm -rf "$ROOT" # remove the root to test
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -173,7 +195,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -193,7 +215,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="../../../../../$ROOT/../../../../../../$ROOT" \
     --link="link" \
@@ -214,7 +236,7 @@ ln -s "$ROOT" "$DIR/rootlink" # symlink to test
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$DIR/rootlink" \
     --link="link" \
@@ -226,12 +248,13 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 pass
 
 ##############################################
-# Test default syncing
+# Test default syncing (master)
 ##############################################
-testcase "default-sync"
+testcase "default-sync-master"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
+git -C "$REPO" checkout -q -b master
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
@@ -268,7 +291,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -302,7 +325,7 @@ BRANCH="$TESTCASE"--BRANCH
 git -C "$REPO" checkout -q -b "$BRANCH"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
-git -C "$REPO" checkout -q master
+git -C "$REPO" checkout -q e2e-branch
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
@@ -318,7 +341,7 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 git -C "$REPO" checkout -q "$BRANCH"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-git -C "$REPO" checkout -q master
+git -C "$REPO" checkout -q e2e-branch
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -326,7 +349,7 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move the branch backward
 git -C "$REPO" checkout -q "$BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
-git -C "$REPO" checkout -q master
+git -C "$REPO" checkout -q e2e-branch
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -346,6 +369,7 @@ git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --rev="$TAG" \
     --root="$ROOT" \
     --link="link" \
@@ -391,6 +415,7 @@ git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --rev="$TAG" \
     --root="$ROOT" \
     --link="link" \
@@ -435,6 +460,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --rev="$REV" \
     --root="$ROOT" \
     --link="link" \
@@ -470,6 +496,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --rev="$REV" \
     --root="$ROOT" \
     --link="link" \
@@ -490,6 +517,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
@@ -502,6 +530,7 @@ rm -f "$ROOT"/link
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
@@ -523,6 +552,7 @@ GIT_SYNC \
     --one-time \
     --sync-timeout=1s \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
@@ -534,6 +564,7 @@ GIT_SYNC \
     --period=100ms \
     --sync-timeout=16s \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -562,6 +593,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --link="link" \
@@ -611,7 +643,7 @@ GIT_SYNC \
     --password="wrong" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -625,7 +657,7 @@ GIT_SYNC \
     --password="my-password" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -641,46 +673,42 @@ pass
 ##############################################
 testcase "askpass_url"
 echo "$TESTCASE 1" > "$REPO"/file
-freencport
 git -C "$REPO" commit -qam "$TESTCASE 1"
 # run the askpass_url service with wrong password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker_run \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong"')
+IP=$(docker_ip "$CTR")
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
+docker_kill "$CTR"
 # check for failure
 assert_file_absent "$ROOT"/link/file
+
 # run with askpass_url service with correct password
-{ (
-    for i in 1 2; do
-        echo -e 'HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password' \
-            | nc -N -l $NCPORT > /dev/null;
-    done
-  ) &
-}
+CTR=$(docker_run \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password"')
+IP=$(docker_ip "$CTR")
 GIT_SYNC \
     --git="$ASKPASS_GIT" \
-    --askpass-url="http://localhost:$NCPORT/git_askpass" \
+    --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
+docker_kill "$CTR"
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -697,6 +725,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     --sync-hook-command="$SYNC_HOOK_COMMAND" \
@@ -723,42 +752,88 @@ pass
 # Test webhook success
 ##############################################
 testcase "webhook-success"
-freencport
+HITLOG="$DIR/hitlog.$TESTCASE"
 # First sync
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n"')
+IP=$(docker_ip "$CTR")
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
-    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-url="http://$IP" \
     --webhook-success-status=200 \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 1 not called, server still running"
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 1 called $HITS times"
 fi
 # Move forward
+cat /dev/null > "$HITLOG"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-# return a failure to ensure that we try again
-{ (echo -e "HTTP/1.1 500 Internal Server Error\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 2 not called, server still running"
+# check that another call works
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 2 called $HITS times"
 fi
+docker_kill "$CTR"
+# Wrap up
+pass
+
+##############################################
+# Test webhook fail-retry
+##############################################
+testcase "webhook-fail-retry"
+HITLOG="$DIR/hitlog.$TESTCASE"
+# First sync - return a failure to ensure that we try again
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 500 Internal Server Error\r\n"')
+IP=$(docker_ip "$CTR")
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --period=100ms \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --root="$ROOT" \
+    --webhook-url="http://$IP" \
+    --webhook-success-status=200 \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+# Check that webhook was called
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 1 called $HITS times"
+fi
+docker_kill "$CTR"
 # Now return 200, ensure that it gets called
-{ (echo -e "HTTP/1.1 200 OK\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 3 not called, server still running"
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    --ip="$IP" \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 200 OK\r\n"')
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook 2 called $HITS times"
 fi
+docker_kill "$CTR"
 # Wrap up
 pass
 
@@ -766,25 +841,33 @@ pass
 # Test webhook fire-and-forget
 ##############################################
 testcase "webhook-fire-and-forget"
-freencport
+HITLOG="$DIR/hitlog.$TESTCASE"
+# First sync
+cat /dev/null > "$HITLOG"
+CTR=$(docker_run \
+    -v "$HITLOG":/var/log/hits \
+    e2e/test/test-ncsvr \
+    80 'echo -e "HTTP/1.1 404 Not Found\r\n"')
+IP=$(docker_ip "$CTR")
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
-    --webhook-url="http://127.0.0.1:$NCPORT" \
+    --webhook-url="http://$IP" \
     --webhook-success-status=-1 \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # check that basic call works
-{ (echo -e "HTTP/1.1 404 Not Found\r\n" | nc -q1 -l $NCPORT > /dev/null) &}
-NCPID=$!
-sleep 3
-if kill -0 $NCPID > /dev/null 2>&1; then
-    fail "webhook 1 not called, server still running"
+sleep 2
+HITS=$(cat "$HITLOG" | wc -l)
+if [ "$HITS" -lt 1 ]; then
+    fail "webhook called $HITS times"
 fi
+docker_kill "$CTR"
 # Wrap up
 pass
 
@@ -800,6 +883,7 @@ GIT_SYNC \
     --git="$SLOW_GIT" \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
     --http-metrics \
@@ -840,7 +924,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b master
+git -C "$SUBMODULE" init -q -b e2e-branch
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -850,7 +934,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q -b master
+git -C "$NESTED_SUBMODULE" init -q -b e2e-branch
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -861,6 +945,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -935,7 +1020,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b master
+git -C "$SUBMODULE" init -q -b e2e-branch
 
 # First sync
 expected_depth="1"
@@ -948,6 +1033,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --link="link" \
@@ -1011,7 +1097,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b master
+git -C "$SUBMODULE" init -q -b e2e-branch
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -1023,6 +1109,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     --submodules=off \
@@ -1042,7 +1129,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b master
+git -C "$SUBMODULE" init -q -b e2e-branch
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -1051,7 +1138,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q -b master
+git -C "$NESTED_SUBMODULE" init -q -b e2e-branch
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -1065,6 +1152,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
+    --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
     --submodules=shallow \
@@ -1084,20 +1172,16 @@ pass
 testcase "ssh"
 echo "$TESTCASE" > "$REPO"/file
 # Run a git-over-SSH server
-CTR=$(docker run \
-    -d \
-    --rm \
-    --label git-sync-e2e="$RUNID" \
+CTR=$(docker_run \
     -v "$DOT_SSH":/dot_ssh:ro \
     -v "$REPO":/src:ro \
     e2e/test/test-sshd)
-sleep 3 # wait for sshd to come up
-IP=$(docker inspect "$CTR" | jq -r .[0].NetworkSettings.IPAddress)
+IP=$(docker_ip "$CTR")
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="test@$IP:/src" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -1110,5 +1194,6 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
-echo "cleaning up $DIR"
+echo
+echo "all tests passed: cleaning up $DIR"
 rm -rf "$DIR"
