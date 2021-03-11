@@ -255,6 +255,33 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 pass
 
 ##############################################
+# Test non-zero exit
+##############################################
+testcase "non-zero-exit"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+ln -s "$ROOT" "$DIR/rootlink" # symlink to test
+(
+  set +o errexit
+  GIT_SYNC \
+      --one-time \
+      --repo="file://$REPO" \
+      --branch=e2e-branch \
+      --rev=does-not-exit \
+      --root="$DIR/rootlink" \
+      --link="link" \
+      > "$DIR"/log."$TESTCASE" 2>&1
+  RET=$?
+  if [[ "$RET" != 1 ]]; then
+      fail "expected exit code 1, got $RET"
+  fi
+  assert_file_absent "$ROOT"/link
+  assert_file_absent "$ROOT"/link/file
+)
+# Wrap up
+pass
+
+##############################################
 # Test default syncing (master)
 ##############################################
 testcase "default-sync-master"
