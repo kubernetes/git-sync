@@ -18,6 +18,7 @@ package main
 
 import (
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -96,5 +97,93 @@ func TestEnvInt(t *testing.T) {
 		if val != testCase.exp {
 			t.Fatalf("expected %v but %v returned", testCase.exp, val)
 		}
+	}
+}
+
+func TestParseGitConfigs(t *testing.T) {
+	cases := []struct {
+		name   string
+		input  string
+		expect []keyVal
+		fail   bool
+	}{{
+		name:   "empty",
+		input:  ``,
+		expect: []keyVal{},
+	}, {
+		name:   "one-pair",
+		input:  `k:v`,
+		expect: []keyVal{keyVal{"k", "v"}},
+	}, {
+		name:   "one-pair-qval",
+		input:  `k:"v"`,
+		expect: []keyVal{keyVal{"k", "v"}},
+	}, {
+		name:  "garbage",
+		input: `abc123`,
+		fail:  true,
+	}, {
+		name:  "invalid-val",
+		input: `k:v\xv`,
+		fail:  true,
+	}, {
+		name:  "invalid-qval",
+		input: `k:"v\xv"`,
+		fail:  true,
+	}, {
+		name:   "two-pair",
+		input:  `k1:v1,k2:v2`,
+		expect: []keyVal{{"k1", "v1"}, {"k2", "v2"}},
+	}, {
+		name:   "val-spaces",
+		input:  `k1:v 1,k2:v 2`,
+		expect: []keyVal{{"k1", "v 1"}, {"k2", "v 2"}},
+	}, {
+		name:   "qval-spaces",
+		input:  `k1:" v 1 ",k2:" v 2 "`,
+		expect: []keyVal{{"k1", " v 1 "}, {"k2", " v 2 "}},
+	}, {
+		name:   "mix-val-qval",
+		input:  `k1:v 1,k2:" v 2 "`,
+		expect: []keyVal{{"k1", "v 1"}, {"k2", " v 2 "}},
+	}, {
+		name:  "garbage-after-qval",
+		input: `k1:"v1"x,k2:"v2"`,
+		fail:  true,
+	}, {
+		name:   "dangling-comma",
+		input:  `k1:"v1",k2:"v2",`,
+		expect: []keyVal{{"k1", "v1"}, {"k2", "v2"}},
+	}, {
+		name:   "val-escapes",
+		input:  `k1:v\n\t\\\"\,1`,
+		expect: []keyVal{{"k1", "v\n\t\\\",1"}},
+	}, {
+		name:   "qval-escapes",
+		input:  `k1:"v\n\t\\\"\,1"`,
+		expect: []keyVal{{"k1", "v\n\t\\\",1"}},
+	}, {
+		name:   "qval-comma",
+		input:  `k1:"v,1"`,
+		expect: []keyVal{{"k1", "v,1"}},
+	}, {
+		name:  "qval-missing-close",
+		input: `k1:"v1`,
+		fail:  true,
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kvs, err := parseGitConfigs(tc.input)
+			if err != nil && !tc.fail {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if err == nil && tc.fail {
+				t.Errorf("unexpected success")
+			}
+			if !reflect.DeepEqual(kvs, tc.expect) {
+				t.Errorf("bad result: expected %v, got %v", tc.expect, kvs)
+			}
+		})
 	}
 }
