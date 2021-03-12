@@ -602,7 +602,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	}
 
 	// Make a worktree for this exact git hash.
-	worktreePath := filepath.Join(gitRoot, "rev-"+hash)
+	worktreePath := filepath.Join(gitRoot, hash)
 	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
