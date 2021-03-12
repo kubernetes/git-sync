@@ -704,7 +704,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	// Make a worktree for this exact git hash.
-	worktreePath := filepath.Join(git.root, "rev-"+hash)
+	worktreePath := filepath.Join(git.root, hash)
 	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch)
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
 	if err != nil {
@@ -1167,7 +1167,9 @@ OPTIONS
     --link <string>, $GIT_SYNC_LINK
             The name of the final symlink (under --root) which will point to the
             current git worktree. This must be a filename, not a path, and may
-            not start with a period. (default: the leaf dir of --repo)
+            not start with a period. The destination of this link (i.e.
+            readlink()) is the currently checked out SHA. (default: the leaf
+            dir of --repo)
 
     --git <string>, $GIT_SYNC_GIT
             The git command to run (subject to PATH search, mostly for testing).
