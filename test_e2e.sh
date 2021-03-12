@@ -33,6 +33,13 @@ function assert_link_exists() {
     fi
 }
 
+function assert_link_eq() {
+    if [[ $(readlink "$1") == "$2" ]]; then
+        return
+    fi
+    fail "link $1 does not point to '$2': $(readlink $1)"
+}
+
 function assert_file_exists() {
     if ! [[ -f "$1" ]]; then
         fail "$1 does not exist"
@@ -252,6 +259,38 @@ sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
+# Wrap up
+pass
+
+##############################################
+# Test readlink
+##############################################
+testcase "readlink"
+# First sync
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --wait=0.1 \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+# Move HEAD forward
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+# Move HEAD backward
+git -C "$REPO" reset -q --hard HEAD^
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
 # Wrap up
 pass
 
