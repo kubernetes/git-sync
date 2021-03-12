@@ -128,6 +128,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
 	@docker buildx build \
+	    --no-cache \
 	    --load \
 	    --platform "$(OS)/$(ARCH)" \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY) \
