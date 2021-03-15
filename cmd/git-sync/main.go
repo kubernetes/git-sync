@@ -271,12 +271,9 @@ func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
 		fmt.Fprintf(os.Stderr, "INFO: detected pid 1, running init handler\n")
-		err := pid1.ReRun()
+		code, err := pid1.ReRun()
 		if err == nil {
-			os.Exit(0)
-		}
-		if exerr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exerr.ExitCode())
+			os.Exit(code)
 		}
 		fmt.Fprintf(os.Stderr, "ERROR: unhandled pid1 error: %v\n", err)
 		os.Exit(127)
