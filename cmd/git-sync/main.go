@@ -725,7 +725,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	// Reset the worktree's working copy to the specific rev.
-	_, err = runCommand(ctx, worktreePath, git.cmd, "reset", "--hard", hash)
+	_, err = runCommand(ctx, worktreePath, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
 		return err
 	}
@@ -768,7 +768,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	// Reset the root's rev (so we can prune and so we can rely on it later).
-	_, err = runCommand(ctx, git.root, git.cmd, "reset", "--hard", hash)
+	_, err = runCommand(ctx, git.root, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
 		return err
 	}
