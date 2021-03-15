@@ -1171,6 +1171,27 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
+##############################################
+# Test additional git configs
+##############################################
+testcase "additional-git-configs"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val' \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
 echo
 echo "cleaning up $DIR"
 rm -rf "$DIR"

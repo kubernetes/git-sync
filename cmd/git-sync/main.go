@@ -109,6 +109,8 @@ var flAskPassURL = flag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
 
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
+var flGitConfig = flag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
+	"additional git config options in 'key1:val1,key2:val2' format")
 
 var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address (including port) for git-sync's HTTP endpoint")
@@ -389,6 +391,14 @@ func main() {
 			os.Exit(1)
 		}
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
+	}
+
+	// This needs to be after all other git-related config flags.
+	if *flGitConfig != "" {
+		if err := setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: can't set additional git configs: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
@@ -831,12 +841,14 @@ func cmdForLog(command string, args ...string) string {
 	if strings.ContainsAny(command, " \t\n") {
 		command = fmt.Sprintf("%q", command)
 	}
+	argsCopy := make([]string, len(args))
+	copy(argsCopy, args)
 	for i := range args {
 		if strings.ContainsAny(args[i], " \t\n") {
-			args[i] = fmt.Sprintf("%q", args[i])
+			argsCopy[i] = fmt.Sprintf("%q", args[i])
 		}
 	}
-	return command + " " + strings.Join(args, " ")
+	return command + " " + strings.Join(argsCopy, " ")
 }
 
 func runCommand(ctx context.Context, cwd, command string, args ...string) (string, error) {
@@ -927,8 +939,7 @@ func setupGitCookieFile(ctx context.Context) error {
 		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
-	if _, err = runCommand(ctx, "",
-		*flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+	if _, err = runCommand(ctx, "", *flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
@@ -985,4 +996,165 @@ func callGitAskPassURL(ctx context.Context, url string) error {
 	}
 
 	return nil
+}
+
+func setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
+	log.V(1).Info("setting additional git configs")
+
+	configs, err := parseGitConfigs(configsFlag)
+	if err != nil {
+		return fmt.Errorf("can't parse --git-config flag: %v", err)
+	}
+	for _, kv := range configs {
+		if _, err := runCommand(ctx, "", *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
+			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
+		}
+	}
+
+	return nil
+}
+
+type keyVal struct {
+	key string
+	val string
+}
+
+func parseGitConfigs(configsFlag string) ([]keyVal, error) {
+	ch := make(chan rune)
+	stop := make(chan bool)
+	go func() {
+		for _, r := range configsFlag {
+			select {
+			case <-stop:
+				break
+			default:
+				ch <- r
+			}
+		}
+		close(ch)
+		return
+	}()
+
+	result := []keyVal{}
+
+	// This assumes it is at the start of a key.
+	for {
+		cur := keyVal{}
+		var err error
+
+		// Peek and see if we have a key.
+		if r, ok := <-ch; !ok {
+			break
+		} else {
+			cur.key, err = parseGitConfigKey(r, ch)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Peek and see if we have a value.
+		if r, ok := <-ch; !ok {
+			return nil, fmt.Errorf("key %q: no value", cur.key)
+		} else {
+			if r == '"' {
+				cur.val, err = parseGitConfigQVal(ch)
+				if err != nil {
+					return nil, fmt.Errorf("key %q: %v", cur.key, err)
+				}
+			} else {
+				cur.val, err = parseGitConfigVal(r, ch)
+				if err != nil {
+					return nil, fmt.Errorf("key %q: %v", cur.key, err)
+				}
+			}
+		}
+
+		result = append(result, cur)
+	}
+
+	return result, nil
+}
+
+func parseGitConfigKey(r rune, ch <-chan rune) (string, error) {
+	buf := make([]rune, 0, 64)
+	buf = append(buf, r)
+
+	for r := range ch {
+		switch {
+		case r == ':':
+			return string(buf), nil
+		default:
+			// This can accumulate things that git doesn't allow, but we'll
+			// just let git handle it, rather than try to pre-validate to their
+			// spec.
+			buf = append(buf, r)
+		}
+	}
+	return "", fmt.Errorf("unexpected end of key: %q", string(buf))
+}
+
+func parseGitConfigQVal(ch <-chan rune) (string, error) {
+	buf := make([]rune, 0, 64)
+
+	for r := range ch {
+		switch r {
+		case '\\':
+			if e, err := unescape(ch); err != nil {
+				return "", err
+			} else {
+				buf = append(buf, e)
+			}
+		case '"':
+			// Once we have a closing quote, the next must be either a comma or
+			// end-of-string.  This helps reset the state for the next key, if
+			// there is one.
+			r, ok := <-ch
+			if ok && r != ',' {
+				return "", fmt.Errorf("unexpected trailing character '%c'", r)
+			}
+			return string(buf), nil
+		default:
+			buf = append(buf, r)
+		}
+	}
+	return "", fmt.Errorf("unexpected end of value: %q", string(buf))
+}
+
+func parseGitConfigVal(r rune, ch <-chan rune) (string, error) {
+	buf := make([]rune, 0, 64)
+	buf = append(buf, r)
+
+	for r := range ch {
+		switch r {
+		case '\\':
+			if r, err := unescape(ch); err != nil {
+				return "", err
+			} else {
+				buf = append(buf, r)
+			}
+		case ',':
+			return string(buf), nil
+		default:
+			buf = append(buf, r)
+		}
+	}
+	// We ran out of characters, but that's OK.
+	return string(buf), nil
+}
+
+// unescape processes most of the documented escapes that git config supports.
+func unescape(ch <-chan rune) (rune, error) {
+	r, ok := <-ch
+	if !ok {
+		return 0, fmt.Errorf("unexpected end of escape sequence")
+	}
+	switch r {
+	case 'n':
+		return '\n', nil
+	case 't':
+		return '\t', nil
+	case '"', ',', '\\':
+		return r, nil
+	}
+	return 0, fmt.Errorf("unsupported escape character: '%c'", r)
 }
