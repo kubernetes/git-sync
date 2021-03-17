@@ -87,4 +87,8 @@ WORKDIR /tmp
 
 # Just dump the binary in the root.
 ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
+
+# Add License file.
+COPY LICENSE LICENSE
+
 ENTRYPOINT ["/{ARG_BIN}"]
