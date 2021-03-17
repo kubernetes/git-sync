@@ -109,7 +109,7 @@ UID be present in /etc/passwd, so in this case you will need to add the
 `--add-user` flag to git-sync's args array. Also, you need to change
 `GIT_SYNC_ROOT` to some other location, say `/workspace`, instead of
 `$HOME/git` as the `$HOME` will be `/` for the user and, `GIT_SYNC_ROOT` will
-end up in `//git` which do not exist.
+end up in `//git` which which the non-root user can't create.
 
 **Note:** Kubernetes mounts the Secret with permissions 0444 by default (not
 restrictive enough to be used as an SSH key), so make sure you set the
