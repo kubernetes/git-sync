@@ -85,5 +85,8 @@ ENV HOME=/tmp
 
 ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 
+# Add third-party licenses.
+COPY .third-party/ /third-party/
+
 WORKDIR /tmp
 ENTRYPOINT ["/{ARG_BIN}"]

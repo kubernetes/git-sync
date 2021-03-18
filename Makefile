@@ -119,8 +119,20 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 # Used to track state in hidden files.
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
+THIRD_PARTY_DIR = .third-party
+GO_TOOLS_PATH = "$$(pwd)/.gopath.tools"
+GO_TOOLS_BIN = "$$(pwd)/bin/tools"
+
+third-party-licenses:
+	@mkdir -p $(GO_TOOLS_BIN)
+	GOPATH=$(GO_TOOLS_PATH) GOBIN=$(GO_TOOLS_BIN) go get -modfile=go.tools.mod github.com/google/go-licenses
+	@rm -rf $(THIRD_PARTY_DIR)
+	@echo creating $(THIRD_PARTY_DIR) directory with licenses
+	@$(GO_TOOLS_BIN)/go-licenses save ./... --save_path=$(THIRD_PARTY_DIR)
+	@chmod -R a+rx $(THIRD_PARTY_DIR)
+
 container: .container-$(DOTFILE_IMAGE) container-name
-.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) Dockerfile.in
+.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) third-party-licenses Dockerfile.in
 	@sed \
 	    -e 's|{ARG_BIN}|$(BIN)|g' \
 	    -e 's|{ARG_ARCH}|$(ARCH)|g' \
@@ -200,10 +212,15 @@ multiarch-build-tools: .qemu-initialized
 $(BUILD_DIRS):
 	@mkdir -p $@
 
-clean: container-clean bin-clean
+clean: container-clean bin-clean tool-clean
 
 container-clean:
-	rm -rf .container-* .dockerfile-* .push-* .qemu-initialized
+	@rm -rf .container-* .dockerfile-* .push-* .qemu-initialized $(THIRD_PARTY_DIR)
 
 bin-clean:
-	rm -rf .go bin
+	@rm -rf .go bin
+
+tool-clean:
+	@chmod -Rf u+w $(GO_TOOLS_PATH)
+	@rm -rf $(GO_TOOLS_PATH)
+	@rm -rf go.tools.sum

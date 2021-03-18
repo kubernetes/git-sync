@@ -4,3 +4,6 @@
 /.container-*
 /.dockerfile-*
 /.qemu-initialized
+/.third-party
+go.tools.sum
+.gopath.tools
