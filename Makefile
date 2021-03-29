@@ -79,6 +79,7 @@ build: bin/$(OS)_$(ARCH)/$(BIN)
 
 BUILD_DIRS :=             \
     bin/$(OS)_$(ARCH)     \
+    bin/tools             \
     .go/bin/$(OS)_$(ARCH) \
     .go/cache
 
@@ -119,8 +120,16 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 # Used to track state in hidden files.
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
+LICENSES = .licenses
+
+$(LICENSES): bin/$(OS)_$(ARCH)/$(BIN)
+	@go build -o ./bin/tools github.com/google/go-licenses
+	@rm -rf $(LICENSES)
+	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
+	@chmod -R a+rx $(LICENSES)
+
 container: .container-$(DOTFILE_IMAGE) container-name
-.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) Dockerfile.in
+.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in
 	@sed \
 	    -e 's|{ARG_BIN}|$(BIN)|g' \
 	    -e 's|{ARG_ARCH}|$(ARCH)|g' \
@@ -203,7 +212,7 @@ $(BUILD_DIRS):
 clean: container-clean bin-clean
 
 container-clean:
-	rm -rf .container-* .dockerfile-* .push-* .qemu-initialized
+	rm -rf .container-* .dockerfile-* .push-* .qemu-initialized $(LICENSES)
 
 bin-clean:
 	rm -rf .go bin
