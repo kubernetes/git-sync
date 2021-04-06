@@ -800,8 +800,10 @@ sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_exists "$ROOT"/link/sync-hook
+assert_file_exists "$ROOT"/link/link-sync-hook
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 1"
+assert_file_eq "$ROOT"/link/link-sync-hook "$TESTCASE 1"
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
@@ -809,8 +811,10 @@ sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_exists "$ROOT"/link/sync-hook
+assert_file_exists "$ROOT"/link/link-sync-hook
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 2"
+assert_file_eq "$ROOT"/link/link-sync-hook "$TESTCASE 2"
 # Wrap up
 pass
 
