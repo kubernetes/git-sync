@@ -663,32 +663,42 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		}
 	}
 
-	// Execute the command, if requested.
-	if *flSyncHookCommand != "" {
-		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
-		_, err = runCommand(ctx, worktreePath, *flSyncHookCommand)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Flip the symlink.
 	oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath)
 	if err != nil {
 		return err
 	}
 	setRepoReady()
-	if oldWorktree != "" {
-		// Clean up previous worktree
-		log.V(1).Info("removing old worktree", "path", oldWorktree)
-		if err := os.RemoveAll(oldWorktree); err != nil {
-			return fmt.Errorf("error removing directory: %v", err)
-		}
-		if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
-			return err
+
+	// From here on we have to save errors until the end.
+
+	// Execute the hook command, if requested.
+	var execErr error
+	if *flSyncHookCommand != "" {
+		log.V(1).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
+		if _, err := runCommand(ctx, worktreePath, *flSyncHookCommand); err != nil {
+			// Save it until after cleanup runs.
+			execErr = err
 		}
 	}
 
+	// Clean up previous worktree(s).
+	var cleanupErr error
+	if oldWorktree != "" {
+		log.V(1).Info("removing old worktree", "path", oldWorktree)
+		if err := os.RemoveAll(oldWorktree); err != nil {
+			cleanupErr = fmt.Errorf("error removing directory: %v", err)
+		} else if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+			cleanupErr = err
+		}
+	}
+
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	if execErr != nil {
+		return execErr
+	}
 	return nil
 }
 
@@ -946,7 +956,7 @@ func setupGitCookieFile(ctx context.Context) error {
 // The expected ASKPASS callback output are below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
 // username=xxx@example.com
-// password=ya29.xxxyyyzzz
+// password=xxxyyyzzz
 func callGitAskPassURL(ctx context.Context, url string) error {
 	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
