@@ -862,15 +862,6 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		}
 	}
 
-	// Execute the command, if requested.
-	if *flSyncHookCommand != "" {
-		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
-		_, err = runCommand(ctx, worktreePath, *flSyncHookCommand)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Reset the root's rev (so we can prune and so we can rely on it later).
 	_, err = runCommand(ctx, git.root, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
@@ -884,17 +875,38 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 	setRepoReady()
-	if oldWorktree != "" {
-		// Clean up previous worktree
-		log.V(1).Info("removing old worktree", "path", oldWorktree)
-		if err := os.RemoveAll(oldWorktree); err != nil {
-			return fmt.Errorf("error removing directory: %v", err)
-		}
-		if _, err := runCommand(ctx, git.root, git.cmd, "worktree", "prune"); err != nil {
-			return err
+
+	// From here on we have to save errors until the end.
+
+	// Execute the hook command, if requested.
+	var execErr error
+	if *flSyncHookCommand != "" {
+		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
+		// TODO: move this to be async like webhook?
+		// TODO: don't use global flags way down here
+		if _, err := runCommand(ctx, worktreePath, *flSyncHookCommand); err != nil {
+			// Save it until after cleanup runs.
+			execErr = err
 		}
 	}
 
+	// Clean up previous worktrees.
+	var cleanupErr error
+	if oldWorktree != "" {
+		log.V(1).Info("removing old worktree", "path", oldWorktree)
+		if err := os.RemoveAll(oldWorktree); err != nil {
+			cleanupErr = fmt.Errorf("error removing directory: %v", err)
+		} else if _, err := runCommand(ctx, git.root, git.cmd, "worktree", "prune"); err != nil {
+			cleanupErr = err
+		}
+	}
+
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	if execErr != nil {
+		return execErr
+	}
 	return nil
 }
 
@@ -1159,7 +1171,7 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 // The expected ASKPASS callback output are below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
 //   username=xxx@example.com
-//   password=ya29.xxxyyyzzz
+//   password=xxxyyyzzz
 func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
