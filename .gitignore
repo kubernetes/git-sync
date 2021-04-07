@@ -4,3 +4,4 @@
 /.container-*
 /.dockerfile-*
 /.qemu-initialized
+/.licenses

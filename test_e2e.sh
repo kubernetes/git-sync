@@ -194,9 +194,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 pass
 
 ##############################################
-# Test HEAD one-time when root exists
+# Test HEAD one-time when root exists and is empty
 ##############################################
-testcase "head-once-root-exists"
+testcase "head-once-root-exists-empty"
 echo "$TESTCASE" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
@@ -280,6 +280,60 @@ ln -s "$ROOT" "$DIR/rootlink" # symlink to test
 )
 # Wrap up
 pass
+
+##############################################
+# Test HEAD one-time when root is under a git repo
+##############################################
+testcase "head-once-root-exists-but-is-not-git-root"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+# Make a parent dir that is a git repo.
+mkdir -p "$ROOT/subdir/root"
+date > "$ROOT/subdir/root/file" # so it is not empty
+git -C "$ROOT/subdir" init >/dev/null
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev=HEAD \
+    --root="$ROOT/subdir/root" \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/subdir/root/link
+assert_file_exists "$ROOT"/subdir/root/link/file
+assert_file_eq "$ROOT"/subdir/root/link/file "$TESTCASE"
+# Wrap up
+pass
+
+##############################################
+# Test HEAD one-time when root fails sanity
+##############################################
+testcase "head-once-root-exists-but-fails-sanity"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+# Make an invalid git repo.
+mkdir -p "$ROOT"
+git -C "$ROOT" init >/dev/null
+echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=master \
+    --rev="HEAD" \
+    --root="$ROOT" \
+    --link="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+# Wrap up
+pass
+
+## FIXME: test when repo is valid git, but wrong remote
+## FIXME: test when repo is valid git, but not ar ref we need
+## FIXME: test when repo is valid git, and is already correct
+exit 42
 
 ##############################################
 # Test default syncing (master)

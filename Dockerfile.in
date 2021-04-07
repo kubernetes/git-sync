@@ -85,6 +85,10 @@ USER 65533:65533
 ENV HOME=/tmp
 WORKDIR /tmp
 
-# Just dump the binary in the root.
-ADD bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
+# Add the platform-specific binary.
+COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
+
+# Add third-party licenses.
+COPY .licenses/ /LICENSES/
+
 ENTRYPOINT ["/{ARG_BIN}"]

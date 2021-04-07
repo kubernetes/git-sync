@@ -425,7 +425,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := os.MkdirAll(*flRoot, 0700); err != nil {
+	// Make sure the root exists.  0755 ensures that this is usable as a volume
+	// when the consumer isn't running as the same UID.  We do this very early
+	// so that we can normalize the path even when there are symlinks in play.
+	if err := os.MkdirAll(*flRoot, 0755); err != nil {
 		log.Error(err, "ERROR: can't make root dir", "path", *flRoot)
 		os.Exit(1)
 	}
@@ -549,6 +552,14 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
+		if initialSync {
+			err := git.InitRepo(ctx)
+			if err != nil {
+				log.Error(err, "can't init root", absRoot)
+				os.Exit(1)
+			}
+		}
+
 		if changed, hash, err := git.SyncRepo(ctx); err != nil {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
@@ -603,6 +614,92 @@ func normalizePath(path string) (string, error) {
 		return "", err
 	}
 	return abs, nil
+}
+
+// initRepo looks at the git root and initializes it if needed.  This assumes
+// the root dir already exists.
+func (git *repoSync) InitRepo(ctx context.Context) error {
+	// Check out the git root, and see if it is already usable.
+	if _, err := os.Stat(git.root); err != nil {
+		return err
+	}
+
+	// Make sure the directory we found is actually usable.
+	if git.SanityCheck(ctx) {
+		log.V(0).Info("root directory is valid", "path", git.root)
+		return nil
+	}
+
+	// Maybe a previous run crashed?  Git won't use this dir.
+	log.V(0).Info("root directory exists but failed checks, cleaning up", "path", git.root)
+
+	// We remove the contents rather than the dir itself, because a common
+	// use-case is to have a volume mounted at git.root, which makes removing
+	// it impossible.
+	if err := removeDirContents(git.root); err != nil {
+		return fmt.Errorf("can't remove unusable git root: %w", err)
+	}
+
+	return nil
+}
+
+// sanityCheck tries to make sure that the dir is a valid git repository.
+func (git *repoSync) SanityCheck(ctx context.Context) bool {
+	log.V(0).Info("sanity-checking git repo", "repo", git.root)
+
+	// If it is empty, we are done.
+	if empty, err := dirIsEmpty(git.root); err != nil {
+		log.Error(err, "can't list repo directory", "repo", git.root)
+		return false
+	} else if empty {
+		log.V(0).Info("git repo is empty", "repo", git.root)
+		return true
+	}
+
+	// Check that this is actually the root of the repo.
+	if root, err := runCommand(ctx, git.root, git.cmd, "rev-parse", "--show-toplevel"); err != nil {
+		log.Error(err, "can't get repo toplevel", "repo", git.root)
+		return false
+	} else {
+		root = strings.TrimSpace(root)
+		if root != git.root {
+			log.V(0).Info("git repo is under another repo", "repo", git.root, "parent", root)
+			return false
+		}
+	}
+
+	// Consistency-check the repo.
+	if _, err := runCommand(ctx, git.root, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+		log.Error(err, "repo sanity check failed", "repo", git.root)
+		return false
+	}
+
+	return true
+}
+
+func dirIsEmpty(dir string) (bool, error) {
+	dirents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	return len(dirents) == 0, nil
+}
+
+func removeDirContents(dir string) error {
+	dirents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range dirents {
+		p := filepath.Join(dir, fi.Name())
+		log.V(2).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
+		if err := os.RemoveAll(p); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func updateSyncMetrics(key string, start time.Time) {
