@@ -59,6 +59,13 @@ function assert_file_eq() {
     fail "file $1 does not contain '$2': $(cat $1)"
 }
 
+function assert_file_contains() {
+    if grep -q "$2" "$1"; then
+        return
+    fi
+    fail "file $1 does not contain '$2': $(cat $1)"
+}
+
 # Helper: run a docker container.
 function docker_run() {
     docker run \
@@ -1226,3 +1233,43 @@ pass
 echo
 echo "cleaning up $DIR"
 rm -rf "$DIR"
+
+##############################################
+# Test export-error
+##############################################
+testcase "export-error"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+(
+  set +o errexit
+  GIT_SYNC \
+      --repo="file://$REPO" \
+      --branch=does-not-exit \
+      --root="$ROOT" \
+      --dest="link" \
+      --error-file="error.json" \
+      > "$DIR"/log."$TESTCASE" 2>&1
+  RET=$?
+  if [[ "$RET" != 1 ]]; then
+      fail "expected exit code 1, got $RET"
+  fi
+  assert_file_absent "$ROOT"/link
+  assert_file_absent "$ROOT"/link/file
+  assert_file_contains "$ROOT"/error.json "Remote branch does-not-exit not found in upstream origin"
+)
+
+# the error.json file should be removed if sync succeeds.
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --root="$ROOT" \
+    --dest="link" \
+    --error-file="error.json" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+assert_file_absent "$ROOT"/error.json
+# Wrap up
+pass

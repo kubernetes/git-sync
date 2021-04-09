@@ -21,6 +21,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -37,6 +38,7 @@ import (
 	"time"
 
 	"github.com/go-logr/glogr"
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/git-sync/pkg/pid1"
@@ -60,6 +62,8 @@ var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", ""
 	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
+var flErrorFile = flag.String("error-file", envString("GIT_SYNC_ERROR_FILE", ""),
+	"the name of a file into which errors will be written under --root (defaults to \"\", disabling error reporting)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 1),
 	"the number of seconds between syncs")
 var flSyncTimeout = flag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 120),
@@ -119,7 +123,7 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
-var log = glogr.New()
+var log *customLogger
 
 // Total pull/error, summary on pull duration
 var (
@@ -155,6 +159,90 @@ const (
 	submodulesOff       = "off"
 )
 
+type customLogger struct {
+	logr.Logger
+	errorFile string
+}
+
+func (l customLogger) Error(err error, msg string, kvList ...interface{}) {
+	l.Logger.Error(err, msg, kvList...)
+	if l.errorFile == "" {
+		return
+	}
+	payload := struct {
+		Msg  string
+		Err  string
+		Args map[string]interface{}
+	}{
+		Msg:  msg,
+		Err:  err.Error(),
+		Args: map[string]interface{}{},
+	}
+	if len(kvList)%2 != 0 {
+		kvList = append(kvList, "<no-value>")
+	}
+	for i := 0; i < len(kvList); i += 2 {
+		k, ok := kvList[i].(string)
+		if !ok {
+			k = fmt.Sprintf("%v", kvList[i])
+		}
+		payload.Args[k] = kvList[i+1]
+	}
+	jb, err := json.Marshal(payload)
+	if err != nil {
+		l.Logger.Error(err, "can't encode error payload")
+		content := fmt.Sprintf("%v", err)
+		l.writeContent([]byte(content))
+	} else {
+		l.writeContent(jb)
+	}
+}
+
+// exportError exports the error to the error file if --export-error is enabled.
+func (l *customLogger) exportError(content string) {
+	if l.errorFile == "" {
+		return
+	}
+	l.writeContent([]byte(content))
+}
+
+// writeContent writes the error content to the error file.
+func (l *customLogger) writeContent(content []byte) {
+	tmpFile, err := ioutil.TempFile(*flRoot, "tmp-err-")
+	if err != nil {
+		l.Logger.Error(err, "can't create temporary error-file", "directory", *flRoot, "prefix", "tmp-err-")
+		return
+	}
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			l.Logger.Error(err, "can't close temporary error-file", "filename", tmpFile.Name())
+		}
+	}()
+
+	if _, err = tmpFile.Write(content); err != nil {
+		l.Logger.Error(err, "can't write to temporary error-file", "filename", tmpFile.Name())
+		return
+	}
+
+	if err := os.Rename(tmpFile.Name(), l.errorFile); err != nil {
+		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", l.errorFile)
+		return
+	}
+}
+
+// deleteErrorFile deletes the error file.
+func (l *customLogger) deleteErrorFile() {
+	if l.errorFile == "" {
+		return
+	}
+	if err := os.Remove(l.errorFile); err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		l.Logger.Error(err, "can't delete the error-file", "filename", l.errorFile)
+	}
+}
+
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
@@ -184,7 +272,7 @@ func envInt(key string, def int) int {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.ParseInt(env, 0, 0)
 		if err != nil {
-			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
+			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%d\n", err, key, env, def)
 			return def
 		}
 		return int(val)
@@ -196,7 +284,7 @@ func envFloat(key string, def float64) float64 {
 	if env := os.Getenv(key); env != "" {
 		val, err := strconv.ParseFloat(env, 64)
 		if err != nil {
-			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
+			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%f\n", err, key, env, def)
 			return def
 		}
 		return val
@@ -208,7 +296,7 @@ func envDuration(key string, def time.Duration) time.Duration {
 	if env := os.Getenv(key); env != "" {
 		val, err := time.ParseDuration(env)
 		if err != nil {
-			log.Error(err, "invalid env value, using default", "key", key, "val", os.Getenv(key), "default", def)
+			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%d\n", err, key, env, def)
 			return def
 		}
 		return val
@@ -220,8 +308,7 @@ func setFlagDefaults() {
 	// Force logging to stderr (from glog).
 	stderrFlag := flag.Lookup("logtostderr")
 	if stderrFlag == nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't find flag 'logtostderr'\n")
-		os.Exit(1)
+		handleError(false, "ERROR: can't find flag 'logtostderr'")
 	}
 	stderrFlag.Value.Set("true")
 }
@@ -241,35 +328,33 @@ func main() {
 	setFlagDefaults()
 	flag.Parse()
 
+	var errorFile string
+	if *flErrorFile != "" {
+		errorFile = filepath.Join(*flRoot, *flErrorFile)
+	}
+	log = &customLogger{glogr.New(), errorFile}
+
 	if *flVer {
 		fmt.Println(version.VERSION)
 		os.Exit(0)
 	}
 
 	if *flRepo == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: --repo must be specified\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --repo must be specified")
 	}
 
 	if *flDepth < 0 { // 0 means "no limit"
-		fmt.Fprintf(os.Stderr, "ERROR: --depth must be greater than or equal to 0\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --depth must be greater than or equal to 0")
 	}
 
 	switch *flSubmodules {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
-		fmt.Fprintf(os.Stderr, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
 	}
 
 	if *flRoot == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: --root must be specified\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --root must be specified")
 	}
 
 	if *flDest == "" {
@@ -278,81 +363,59 @@ func main() {
 	}
 
 	if strings.Contains(*flDest, "/") {
-		fmt.Fprintf(os.Stderr, "ERROR: --dest must be a leaf name, not a path\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --dest must be a leaf name, not a path")
 	}
 
 	if *flWait < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --wait must be greater than or equal to 0\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --wait must be greater than or equal to 0")
 	}
 
 	if *flSyncTimeout < 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: --timeout must be greater than 0\n")
-		flag.Usage()
-		os.Exit(1)
+		handleError(true, "ERROR: --timeout must be greater than 0")
 	}
 
 	if *flWebhookURL != "" {
 		if *flWebhookStatusSuccess < -1 {
-			fmt.Fprintf(os.Stderr, "ERROR: --webhook-success-status must be a valid HTTP code or -1\n")
-			flag.Usage()
-			os.Exit(1)
+			handleError(true, "ERROR: --webhook-success-status must be a valid HTTP code or -1")
 		}
 		if *flWebhookTimeout < time.Second {
-			fmt.Fprintf(os.Stderr, "ERROR: --webhook-timeout must be at least 1s\n")
-			flag.Usage()
-			os.Exit(1)
+			handleError(true, "ERROR: --webhook-timeout must be at least 1s")
 		}
 		if *flWebhookBackoff < time.Second {
-			fmt.Fprintf(os.Stderr, "ERROR: --webhook-backoff must be at least 1s\n")
-			flag.Usage()
-			os.Exit(1)
+			handleError(true, "ERROR: --webhook-backoff must be at least 1s")
 		}
 	}
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: git executable %q not found: %v\n", *flGitCmd, err)
-		os.Exit(1)
+		handleError(false, "ERROR: git executable %q not found: %v", *flGitCmd, err)
 	}
 
 	if *flSSH {
 		if *flUsername != "" {
-			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --username may be specified\n")
-			os.Exit(1)
+			handleError(false, "ERROR: only one of --ssh and --username may be specified")
 		}
 		if *flPassword != "" {
-			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --password may be specified\n")
-			os.Exit(1)
+			handleError(false, "ERROR: only one of --ssh and --password may be specified")
 		}
 		if *flAskPassURL != "" {
-			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --askpass-url may be specified\n")
-			os.Exit(1)
+			handleError(false, "ERROR: only one of --ssh and --askpass-url may be specified")
 		}
 		if *flCookieFile {
-			fmt.Fprintf(os.Stderr, "ERROR: only one of --ssh and --cookie-file may be specified\n")
-			os.Exit(1)
+			handleError(false, "ERROR: only one of --ssh and --cookie-file may be specified")
 		}
 		if *flSSHKeyFile == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: --ssh-key-file must be specified when --ssh is specified\n")
-			flag.Usage()
-			os.Exit(1)
+			handleError(true, "ERROR: --ssh-key-file must be specified when --ssh is specified")
 		}
 		if *flSSHKnownHosts {
 			if *flSSHKnownHostsFile == "" {
-				fmt.Fprintf(os.Stderr, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified\n")
-				flag.Usage()
-				os.Exit(1)
+				handleError(true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
 			}
 		}
 	}
 
 	if *flAddUser {
 		if err := addUser(); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't write to /etc/passwd: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: can't write to /etc/passwd: %v", err)
 		}
 	}
 
@@ -362,30 +425,26 @@ func main() {
 
 	if *flUsername != "" && *flPassword != "" {
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't create .netrc file: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: can't create .netrc file: %v", err)
 		}
 	}
 
 	if *flSSH {
 		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't configure SSH: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: can't configure SSH: %v", err)
 		}
 	}
 
 	if *flCookieFile {
 		if err := setupGitCookieFile(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't set git cookie file: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: can't set git cookie file: %v", err)
 		}
 	}
 
 	if *flAskPassURL != "" {
 		if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
-			fmt.Fprintf(os.Stderr, "ERROR: failed to call ASKPASS callback URL: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: failed to call ASKPASS callback URL: %v", err)
 		}
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
@@ -404,8 +463,7 @@ func main() {
 	if *flHTTPBind != "" {
 		ln, err := net.Listen("tcp", *flHTTPBind)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: unable to bind HTTP endpoint: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: unable to bind HTTP endpoint: %v", err)
 		}
 		mux := http.NewServeMux()
 		go func() {
@@ -480,6 +538,7 @@ func main() {
 
 		if initialSync {
 			if *flOneTime {
+				log.deleteErrorFile()
 				os.Exit(0)
 			}
 			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
@@ -487,12 +546,14 @@ func main() {
 				os.Exit(1)
 			} else if isHash {
 				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
+				log.deleteErrorFile()
 				sleepForever()
 			}
 			initialSync = false
 		}
 
 		failCount = 0
+		log.deleteErrorFile()
 		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
 		cancel()
 		time.Sleep(waitTime(*flWait))
@@ -515,6 +576,18 @@ func sleepForever() {
 	signal.Notify(c, os.Interrupt, os.Kill)
 	<-c
 	os.Exit(0)
+}
+
+// handleError prints the error to the standard error, prints the usage if the `printUsage` flag is true,
+// exports the error to the error file and exits the process with the exit code.
+func handleError(printUsage bool, format string, a ...interface{}) {
+	s := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, s)
+	if printUsage {
+		flag.Usage()
+	}
+	log.exportError(s)
+	os.Exit(1)
 }
 
 // Put the current UID/GID into /etc/passwd so SSH can look it up.  This
