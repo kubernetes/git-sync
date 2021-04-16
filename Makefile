@@ -122,7 +122,7 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
 LICENSES = .licenses
 
-$(LICENSES): bin/$(OS)_$(ARCH)/$(BIN)
+$(LICENSES): bin/$(shell go env GOOS)_$(shell go env GOARCH)/$(BIN)
 	@go build -o ./bin/tools github.com/google/go-licenses
 	@rm -rf $(LICENSES)
 	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
@@ -149,6 +149,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 
 container-name:
 	@echo "container: $(IMAGE):$(TAG)"
+	@echo
 
 push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
@@ -157,6 +158,7 @@ push: .push-$(DOTFILE_IMAGE) push-name
 
 push-name:
 	@echo "pushed: $(IMAGE):$(TAG)"
+	@echo
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
