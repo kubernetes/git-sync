@@ -1517,15 +1517,15 @@ OPTIONS
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
+    --depth <int>, $GIT_SYNC_DEPTH
+            Create a shallow clone with history truncated to the specified
+            number of commits.
+
     --error-file, $GIT_SYNC_ERROR_FILE
             The name of a file (under --root) into which errors will be
             written. This must be a filename, not a path, and may not start
             with a period. (default: "", which means error reporting will be
             disabled)
-
-    --depth <int>, $GIT_SYNC_DEPTH
-            Create a shallow clone with history truncated to the specified
-            number of commits.
 
     --git <string>, $GIT_SYNC_GIT
             The git command to run (subject to PATH search, mostly for testing).
