@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -77,6 +78,8 @@ var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
 		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
+var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
+	"the path to a sparse-checkout file.")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
 	"the URL for a webook notification when syncs complete (default is no webook)")
@@ -683,7 +686,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(gitRoot, hash)
-	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch)
+	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
@@ -702,7 +705,45 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
-	// Reset the worktree's working copy to the specific rev.
+	if *flSparseCheckoutFile != "" {
+		// This is required due to the undocumented behavior outlined here: https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
+		log.V(0).Info("configuring worktree sparse checkout")
+		checkoutFile := *flSparseCheckoutFile
+
+		gitInfoPath := filepath.Join(gitRoot, fmt.Sprintf(".git/worktrees/%s/info", hash))
+		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
+
+		source, err := os.Open(checkoutFile)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+
+		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
+			fileMode := os.FileMode(int(0755))
+			err := os.Mkdir(gitInfoPath, fileMode)
+			if err != nil {
+				return err
+			}
+		}
+
+		destination, err := os.Create(gitSparseConfigPath)
+		if err != nil {
+			return err
+		}
+		defer destination.Close()
+		_, err = io.Copy(destination, source)
+		if err != nil {
+			return err
+		}
+
+		args := []string{"sparse-checkout", "init"}
+		_, err = runCommand(ctx, worktreePath, *flGitCmd, args...)
+		if err != nil {
+			return err
+		}
+	}
+
 	_, err = runCommand(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
 	if err != nil {
 		return err
@@ -797,6 +838,45 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 				return err
 			}
 		} else {
+			return err
+		}
+	}
+
+	if *flSparseCheckoutFile != "" {
+		log.V(0).Info("configuring sparse checkout")
+		checkoutFile := *flSparseCheckoutFile
+
+		gitRepoPath := filepath.Join(gitRoot, ".git")
+		gitInfoPath := filepath.Join(gitRepoPath, "info")
+		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
+
+		source, err := os.Open(checkoutFile)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+
+		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
+			fileMode := os.FileMode(int(0755))
+			err := os.Mkdir(gitInfoPath, fileMode)
+			if err != nil {
+				return err
+			}
+		}
+
+		destination, err := os.Create(gitSparseConfigPath)
+		if err != nil {
+			return err
+		}
+		defer destination.Close()
+		_, err = io.Copy(destination, source)
+		if err != nil {
+			return err
+		}
+
+		args := []string{"sparse-checkout", "init"}
+		_, err = runCommand(ctx, gitRoot, *flGitCmd, args...)
+		if err != nil {
 			return err
 		}
 	}
