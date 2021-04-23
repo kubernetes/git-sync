@@ -58,64 +58,249 @@ docker run -d \
     nginx
 ```
 
-## Webhooks
-
-Webhooks are executed asynchronously from the main git-sync process. If a `webhook-url` is configured,
-when a change occurs to the local git checkout a call is sent using the method defined in `webhook-method`
-(default to `POST`). git-sync will continually attempt this webhook call until it succeeds (based on `webhook-success-status`).
-If unsuccessful, git-sync will wait `webhook-backoff` (default `3s`) before re-attempting the webhook call.
-
-**Usage**
-
-A webhook is configured using a set of CLI flags. At its most basic only `webhook-url` needs to be set.
+## Manual
 
 ```
-docker run -d \
-    -v /tmp/git-data:/tmp/git \
-    registry/git-sync:tag \
+GIT-SYNC
+
+NAME
+    git-sync - sync a remote git repository
+
+SYNOPSIS
+    git-sync --repo=<repo> [OPTION]...
+
+DESCRIPTION
+
+    Fetch a remote git repository to a local directory, poll the remote for
+    changes, and update the local copy.
+
+    This is a perfect "sidecar" container in Kubernetes.  For example, it can
+    periodically pull files down from a repository so that an application can
+    consume them.
+
+    git-sync can pull one time, or on a regular interval.  It can read from the
+    HEAD of a branch, from a git tag, or from a specific git hash.  It will only
+    re-pull if the target has changed in the remote repository.  When it
+    re-pulls, it updates the destination directory atomically.  In order to do
+    this, it uses a git worktree in a subdirectory of the --root and flips a
+    symlink.
+
+    git-sync can pull over HTTP(S) (with authentication or not) or SSH.
+
+    git-sync can also be configured to make a webhook call upon successful git
+    repo synchronization. The call is made after the symlink is updated.
+
+OPTIONS
+
+    Many options can be specified as either a commandline flag or an environment
+    variable.
+
+    --add-user, $GIT_SYNC_ADD_USER
+            Add a record to /etc/passwd for the current UID/GID.  This is needed
+            to use SSH (see --ssh) with an arbitrary UID.  This assumes that
+            /etc/passwd is writable by the current UID.
+
+    --askpass-url <string>, $GIT_ASKPASS_URL
+            A URL to query for git credentials. The query must return success
+            (200) and produce a series of key=value lines, including
+            "username=<value>" and "password=<value>".
+
+    --branch <string>, $GIT_SYNC_BRANCH
+            The git branch to check out. (default: master)
+
+    --change-permissions <int>, $GIT_SYNC_PERMISSIONS
+            Optionally change permissions on the checked-out files to the
+            specified mode.
+
+    --cookie-file, $GIT_COOKIE_FILE
+            Use a git cookiefile (/etc/git-secret/cookie_file) for
+            authentication.
+
+    --error-file, $GIT_SYNC_ERROR_FILE
+            The name of a file (under --root) into which errors will be
+            written. This must be a filename, not a path, and may not start
+            with a period. (default: "", which means error reporting will be
+            disabled)
+
+    --depth <int>, $GIT_SYNC_DEPTH
+            Create a shallow clone with history truncated to the specified
+            number of commits.
+
+    --git <string>, $GIT_SYNC_GIT
+            The git command to run (subject to PATH search, mostly for testing).
+            (default: git)
+
+    --git-config <string>, $GIT_SYNC_GIT_CONFIG
+            Additional git config options in 'key1:val1,key2:val2' format.  The
+            key parts are passed to 'git config' and must be valid syntax for
+            that command.  The val parts can be either quoted or unquoted
+            values.  For all values the following escape sequences are
+            supported: '\n' => [newline], '\t' => [tab], '\"' => '"', '\,' =>
+            ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
+            Within quoted values, commas MAY be escaped, but are not required
+            to be.  Any other escape sequence is an error. (default: "")
+
+    -h, --help
+            Print help text and exit.
+
+    --http-bind <string>, $GIT_SYNC_HTTP_BIND
+            The bind address (including port) for git-sync's HTTP endpoint.
+            (default: none)
+
+    --http-metrics, $GIT_SYNC_HTTP_METRICS
+            Enable metrics on git-sync's HTTP endpoint (see --http-bind).
+            (default: true)
+
+    --http-pprof, $GIT_SYNC_HTTP_PPROF
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint (see
+            --http-bind). (default: false)
+
+    --link <string>, $GIT_SYNC_LINK
+            The name of the final symlink (under --root) which will point to the
+            current git worktree. This must be a filename, not a path, and may
+            not start with a period. The destination of this link (i.e.
+            readlink()) is the currently checked out SHA. (default: the leaf
+            dir of --repo)
+
+    --man
+            Print this manual and exit.
+
+    --max-sync-failures <int>, $GIT_SYNC_MAX_SYNC_FAILURES
+            The number of consecutive failures allowed before aborting (the
+            first sync must succeed), Setting this to -1 will retry forever
+            after the initial sync. (default: 0)
+
+    --one-time, $GIT_SYNC_ONE_TIME
+            Exit after the first sync.
+
+    --password <string>, $GIT_SYNC_PASSWORD
+            The password or personal access token (see github docs) to use for
+            git authentication (see --username).  NOTE: for security reasons,
+            users should prefer the environment variable for specifying the
+            password.
+
+    --period <duration>, $GIT_SYNC_PERIOD
+            How long to wait between sync attempts.  This must be at least
+            10ms.  This flag obsoletes --wait, but if --wait is specified, it
+            will take precedence. (default: 10s)
+
+    --repo <string>, $GIT_SYNC_REPO
+            The git repository to sync.
+
+    --rev <string>, $GIT_SYNC_REV
+            The git revision (tag or hash) to check out. (default: HEAD)
+
+    --root <string>, $GIT_SYNC_ROOT
+            The root directory for git-sync operations, under which --link will
+            be created. This flag is required.
+
+    --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
+            The path to a git sparse-checkout file (see git documentation for
+            details) which controls which files and directories will be checked
+            out.
+
+    --ssh, $GIT_SYNC_SSH
+            Use SSH for git authentication and operations.
+
+    --ssh-key-file <string>, $GIT_SSH_KEY_FILE
+            The SSH key to use when using --ssh. (default: /etc/git-secret/ssh)
+
+    --ssh-known-hosts, $GIT_KNOWN_HOSTS
+            Enable SSH known_hosts verification when using --ssh.
+            (default: true)
+
+    --ssh-known-hosts-file <string>, $GIT_SSH_KNOWN_HOSTS_FILE
+            The known_hosts file to use when --ssh-known-hosts is specified.
+            (default: /etc/git-secret/known_hosts)
+
+    --submodules <string>, $GIT_SYNC_SUBMODULES
+            The git submodule behavior: one of 'recursive', 'shallow', or 'off'.
+            (default: recursive)
+
+    --sync-hook-command <string>, $GIT_SYNC_HOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the
+            remote repository.  This command does not take any arguments and
+            executes with the synced repo as its working directory.  The
+            execution is subject to the overall --sync-timeout flag and will
+            extend the effective period between sync attempts.
+
+    --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
+            The total time allowed for one complete sync.  This must be at least
+            10ms.  This flag obsoletes --timeout, but if --timeout is specified,
+            it will take precedence. (default: 120s)
+
+    --username <string>, $GIT_SYNC_USERNAME
+            The username to use for git authentication (see --password).
+
+    -v, --verbose <int>
+            Set the log verbosity level.  Logs at this level and lower will be
+            printed. (default: 0)
+
+    --version
+            Print the version and exit.
+
+    --webhook-backoff <duration>, $GIT_SYNC_WEBHOOK_BACKOFF
+            The time to wait before retrying a failed --webhook-url).
+            (default: 3s)
+
+    --webhook-method <string>, $GIT_SYNC_WEBHOOK_METHOD
+            The HTTP method for the --webhook-url (default: POST)
+
+    --webhook-success-status <int>, $GIT_SYNC_WEBHOOK_SUCCESS_STATUS
+            The HTTP status code indicating a successful --webhook-url.  Setting
+            this to -1 disables success checks to make webhooks fire-and-forget.
+            (default: 200)
+
+    --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT
+            The timeout for the --webhook-url. (default: 1s)
+
+    --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
+            A URL for optional webhook notifications when syncs complete.
+
+EXAMPLE USAGE
+
+    git-sync \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
-        --root=/tmp/git/root \
-        --period=30s \
-        --webhook-url="http://localhost:9090/-/reload"
+        --rev=HEAD \
+        --period=10s \
+        --root=/mnt/git
+
+AUTHENTICATION
+
+    Git-sync offers several authentication options to choose from.  If none of
+    the following are specified, git-sync will try to access the repo in the
+    "natural" manner.  For example, "https://repo" will try to use plain HTTPS
+    and "git@example.com:repo" will try to use SSH.
+
+    username/password
+            The --username (GIT_SYNC_USERNAME) and --password
+            (GIT_SYNC_PASSWORD) flags will be used.  To prevent password
+            leaks, the GIT_SYNC_PASSWORD environment variable is almost always
+            preferred to the flag.
+
+            A variant of this is --askpass-url (GIT_ASKPASS_URL), which
+            consults a URL (e.g. http://metadata) to get credentials on each
+            sync.
+
+    SSH
+            When --ssh (GIT_SYNC_SSH) is specified, the --ssh-key-file
+            (GIT_SSH_KEY_FILE) will be used.  Users are strongly advised to
+            also use --ssh-known-hosts (GIT_KNOWN_HOSTS) and
+            --ssh-known-hosts-file (GIT_SSH_KNOWN_HOSTS_FILE) when using SSH.
+
+    cookies
+            When --cookie-file (GIT_COOKIE_FILE) is specified, the associated
+            cookies can contain authentication information.
+
+WEBHOOKS
+
+    Webhooks are executed asynchronously from the main git-sync process. If a
+    --webhook-url is configured, whenever a new hash is synced a call is sent
+    using the method defined in --webhook-method. Git-sync will retry this
+    webhook call until it succeeds (based on --webhook-success-status).  If
+    unsuccessful, git-sync will wait --webhook-backoff (default 3s) before
+    re-attempting the webhook call.
 ```
-
-## Parameters
-
-| Environment Variable            | Flag                       | Description                                                                                                                                                                                                                                   | Default                       |
-|---------------------------------|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
-| GIT_SYNC_REPO                   | `--repo`                   | the git repository to clone                                                                                                                                                                                                                   | ""                            |
-| GIT_SYNC_BRANCH                 | `--branch`                 | the git branch to check out                                                                                                                                                                                                                   | "master"                      |
-| GIT_SYNC_REV                    | `--rev`                    | the git revision (tag or hash) to check out                                                                                                                                                                                                   | "HEAD"                        |
-| GIT_SYNC_DEPTH                  | `--depth`                  | use a shallow clone with a history truncated to the specified number of commits                                                                                                                                                               | 0                             |
-| GIT_SYNC_SUBMODULES             | `--submodules`             | git submodule behavior: one of 'recursive', 'shallow', or 'off'                                                                                                                                                                               | recursive                     |
-| GIT_SYNC_ROOT                   | `--root`                   | the root directory for git-sync operations, under which --link will be created                                                                                                                                                                | ""                            |
-| GIT_SYNC_LINK                   | `--link`                   | the name of a symlink, under --root, which points to a directory in which --repo is checked out (defaults to the leaf dir of --repo)                                                                                                          | ""                            |
-| GIT_SYNC_ERROR_FILE             | `--error-file`             | the name of a file, under --root, into which errors will be written (defaults to "", disabling error reporting)                                                                                                  | ""                            |
-| GIT_SYNC_PERIOD                 | `--period`                 | how long to wait between syncs, must be >= 10ms                                                                                                                                                                                               | "10s"                         |
-| GIT_SYNC_SYNC_TIMEOUT           | `--sync-timeout`           | the total time allowed for one complete sync, must be >= 10ms                                                                                                                                                                                 | "120s"                        |
-| GIT_SYNC_ONE_TIME               | `--one-time`               | exit after the first sync                                                                                                                                                                                                                     | false                         |
-| GIT_SYNC_MAX_SYNC_FAILURES      | `--max-sync-failures`      | the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)                                                                                                        | 0                             |
-| GIT_SYNC_PERMISSIONS            | `--change-permissions`     | the file permissions to apply to the checked-out files (0 will not change permissions at all)                                                                                                                                                 | 0                             |
-| GIT_SYNC_HOOK_COMMAND           | `--sync-hook-command`      | an optional command to be executed after syncing a new hash of the remote repository                                            |
-| GIT_SYNC_WEBHOOK_URL            | `--webhook-url`            | the URL for a webook notification when syncs complete                                                                                                                                                                                         | ""                            |
-| GIT_SYNC_WEBHOOK_METHOD         | `--webhook-method`         | the HTTP method for the webhook                                                                                                                                                                                                               | "POST"                        |
-| GIT_SYNC_WEBHOOK_SUCCESS_STATUS | `--webhook-success-status` | the HTTP status code indicating a successful webhook (-1 disables success checks to make webhooks fire-and-forget)                                                                                                                            | 200                           |
-| GIT_SYNC_WEBHOOK_TIMEOUT        | `--webhook-timeout`        | the timeout for the webhook                                                                                                                                                                                                                   | 1 (second)                    |
-| GIT_SYNC_WEBHOOK_BACKOFF        | `--webhook-backoff`        | the time to wait before retrying a failed webhook                                                                                                                                                                                             | 3 (seconds)                   |
-| GIT_SYNC_USERNAME               | `--username`               | the username to use for git auth                                                                                                                                                                                                              | ""                            |
-| GIT_SYNC_PASSWORD               | `--password`               | the password or personal access token to use for git auth (prefer env vars for passwords)                                                                                                                                                     | ""                            |
-| GIT_SYNC_SSH                    | `--ssh`                    | use SSH for git operations                                                                                                                                                                                                                    | false                         |
-| GIT_SSH_KEY_FILE                | `--ssh-key-file`           | the SSH key to use                                                                                                                                                                                                                            | "/etc/git-secret/ssh"         |
-| GIT_KNOWN_HOSTS                 | `--ssh-known-hosts`        | enable SSH known_hosts verification                                                                                                                                                                                                           | true                          |
-| GIT_SSH_KNOWN_HOSTS_FILE        | `--ssh-known-hosts-file`   | the known_hosts file to use                                                                                                                                                                                                                   | "/etc/git-secret/known_hosts" |
-| GIT_SYNC_ADD_USER               | `--add-user`               | add a record to /etc/passwd for the current UID/GID (needed to use SSH with a different UID)                                                                                                                                                  | false                         |
-| GIT_COOKIE_FILE                 | `--cookie-file`            | use git cookiefile                                                                                                                                                                                                                            | false                         |
-| GIT_ASKPASS_URL                 | `--askpass-url`            | the URL for GIT_ASKPASS callback                                                                                                                                                                                                              | ""                            |
-| GIT_SYNC_GIT                    | `--git`                    | the git command to run (subject to PATH search, mostly for testing                                                                                                                                                                            | "git"                         |
-| GIT_SYNC_HTTP_BIND              | `--http-bind`              | the bind address (including port) for git-sync's HTTP endpoint                                                                                                                                                                                | ""                            |
-| GIT_SYNC_HTTP_METRICS           | `--http-metrics`           | enable metrics on git-sync's HTTP endpoint                                                                                                                                                                                                    | true                          |
-| GIT_SYNC_HTTP_PPROF             | `--http-pprof`             | enable the pprof debug endpoints on git-sync's HTTP endpoint                                                                                                                                                                                  | false                         |
-| GIT_SYNC_GIT_CONFIG             | `--git-config`             | additional git config options in 'key1:val1,key2:val2' format                                                                                                                                                                                 | ""                            |
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()

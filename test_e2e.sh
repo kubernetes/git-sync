@@ -1389,3 +1389,35 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 assert_file_absent "$ROOT"/error.json
 # Wrap up
 pass
+
+##############################################
+# Test sparse-checkout files
+##############################################
+testcase "sparse-checkout"
+echo "!/*" > "$DIR"/sparseconfig
+echo "!/*/" >> "$DIR"/sparseconfig
+echo "file2" >> "$DIR"/sparseconfig
+echo "$TESTCASE" > "$REPO"/file
+echo "$TESTCASE" > "$REPO"/file2
+mkdir "$REPO"/dir
+echo "$TESTCASE" > "$REPO"/dir/file3
+git -C "$REPO" add file2
+git -C "$REPO" add dir
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --link="link" \
+    --sparse-checkout-file="$DIR/sparseconfig" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file2
+assert_file_absent "$ROOT"/link/file
+assert_file_absent "$ROOT"/link/dir/file3
+assert_file_absent "$ROOT"/link/dir
+assert_file_eq "$ROOT"/link/file2 "$TESTCASE"
+# Wrap up
+pass
