@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -83,6 +84,8 @@ var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 
 var flSyncHookCommand = pflag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"an optional command to be executed after syncing a new hash of the remote repository")
+var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
+	"the path to a sparse-checkout file")
 
 var flWebhookURL = pflag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
 	"a URL for optional webhook notifications when syncs complete")
@@ -352,6 +355,7 @@ type repoSync struct {
 	chmod      int            // mode to change repo to, or 0
 	link       string         // the name of the symlink to publish under `root`
 	authURL    string         // a URL to re-fetch credentials, or ""
+	sparseFile string         // path to a sparse-checkout file
 }
 
 func main() {
@@ -523,6 +527,7 @@ func main() {
 		chmod:      *flChmod,
 		link:       *flLink,
 		authURL:    *flAskPassURL,
+		sparseFile: *flSparseCheckoutFile,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -887,7 +892,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(git.root, hash)
-	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch)
+	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
 	if err != nil {
 		return err
@@ -904,6 +909,48 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
 	if err = ioutil.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
 		return err
+	}
+
+	// If sparse checkout is requested, configure git for it.
+	if git.sparseFile != "" {
+		// This is required due to the undocumented behavior outlined here:
+		// https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
+		log.V(0).Info("configuring worktree sparse checkout")
+		checkoutFile := *flSparseCheckoutFile
+
+		gitInfoPath := filepath.Join(git.root, fmt.Sprintf(".git/worktrees/%s/info", hash))
+		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
+
+		source, err := os.Open(checkoutFile)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+
+		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
+			fileMode := os.FileMode(int(0755))
+			err := os.Mkdir(gitInfoPath, fileMode)
+			if err != nil {
+				return err
+			}
+		}
+
+		destination, err := os.Create(gitSparseConfigPath)
+		if err != nil {
+			return err
+		}
+		defer destination.Close()
+
+		_, err = io.Copy(destination, source)
+		if err != nil {
+			return err
+		}
+
+		args := []string{"sparse-checkout", "init"}
+		_, err = runCommand(ctx, worktreePath, *flGitCmd, args...)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Reset the worktree's working copy to the specific rev.
@@ -1011,6 +1058,48 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 				return err
 			}
 		} else {
+			return err
+		}
+	}
+
+	// If sparse checkout is requested, configure git for it.
+	if git.sparseFile != "" {
+		log.V(0).Info("configuring sparse checkout")
+		checkoutFile := *flSparseCheckoutFile
+
+		// TODO: capture this as a function (mostly duplicated above)
+		gitRepoPath := filepath.Join(git.root, ".git")
+		gitInfoPath := filepath.Join(gitRepoPath, "info")
+		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
+
+		source, err := os.Open(checkoutFile)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+
+		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
+			fileMode := os.FileMode(int(0755))
+			err := os.Mkdir(gitInfoPath, fileMode)
+			if err != nil {
+				return err
+			}
+		}
+
+		destination, err := os.Create(gitSparseConfigPath)
+		if err != nil {
+			return err
+		}
+		defer destination.Close()
+
+		_, err = io.Copy(destination, source)
+		if err != nil {
+			return err
+		}
+
+		args := []string{"sparse-checkout", "init"}
+		_, err = runCommand(ctx, git.root, *flGitCmd, args...)
+		if err != nil {
 			return err
 		}
 	}
@@ -1594,6 +1683,11 @@ OPTIONS
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
             be created. This flag is required.
+
+    --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
+            The path to a git sparse-checkout file (see git documentation for
+            details) which controls which files and directories will be checked
+            out.
 
     --ssh, $GIT_SYNC_SSH
             Use SSH for git authentication and operations.
