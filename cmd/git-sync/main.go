@@ -183,6 +183,7 @@ const (
 
 type customLogger struct {
 	logr.Logger
+	root      string
 	errorFile string
 }
 
@@ -230,16 +231,16 @@ func (l *customLogger) exportError(content string) {
 
 // writeContent writes the error content to the error file.
 func (l *customLogger) writeContent(content []byte) {
-	if _, err := os.Stat(*flRoot); os.IsNotExist(err) {
+	if _, err := os.Stat(l.root); os.IsNotExist(err) {
 		fileMode := os.FileMode(0755)
-		if err := os.Mkdir(*flRoot, fileMode); err != nil {
-			l.Logger.Error(err, "can't create the root directory", "root", *flRoot)
+		if err := os.Mkdir(l.root, fileMode); err != nil {
+			l.Logger.Error(err, "can't create the root directory", "root", l.root)
 			return
 		}
 	}
-	tmpFile, err := ioutil.TempFile(*flRoot, "tmp-err-")
+	tmpFile, err := ioutil.TempFile(l.root, "tmp-err-")
 	if err != nil {
-		l.Logger.Error(err, "can't create temporary error-file", "directory", *flRoot, "prefix", "tmp-err-")
+		l.Logger.Error(err, "can't create temporary error-file", "directory", l.root, "prefix", "tmp-err-")
 		return
 	}
 	defer func() {
@@ -253,8 +254,9 @@ func (l *customLogger) writeContent(content []byte) {
 		return
 	}
 
-	if err := os.Rename(tmpFile.Name(), l.errorFile); err != nil {
-		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", l.errorFile)
+	errorFile := filepath.Join(l.root, l.errorFile)
+	if err := os.Rename(tmpFile.Name(), errorFile); err != nil {
+		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", errorFile)
 		return
 	}
 }
@@ -264,11 +266,12 @@ func (l *customLogger) deleteErrorFile() {
 	if l.errorFile == "" {
 		return
 	}
-	if err := os.Remove(l.errorFile); err != nil {
+	errorFile := filepath.Join(l.root, l.errorFile)
+	if err := os.Remove(errorFile); err != nil {
 		if os.IsNotExist(err) {
 			return
 		}
-		l.Logger.Error(err, "can't delete the error-file", "filename", l.errorFile)
+		l.Logger.Error(err, "can't delete the error-file", "filename", errorFile)
 	}
 }
 
@@ -385,11 +388,7 @@ func main() {
 	flag.CommandLine.Parse(nil) // Otherwise glog complains
 	setGlogFlags()
 
-	var errorFile string
-	if *flErrorFile != "" {
-		errorFile = filepath.Join(*flRoot, *flErrorFile)
-	}
-	log = &customLogger{glogr.New(), errorFile}
+	log = &customLogger{glogr.New(), *flRoot, *flErrorFile}
 
 	if *flVersion {
 		fmt.Println(version.VERSION)
