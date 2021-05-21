@@ -211,6 +211,13 @@ func (l *customLogger) exportError(content string) {
 
 // writeContent writes the error content to the error file.
 func (l *customLogger) writeContent(content []byte) {
+	if _, err := os.Stat(*flRoot); os.IsNotExist(err) {
+		fileMode := os.FileMode(0755)
+		if err := os.Mkdir(*flRoot, fileMode); err != nil {
+			l.Logger.Error(err, "can't create the root directory", "root", *flRoot)
+			return
+		}
+	}
 	tmpFile, err := ioutil.TempFile(*flRoot, "tmp-err-")
 	if err != nil {
 		l.Logger.Error(err, "can't create temporary error-file", "directory", *flRoot, "prefix", "tmp-err-")
