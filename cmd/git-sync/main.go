@@ -259,6 +259,9 @@ func (l *customLogger) writeContent(content []byte) {
 		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", errorFile)
 		return
 	}
+	if err := os.Chmod(errorFile, 0644) ; err != nil {
+		l.Logger.Error(err, "can't change the mod of the error-file", "error-file", errorFile)
+	}
 }
 
 // deleteErrorFile deletes the error file.
