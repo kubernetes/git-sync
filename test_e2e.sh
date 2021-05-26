@@ -1346,10 +1346,6 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE"
 # Wrap up
 pass
 
-echo
-echo "all tests passed: cleaning up $DIR"
-rm -rf "$DIR"
-
 ##############################################
 # Test export-error
 ##############################################
@@ -1421,3 +1417,9 @@ assert_file_absent "$ROOT"/link/dir
 assert_file_eq "$ROOT"/link/file2 "$TESTCASE"
 # Wrap up
 pass
+
+# Finally...
+echo
+echo "all tests passed: cleaning up $DIR"
+rm -rf "$DIR"
+
