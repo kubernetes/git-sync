@@ -58,8 +58,15 @@ RUN apt-get -y install --no-install-recommends \
         coreutils \
         socat \
         openssh-client
+# We want a newer git than the norm.
 RUN apt-get -y -t buster-backports install --no-install-recommends \
         git
+# libcurl3-gnutls=7.74.0-1.2~bpo10+1 is broken.  We can downgrade for now until
+# the fix reaches upstream.
+# https://github.com/kubernetes/git-sync/issues/395
+RUN apt-get -y install --no-install-recommends --allow-downgrades \
+        libcurl3-gnutls:amd64=7.64.0-4+deb10u2
+RUN apt-get -y autoremove
 RUN rm -rf /var/lib/apt/lists/*
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
