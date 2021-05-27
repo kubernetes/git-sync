@@ -44,19 +44,22 @@
 #    => either add the git-sync GID or else set --root, mount a volume,
 #       and manage volume permissions to access that volume
 
-FROM {ARG_FROM}
+#############################################################################
+# First we prepare the image that we want, regardless of build layers.
+#############################################################################
+FROM {ARG_FROM} as prep
 
 RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
-        /etc/apt/sources.list.d/backports.list \
-    && apt update \
-    && apt -y upgrade \
-    && apt -y install \
+        /etc/apt/sources.list.d/backports.list
+RUN apt update
+RUN apt -y upgrade
+RUN apt -y install \
         ca-certificates \
         coreutils \
         socat \
-        openssh-client \
-    && apt -y -t buster-backports install git \
-    && rm -rf /var/lib/apt/lists/*
+        openssh-client
+RUN apt -y -t buster-backports install git
+RUN rm -rf /var/lib/apt/lists/*
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
@@ -74,8 +77,19 @@ RUN echo "git-sync:x:65533:git-sync" >> /etc/group
 # they use our git-sync group.  If the user needs a different group or sets
 # $GIT_SYNC_ROOT or --root, their values will override this, and we assume they
 # are handling permissions themselves.
-ENV GIT_SYNC_ROOT=/git
 RUN mkdir -m 02775 /git && chown 65533:65533 /git
+
+# Add the platform-specific binary.
+COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
+
+# Add third-party licenses.
+COPY .licenses/ /LICENSES/
+
+#############################################################################
+# Now we make a "clean" final image.
+#############################################################################
+FROM scratch
+COPY --from=prep / /
 
 # Run as non-root by default.  There's simply no reason to run as root.
 USER 65533:65533
@@ -85,10 +99,7 @@ USER 65533:65533
 ENV HOME=/tmp
 WORKDIR /tmp
 
-# Add the platform-specific binary.
-COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
-
-# Add third-party licenses.
-COPY .licenses/ /LICENSES/
+# Default values for flags.
+ENV GIT_SYNC_ROOT=/tmp/git
 
 ENTRYPOINT ["/{ARG_BIN}"]
