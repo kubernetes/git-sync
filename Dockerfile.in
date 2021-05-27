@@ -51,14 +51,14 @@ FROM {ARG_FROM} as prep
 
 RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
         /etc/apt/sources.list.d/backports.list
-RUN apt update
-RUN apt -y upgrade
-RUN apt -y install \
+RUN apt-get update
+RUN apt-get -y upgrade
+RUN apt-get -y install \
         ca-certificates \
         coreutils \
         socat \
         openssh-client
-RUN apt -y -t buster-backports install git
+RUN apt-get -y -t buster-backports install git
 RUN rm -rf /var/lib/apt/lists/*
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
