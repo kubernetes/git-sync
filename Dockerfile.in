@@ -53,12 +53,13 @@ RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
         /etc/apt/sources.list.d/backports.list
 RUN apt-get update
 RUN apt-get -y upgrade
-RUN apt-get -y install \
+RUN apt-get -y install --no-install-recommends \
         ca-certificates \
         coreutils \
         socat \
         openssh-client
-RUN apt-get -y -t buster-backports install git
+RUN apt-get -y -t buster-backports install --no-install-recommends \
+        git
 RUN rm -rf /var/lib/apt/lists/*
 
 # By default we will run as this user...
