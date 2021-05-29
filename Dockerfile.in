@@ -44,19 +44,30 @@
 #    => either add the git-sync GID or else set --root, mount a volume,
 #       and manage volume permissions to access that volume
 
-FROM {ARG_FROM}
+#############################################################################
+# First we prepare the image that we want, regardless of build layers.
+#############################################################################
+FROM {ARG_FROM} as prep
 
 RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
-        /etc/apt/sources.list.d/backports.list \
-    && apt update \
-    && apt -y upgrade \
-    && apt -y install \
+        /etc/apt/sources.list.d/backports.list
+RUN apt-get update
+RUN apt-get -y upgrade
+RUN apt-get -y install --no-install-recommends \
         ca-certificates \
         coreutils \
         socat \
-        openssh-client \
-    && apt -y -t buster-backports install git \
-    && rm -rf /var/lib/apt/lists/*
+        openssh-client
+# We want a newer git than the norm.
+RUN apt-get -y -t buster-backports install --no-install-recommends \
+        git
+# libcurl3-gnutls=7.74.0-1.2~bpo10+1 is broken.  We can downgrade for now until
+# the fix reaches upstream.
+# https://github.com/kubernetes/git-sync/issues/395
+RUN apt-get -y install --no-install-recommends --allow-downgrades \
+        libcurl3-gnutls:amd64=7.64.0-4+deb10u2
+RUN apt-get -y autoremove
+RUN rm -rf /var/lib/apt/lists/*
 
 # By default we will run as this user...
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
@@ -73,15 +84,7 @@ RUN echo "git-sync:x:65533:git-sync" >> /etc/group
 # they use our git-sync group.  If the user needs a different group or sets
 # $GIT_SYNC_ROOT or --root, their values will override this, and we assume they
 # are handling permissions themselves.
-ENV GIT_SYNC_ROOT=/tmp/git
 RUN mkdir -m 02775 /tmp/git && chown 65533:65533 /tmp/git
-
-# Run as non-root by default.  There's simply no reason to run as root.
-USER 65533:65533
-
-# Setting HOME ensures that whatever UID this ultimately runs as can write to
-# files like ~/.gitconfig.
-ENV HOME=/tmp
 
 # Add the platform-specific binary.
 COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
@@ -89,5 +92,21 @@ COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 # Add third-party licenses.
 COPY .licenses/ /LICENSES/
 
+#############################################################################
+# Now we make a "clean" final image.
+#############################################################################
+FROM scratch
+COPY --from=prep / /
+
+# Run as non-root by default.  There's simply no reason to run as root.
+USER 65533:65533
+
+# Setting HOME ensures that whatever UID this ultimately runs as can write to
+# files like ~/.gitconfig.
+ENV HOME=/tmp
 WORKDIR /tmp
+
+# Default values for flags.
+ENV GIT_SYNC_ROOT=/tmp/git
+
 ENTRYPOINT ["/{ARG_BIN}"]

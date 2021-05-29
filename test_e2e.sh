@@ -1316,6 +1316,23 @@ assert_file_absent "$ROOT"/error.json
 # Wrap up
 pass
 
+##############################################
+# Test github HTTPS
+# TODO: it would be better if we set up a local HTTPS server
+##############################################
+testcase "github-https"
+GIT_SYNC \
+    --one-time \
+    --repo="https://github.com/kubernetes/git-sync" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_file_exists "$ROOT"/link/LICENSE
+# Wrap up
+pass
+
 # Finally...
 echo
 echo "cleaning up $DIR"
