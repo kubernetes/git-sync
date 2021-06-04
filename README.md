@@ -42,9 +42,14 @@ make container REGISTRY=registry VERSION=tag \
 ## Usage
 
 ```
-# run the container
+# make a directory (owned by you) for the volume
+export DIR="/tmp/git-data"
+mkdir -p $DIR
+
+# run the container (as your own UID)
 docker run -d \
-    -v /tmp/git-data:/tmp/git \
+    -v $DIR:/tmp/git \
+    -u$(id -u):$(id -g) \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
@@ -53,7 +58,7 @@ docker run -d \
 # run an nginx container to serve the content
 docker run -d \
     -p 8080:80 \
-    -v /tmp/git-data:/usr/share/nginx/html \
+    -v $DIR:/usr/share/nginx/html \
     nginx
 ```
 
@@ -70,7 +75,7 @@ A webhook is configured using a set of CLI flags. At its most basic only `webhoo
 
 ```
 docker run -d \
-    -v /tmp/git-data:/git \
+    -v $DIR:/tmp/git \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
