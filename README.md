@@ -42,9 +42,16 @@ make container REGISTRY=registry VERSION=tag \
 ## Usage
 
 ```
+# make a directory (owned by you) for the volume
+export DIR="/tmp/git-data"
+mkdir -p $DIR
+
+# run the container (as your own UID)
+
 # run the container
 docker run -d \
-    -v /tmp/git-data:/tmp/git \
+    -v $DIR:/tmp/git \
+    -u$(id -u):$(id -g) \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
         --branch=master \
@@ -54,7 +61,7 @@ docker run -d \
 # run an nginx container to serve the content
 docker run -d \
     -p 8080:80 \
-    -v /tmp/git-data:/usr/share/nginx/html \
+    -v $DIR:/usr/share/nginx/html \
     nginx
 ```
 
