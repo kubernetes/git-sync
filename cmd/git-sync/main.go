@@ -1365,11 +1365,17 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("can't access auth URL: %w", err)
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("auth URL returned status %d", resp.StatusCode)
+		errMessage, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("auth URL returned status %d, failed to read body: %w", resp.StatusCode, err)
+		}
+		return fmt.Errorf("auth URL returned status %d, body: %q", resp.StatusCode, string(errMessage))
 	}
 	authData, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
 	if err != nil {
 		return fmt.Errorf("can't read auth response: %w", err)
 	}
