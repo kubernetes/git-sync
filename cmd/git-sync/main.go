@@ -688,6 +688,11 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
+	// ls to record in logs what commit was fetched
+	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "log", "-n1"); err != nil {
+		return err
+	}
+
 	// GC clone
 	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
