@@ -700,6 +700,14 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
+	// With shallow fetches, it's possible to race with the upstream repo and
+	// end up NOT fetching the hash we wanted. If we can't resolve that hash
+	// to a commit we can just end early and leave it for the next sync period.
+	if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
+		log.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
+		return nil
+	}
+
 	// GC clone
 	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
