@@ -22,7 +22,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
+	stdflag "flag" // renamed so we don't accidentally use it
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -84,7 +84,7 @@ var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 
 var flSyncHookCommand = pflag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"an optional command to be executed after syncing a new hash of the remote repository")
-var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
+var flSparseCheckoutFile = pflag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file")
 
 var flWebhookURL = pflag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
@@ -341,14 +341,14 @@ func envDuration(key string, def time.Duration) time.Duration {
 
 func setGlogFlags() {
 	// Force logging to stderr.
-	stderrFlag := flag.Lookup("logtostderr")
+	stderrFlag := stdflag.Lookup("logtostderr")
 	if stderrFlag == nil {
 		handleError(false, "ERROR: can't find glog flag 'logtostderr'")
 	}
 	stderrFlag.Value.Set("true")
 
 	// Set verbosity from flag.
-	vFlag := flag.Lookup("v")
+	vFlag := stdflag.Lookup("v")
 	if vFlag == nil {
 		fmt.Fprintf(os.Stderr, "ERROR: can't find glog flag 'v'\n")
 		os.Exit(1)
@@ -388,7 +388,7 @@ func main() {
 	//
 
 	pflag.Parse()
-	flag.CommandLine.Parse(nil) // Otherwise glog complains
+	stdflag.CommandLine.Parse(nil) // Otherwise glog complains
 	setGlogFlags()
 
 	log = &customLogger{glogr.New(), *flRoot, *flErrorFile}
