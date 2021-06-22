@@ -1440,7 +1440,7 @@ testcase "github-https"
 GIT_SYNC \
     --one-time \
     --repo="https://github.com/kubernetes/git-sync" \
-    --branch=e2e-branch \
+    --branch=master \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
