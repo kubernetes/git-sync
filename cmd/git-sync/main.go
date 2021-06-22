@@ -358,17 +358,18 @@ func setGlogFlags() {
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd        string         // the git command to run
-	root       string         // absolute path to the root directory
-	repo       string         // remote repo to sync
-	branch     string         // remote branch to sync
-	rev        string         // the rev or SHA to sync
-	depth      int            // for shallow sync
-	submodules submodulesMode // how to handle submodules
-	chmod      int            // mode to change repo to, or 0
-	link       string         // the name of the symlink to publish under `root`
-	authURL    string         // a URL to re-fetch credentials, or ""
-	sparseFile string         // path to a sparse-checkout file
+	cmd         string         // the git command to run
+	root        string         // absolute path to the root directory
+	repo        string         // remote repo to sync
+	branch      string         // remote branch to sync
+	rev         string         // the rev or SHA to sync
+	depth       int            // for shallow sync
+	submodules  submodulesMode // how to handle submodules
+	chmod       int            // mode to change repo to, or 0
+	link        string         // the name of the symlink to publish under `root`
+	authURL     string         // a URL to re-fetch credentials, or ""
+	sparseFile  string         // path to a sparse-checkout file
+	syncHookCmd string         // command to run after each sync
 }
 
 func main() {
@@ -526,17 +527,18 @@ func main() {
 
 	// Capture the various git parameters.
 	git := &repoSync{
-		cmd:        *flGitCmd,
-		root:       absRoot,
-		repo:       *flRepo,
-		branch:     *flBranch,
-		rev:        *flRev,
-		depth:      *flDepth,
-		submodules: submodulesMode(*flSubmodules),
-		chmod:      *flChmod,
-		link:       *flLink,
-		authURL:    *flAskPassURL,
-		sparseFile: *flSparseCheckoutFile,
+		cmd:         *flGitCmd,
+		root:        absRoot,
+		repo:        *flRepo,
+		branch:      *flBranch,
+		rev:         *flRev,
+		depth:       *flDepth,
+		submodules:  submodulesMode(*flSubmodules),
+		chmod:       *flChmod,
+		link:        *flLink,
+		authURL:     *flAskPassURL,
+		sparseFile:  *flSparseCheckoutFile,
+		syncHookCmd: *flSyncHookCommand,
 	}
 
 	// This context is used only for git credentials initialization. There are no long-running operations like
@@ -551,7 +553,7 @@ func main() {
 	}
 
 	if *flSSH {
-		if err := setupGitSSH(*flSSHKnownHosts); err != nil {
+		if err := setupGitSSH(*flSSHKnownHosts, *flSSHKeyFile, *flSSHKnownHostsFile); err != nil {
 			log.Error(err, "ERROR: can't set up git SSH")
 			os.Exit(1)
 		}
@@ -566,7 +568,7 @@ func main() {
 
 	// This needs to be after all other git-related config flags.
 	if *flGitConfig != "" {
-		if err := setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
+		if err := git.setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
 			log.Error(err, "ERROR: can't set additional git configs")
 			os.Exit(1)
 		}
@@ -925,7 +927,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		// This is required due to the undocumented behavior outlined here:
 		// https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
 		log.V(0).Info("configuring worktree sparse checkout")
-		checkoutFile := *flSparseCheckoutFile
+		checkoutFile := git.sparseFile
 
 		gitInfoPath := filepath.Join(git.root, fmt.Sprintf(".git/worktrees/%s/info", hash))
 		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
@@ -956,7 +958,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = runCommand(ctx, worktreePath, *flGitCmd, args...)
+		_, err = runCommand(ctx, worktreePath, git.cmd, args...)
 		if err != nil {
 			return err
 		}
@@ -1014,11 +1016,10 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 	// Execute the hook command, if requested.
 	var execErr error
-	if *flSyncHookCommand != "" {
-		log.V(0).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
+	if git.syncHookCmd != "" {
+		log.V(0).Info("executing command for git sync hooks", "command", git.syncHookCmd)
 		// TODO: move this to be async like webhook?
-		// TODO: don't use global flags way down here
-		if _, err := runCommand(ctx, worktreePath, *flSyncHookCommand); err != nil {
+		if _, err := runCommand(ctx, worktreePath, git.syncHookCmd); err != nil {
 			// Save it until after cleanup runs.
 			execErr = err
 		}
@@ -1074,7 +1075,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 	// If sparse checkout is requested, configure git for it.
 	if git.sparseFile != "" {
 		log.V(0).Info("configuring sparse checkout")
-		checkoutFile := *flSparseCheckoutFile
+		checkoutFile := git.sparseFile
 
 		// TODO: capture this as a function (mostly duplicated above)
 		gitRepoPath := filepath.Join(git.root, ".git")
@@ -1107,7 +1108,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = runCommand(ctx, git.root, *flGitCmd, args...)
+		_, err = runCommand(ctx, git.root, git.cmd, args...)
 		if err != nil {
 			return err
 		}
@@ -1295,11 +1296,8 @@ func (git *repoSync) SetupAuth(ctx context.Context, username, password string) e
 	return nil
 }
 
-func setupGitSSH(setupKnownHosts bool) error {
+func setupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSSHKnownHosts string) error {
 	log.V(1).Info("setting up git SSH credentials")
-
-	var pathToSSHSecret = *flSSHKeyFile
-	var pathToSSHKnownHosts = *flSSHKnownHostsFile
 
 	_, err := os.Stat(pathToSSHSecret)
 	if err != nil {
@@ -1402,7 +1400,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	return nil
 }
 
-func setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
+func (git *repoSync) setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 	log.V(1).Info("setting additional git configs")
 
 	configs, err := parseGitConfigs(configsFlag)
@@ -1410,7 +1408,7 @@ func setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
 	for _, kv := range configs {
-		if _, err := runCommand(ctx, "", *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
+		if _, err := runCommand(ctx, "", git.cmd, "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
 		}
 	}
