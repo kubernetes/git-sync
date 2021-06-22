@@ -425,6 +425,54 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
+# Test worktree-cleanup
+##############################################
+testcase "worktree-cleanup"
+
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --period=100ms \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+
+# wait for first sync
+sleep 3
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+
+# suspend time so we can fake corruption
+docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+    | while read CTR; do
+        docker pause "$CTR" >/dev/null
+    done
+
+# make a second commit
+echo "$TESTCASE-ok" > "$REPO"/file2
+git -C "$REPO" add file2
+git -C "$REPO" commit -qam "$TESTCASE new file"
+# make a worktree to collide with git-sync
+REV=$(git -C "$REPO" rev-list -n1 HEAD)
+git -C "$REPO" worktree add -q "$ROOT"/"$REV" -b e2e --no-checkout
+
+# resume time
+docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+    | while read CTR; do
+        docker unpause "$CTR" >/dev/null
+    done
+
+sleep 3
+assert_file_exists "$ROOT"/link/file2
+assert_file_eq "$ROOT"/link/file2 "$TESTCASE-ok"
+# Wrap up
+pass
+
+##############################################
 # Test readlink
 ##############################################
 testcase "readlink"
