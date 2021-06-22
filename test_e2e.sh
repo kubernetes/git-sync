@@ -315,7 +315,7 @@ git -C "$ROOT/subdir" init >/dev/null
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev=HEAD \
     --root="$ROOT/subdir/root" \
     --link="link" \
@@ -340,7 +340,7 @@ echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=master \
+    --branch=e2e-branch \
     --rev="HEAD" \
     --root="$ROOT" \
     --link="link" \
@@ -354,7 +354,6 @@ pass
 ## FIXME: test when repo is valid git, but wrong remote
 ## FIXME: test when repo is valid git, but not ar ref we need
 ## FIXME: test when repo is valid git, and is already correct
-exit 42
 
 ##############################################
 # Test default syncing (master)
