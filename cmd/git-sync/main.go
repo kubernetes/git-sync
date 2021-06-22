@@ -673,6 +673,18 @@ func setRepoReady() {
 	repoReady = true
 }
 
+// cleanupWorkTree() is used to remove a worktree and its folder
+func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
+	// Clean up worktree(s)
+	log.V(1).Info("removing worktree", "path", worktree)
+	if err := os.RemoveAll(worktree); err != nil {
+		return fmt.Errorf("error removing directory: %v", err)
+	} else if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+		return err
+	}
+	return nil
+}
+
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
@@ -695,6 +707,17 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(gitRoot, hash)
+
+	// Avoid wedge cases where the worktree was created but this function error'd without cleaning the worktree.
+	// Next timearound, the sync loop fails to create the worktree and bails out.
+	// Error observed:
+	//   " Run(git worktree add /repo/root/rev-nnnn origin/develop):
+	//     exit status 128: { stdout: \"Preparing worktree (detached HEAD nnnn)\\n\", stderr: \"fatal: '/repo/root/rev-nnnn' already exists\\n\" }"
+	//.  "
+	if err := cleanupWorkTree(ctx, gitRoot, worktreePath); err != nil {
+		return err
+	}
+
 	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
@@ -808,12 +831,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// Clean up previous worktree(s).
 	var cleanupErr error
 	if oldWorktree != "" {
-		log.V(1).Info("removing old worktree", "path", oldWorktree)
-		if err := os.RemoveAll(oldWorktree); err != nil {
-			cleanupErr = fmt.Errorf("error removing directory: %v", err)
-		} else if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
-			cleanupErr = err
-		}
+		cleanupErr = cleanupWorkTree(ctx, gitRoot, oldWorktree)
 	}
 
 	if cleanupErr != nil {
