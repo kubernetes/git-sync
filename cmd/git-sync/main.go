@@ -908,6 +908,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 
+	// With shallow fetches, it's possible to race with the upstream repo and
+	// end up NOT fetching the hash we wanted. If we can't resolve that hash
+	// to a commit we can just end early and leave it for the next sync period.
+	if _, err := git.ResolveRef(ctx, hash); err != nil {
+		log.Error(err, "can't resolve commit, will retry", "rev", git.rev, "hash", hash)
+		return nil
+	}
+
 	// GC clone
 	if _, err := runCommand(ctx, git.root, git.cmd, "gc", "--prune=all"); err != nil {
 		return err
@@ -1134,8 +1142,8 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 }
 
 // LocalHashForRev returns the locally known hash for a given rev.
-func (git *repoSync) LocalHashForRev(ctx context.Context) (string, error) {
-	output, err := runCommand(ctx, git.root, git.cmd, "rev-parse", git.rev)
+func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, error) {
+	output, err := runCommand(ctx, git.root, git.cmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -1153,25 +1161,33 @@ func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, 
 }
 
 func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
-	// If git doesn't identify rev as a commit, we're done.
-	output, err := runCommand(ctx, git.root, git.cmd, "cat-file", "-t", git.rev)
+	hash, err := git.ResolveRef(ctx, git.rev)
 	if err != nil {
 		return false, err
 	}
+	return strings.HasPrefix(hash, git.rev), nil
+}
+
+func (git *repoSync) ResolveRef(ctx context.Context, ref string) (string, error) {
+	// If git doesn't identify rev as a commit, we're done.
+	output, err := runCommand(ctx, git.root, git.cmd, "cat-file", "-t", ref)
+	if err != nil {
+		return "", err
+	}
 	o := strings.Trim(string(output), "\n")
 	if o != "commit" {
-		return false, nil
+		return "", nil
 	}
 
 	// `git cat-file -t` also returns "commit" for tags. If rev is already a git
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = git.LocalHashForRev(ctx)
+	output, err = git.LocalHashForRev(ctx, ref)
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	return strings.HasPrefix(output, git.rev), nil
+	return output, nil
 }
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
@@ -1198,7 +1214,7 @@ func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = git.LocalHashForRev(ctx)
+		hash, err = git.LocalHashForRev(ctx, git.rev)
 		if err != nil {
 			return false, "", err
 		}
@@ -1224,7 +1240,7 @@ func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 // GetRevs returns the local and upstream hashes for rev.
 func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	// Ask git what the exact hash is for rev.
-	local, err := git.LocalHashForRev(ctx)
+	local, err := git.LocalHashForRev(ctx, git.rev)
 	if err != nil {
 		return "", "", err
 	}
