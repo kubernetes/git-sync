@@ -161,7 +161,8 @@ function finish() {
 }
 trap finish INT EXIT
 
-SLOW_GIT=/slow_git.sh
+SLOW_GIT_CLONE=/slow_git_clone.sh
+SLOW_GIT_FETCH=/slow_git_fetch.sh
 ASKPASS_GIT=/askpass_git.sh
 SYNC_HOOK_COMMAND=/test_sync_hook_command.sh
 
@@ -174,7 +175,8 @@ function GIT_SYNC() {
         --network="host" \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR":rw \
-        -v "$(pwd)/slow_git.sh":"$SLOW_GIT":ro \
+        -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
+        -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
         -v "$(pwd)/test_sync_hook_command.sh":"$SYNC_HOOK_COMMAND":ro \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
@@ -609,7 +611,7 @@ testcase "sync-loop-timeout"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --one-time \
     --timeout=1 \
     --repo="file://$REPO" \
@@ -621,7 +623,7 @@ GIT_SYNC \
 assert_file_absent "$ROOT"/link/file
 # run with slow_git but without timing out
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --wait=0.1 \
     --timeout=16 \
     --repo="file://$REPO" \
@@ -689,6 +691,48 @@ if [ $expected_depth != $depth ]; then
     fail "backward depth mismatch expected=$expected_depth actual=$depth"
 fi
 # Wrap up
+pass
+
+##############################################
+# Test fetch skipping commit
+##############################################
+testcase "fetch-skip-depth-1"
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --git="$SLOW_GIT_FETCH" \
+    --wait=0.1 \
+    --depth=1 \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+
+# wait for first sync which does a clone followed by an artifically slowed fetch
+sleep 8
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+
+# make a second commit to trigger a sync with shallow fetch
+echo "$TESTCASE-ok" > "$REPO"/file2
+git -C "$REPO" add file2
+git -C "$REPO" commit -qam "$TESTCASE new file"
+
+# Give time for ls-remote to detect the commit and slowed fetch to start
+sleep 2
+
+# make a third commit to insert the commit between ls-remote and fetch
+echo "$TESTCASE-ok" > "$REPO"/file3
+git -C "$REPO" add file3
+git -C "$REPO" commit -qam "$TESTCASE third file"
+sleep 10
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file3
+assert_file_eq "$ROOT"/link/file3 "$TESTCASE-ok"
+
 pass
 
 ##############################################
@@ -945,7 +989,7 @@ BINDPORT=8888
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --repo="file://$REPO" \
     --branch=e2e-branch \
     --root="$ROOT" \
