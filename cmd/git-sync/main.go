@@ -881,6 +881,18 @@ func setRepoReady() {
 	repoReady = true
 }
 
+// cleanupWorkTree() is used to remove a worktree and its folder
+func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
+	// Clean up worktree(s)
+	log.V(1).Info("removing worktree", "path", worktree)
+	if err := os.RemoveAll(worktree); err != nil {
+		return fmt.Errorf("error removing directory: %v", err)
+	} else if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+		return err
+	}
+	return nil
+}
+
 // AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
 func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error {
 	log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
@@ -903,6 +915,15 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(git.root, hash)
+
+	// Avoid wedge cases where the worktree was created but this function
+	// error'd without cleaning up.  The next time thru the sync loop fails to
+	// create the worktree and bails out. This manifests as:
+	//     "fatal: '/repo/root/rev-nnnn' already exists"
+	if err := cleanupWorkTree(ctx, git.root, worktreePath); err != nil {
+		return err
+	}
+
 	_, err := runCommand(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
 	if err != nil {
@@ -1028,12 +1049,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	// Clean up previous worktrees.
 	var cleanupErr error
 	if oldWorktree != "" {
-		log.V(1).Info("removing old worktree", "path", oldWorktree)
-		if err := os.RemoveAll(oldWorktree); err != nil {
-			cleanupErr = fmt.Errorf("error removing directory: %v", err)
-		} else if _, err := runCommand(ctx, git.root, git.cmd, "worktree", "prune"); err != nil {
-			cleanupErr = err
-		}
+		cleanupErr = cleanupWorkTree(ctx, git.root, oldWorktree)
 	}
 
 	if cleanupErr != nil {
