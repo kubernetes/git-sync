@@ -161,7 +161,7 @@ function finish() {
 }
 trap finish INT EXIT
 
-SLOW_GIT=/slow_git.sh
+SLOW_GIT_CLONE=/slow_git_clone.sh
 ASKPASS_GIT=/askpass_git.sh
 SYNC_HOOK_COMMAND=/test_sync_hook_command.sh
 
@@ -174,7 +174,7 @@ function GIT_SYNC() {
         --network="host" \
         -u $(id -u):$(id -g) \
         -v "$DIR":"$DIR":rw \
-        -v "$(pwd)/slow_git.sh":"$SLOW_GIT":ro \
+        -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
         -v "$(pwd)/test_sync_hook_command.sh":"$SYNC_HOOK_COMMAND":ro \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
@@ -736,7 +736,7 @@ testcase "sync-loop-timeout"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --one-time \
     --sync-timeout=1s \
     --repo="file://$REPO" \
@@ -746,9 +746,9 @@ GIT_SYNC \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
 # check for failure
 assert_file_absent "$ROOT"/link/file
-# run with slow_git but without timing out
+# run with slow_git_clone but without timing out
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --period=100ms \
     --sync-timeout=16s \
     --repo="file://$REPO" \
@@ -1072,7 +1072,7 @@ BINDPORT=8888
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
-    --git="$SLOW_GIT" \
+    --git="$SLOW_GIT_CLONE" \
     --period=100ms \
     --repo="file://$REPO" \
     --branch=e2e-branch \
