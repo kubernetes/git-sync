@@ -102,6 +102,8 @@ var flUsername = pflag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use for git auth")
 var flPassword = pflag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 	"the password or personal access token to use for git auth (prefer env vars for passwords)")
+var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
+	"the file from which the password or personal access token for git auth will be sourced")
 
 var flSSH = pflag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
@@ -473,6 +475,9 @@ func main() {
 		if *flPassword != "" {
 			handleError(false, "ERROR: only one of --ssh and --password may be specified")
 		}
+		if *flPasswordFile != "" {
+			handleError(false, "ERROR: only one of --ssh and --password-file may be specified")
+		}
 		if *flAskPassURL != "" {
 			handleError(false, "ERROR: only one of --ssh and --askpass-url may be specified")
 		}
@@ -486,6 +491,15 @@ func main() {
 			if *flSSHKnownHostsFile == "" {
 				handleError(true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
 			}
+		}
+	}
+
+	if *flPassword != "" && *flPasswordFile != "" {
+		handleError(false, "ERROR: only one of --password and --password-file may be specified")
+	}
+	if *flUsername != "" {
+		if *flPassword == "" && *flPasswordFile == "" {
+			handleError(true, "ERROR: --password or --password-file must be set when --username is specified")
 		}
 	}
 
@@ -545,7 +559,15 @@ func main() {
 	// `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-	if *flUsername != "" && *flPassword != "" {
+	if *flUsername != "" {
+		if *flPasswordFile != "" {
+			flPasswordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
+			if err != nil {
+				log.Error(err, "ERROR: can't read password file")
+				os.Exit(1)
+			}
+			*flPassword = string(flPasswordFileBytes)
+		}
 		if err := git.SetupAuth(ctx, *flUsername, *flPassword); err != nil {
 			log.Error(err, "ERROR: can't set up git auth")
 			os.Exit(1)
