@@ -33,6 +33,3 @@ kubectl create -f config
 ```
 
 Open the service external ip in your browser
-
-
-[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/demo/README.md?pixel)]()
