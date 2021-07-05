@@ -101,7 +101,7 @@ var flWebhookBackoff = pflag.Duration("webhook-backoff", envDuration("GIT_SYNC_W
 var flUsername = pflag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use for git auth")
 var flPassword = pflag.String("password", envString("GIT_SYNC_PASSWORD", ""),
-	"the password or personal access token to use for git auth (prefer env vars for passwords)")
+	"the password or personal access token to use for git auth (prefer --password-file or this env var)")
 var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
 	"the file from which the password or personal access token for git auth will be sourced")
 
@@ -468,6 +468,15 @@ func main() {
 		}
 	}
 
+	if *flPassword != "" && *flPasswordFile != "" {
+		handleError(false, "ERROR: only one of --password and --password-file may be specified")
+	}
+	if *flUsername != "" {
+		if *flPassword == "" && *flPasswordFile == "" {
+			handleError(true, "ERROR: --password or --password-file must be set when --username is specified")
+		}
+	}
+
 	if *flSSH {
 		if *flUsername != "" {
 			handleError(false, "ERROR: only one of --ssh and --username may be specified")
@@ -491,15 +500,6 @@ func main() {
 			if *flSSHKnownHostsFile == "" {
 				handleError(true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
 			}
-		}
-	}
-
-	if *flPassword != "" && *flPasswordFile != "" {
-		handleError(false, "ERROR: only one of --password and --password-file may be specified")
-	}
-	if *flUsername != "" {
-		if *flPassword == "" && *flPasswordFile == "" {
-			handleError(true, "ERROR: --password or --password-file must be set when --username is specified")
 		}
 	}
 
@@ -561,12 +561,12 @@ func main() {
 
 	if *flUsername != "" {
 		if *flPasswordFile != "" {
-			flPasswordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
+			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
 			if err != nil {
 				log.Error(err, "ERROR: can't read password file")
 				os.Exit(1)
 			}
-			*flPassword = string(flPasswordFileBytes)
+			*flPassword = string(passwordFileBytes)
 		}
 		if err := git.SetupAuth(ctx, *flUsername, *flPassword); err != nil {
 			log.Error(err, "ERROR: can't set up git auth")
@@ -1733,8 +1733,13 @@ OPTIONS
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer the environment variable for specifying the
-            password.
+            users should prefer --password-file or $GIT_SYNC_PASSWORD for
+            specifying the password.
+
+    --password-file <string>, $GIT_SYNC_PASSWORD
+            The file from which the password or personal access token (see
+            github docs) to use for git authentication (see --username) will be
+            sourced.
 
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
@@ -1787,7 +1792,8 @@ OPTIONS
             it will take precedence. (default: 120s)
 
     --username <string>, $GIT_SYNC_USERNAME
-            The username to use for git authentication (see --password).
+            The username to use for git authentication (see --password-file or
+            --password).
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
@@ -1831,10 +1837,11 @@ AUTHENTICATION
     and "git@example.com:repo" will try to use SSH.
 
     username/password
-            The --username (GIT_SYNC_USERNAME) and --password
-            (GIT_SYNC_PASSWORD) flags will be used.  To prevent password
-            leaks, the GIT_SYNC_PASSWORD environment variable is almost always
-            preferred to the flag.
+            The --username (GIT_SYNC_USERNAME) and --password-file
+            (GIT_SYNC_PASSWORD_FILE) or --password (GIT_SYNC_PASSWORD) flags
+            will be used.  To prevent password leaks, the --password-file flag
+            or GIT_SYNC_PASSWORD environment variable is almost always
+            preferred to the --password flag.
 
             A variant of this is --askpass-url (GIT_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
