@@ -42,6 +42,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/pflag"
 	"k8s.io/git-sync/pkg/pid1"
 	"k8s.io/git-sync/pkg/version"
 )
@@ -95,7 +96,9 @@ var flWebhookBackoff = flag.Duration("webhook-backoff", envDuration("GIT_SYNC_WE
 var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use for git auth")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
-	"the password to use for git auth (users should prefer env vars for passwords)")
+	"the password to use for git auth (prefer --password-file or this env var)")
+var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
+	"the file from which the password or personal access token for git auth will be sourced")
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
@@ -402,12 +405,24 @@ func main() {
 		handleError(false, "ERROR: git executable %q not found: %v", *flGitCmd, err)
 	}
 
+	if *flPassword != "" && *flPasswordFile != "" {
+		handleError(false, "ERROR: only one of --password and --password-file may be specified")
+	}
+	if *flUsername != "" {
+		if *flPassword == "" && *flPasswordFile == "" {
+			handleError(true, "ERROR: --password or --password-file must be set when --username is specified")
+		}
+	}
+
 	if *flSSH {
 		if *flUsername != "" {
 			handleError(false, "ERROR: only one of --ssh and --username may be specified")
 		}
 		if *flPassword != "" {
 			handleError(false, "ERROR: only one of --ssh and --password may be specified")
+		}
+		if *flPasswordFile != "" {
+			handleError(false, "ERROR: only one of --ssh and --password-file may be specified")
 		}
 		if *flAskPassURL != "" {
 			handleError(false, "ERROR: only one of --ssh and --askpass-url may be specified")
@@ -435,7 +450,15 @@ func main() {
 	// `git clone`, so initTimeout set to 30 seconds should be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 
-	if *flUsername != "" && *flPassword != "" {
+	if *flUsername != "" {
+		if *flPasswordFile != "" {
+			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
+			if err != nil {
+				log.Error(err, "ERROR: can't read password file")
+				os.Exit(1)
+			}
+			*flPassword = string(passwordFileBytes)
+		}
 		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			handleError(false, "ERROR: can't create .netrc file: %v", err)
 		}
