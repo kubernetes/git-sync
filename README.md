@@ -183,8 +183,12 @@ OPTIONS
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer the environment variable for specifying the
-            password.
+            users should prefer using a file for specifying the password (see
+            --password-file).
+
+    --password-file <string>, $GIT_SYNC_PASSWORD_FILE
+            The path to password file which contains password or personal access
+            token (see --password).
 
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
