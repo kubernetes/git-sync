@@ -64,6 +64,9 @@ var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"create a shallow clone with history truncated to the specified number of commits")
 var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
+var flSubmodulesRemoteTracking = flag.String("submodules-remote-tracking",
+	envString("GIT_SYNC_SUBMODULES_REMOTE_TRACKING", ""),
+	"the comma separated submodule's name list to enable remote-tracking branch sync, eg. 'module1,module2', see: 'man gitmodules' and find 'submodule.<name>.branch' for detail")
 
 var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
 	"the root directory for git-sync operations, under which --link will be created")
@@ -648,6 +651,28 @@ func main() {
 		go webhook.run()
 	}
 
+	// Startup submodules remote-tracking goroutine
+	var submodulesRemoteTracking *SubmodulesRemoteTracking
+
+	if *flSubmodulesRemoteTracking != "" {
+		absRoot, err := filepath.Abs(*flRoot)
+		if err != nil {
+			log.Error(err, "can't normalize path", "path", *flRoot)
+			os.Exit(1)
+		}
+
+		submodulesRemoteTracking = &SubmodulesRemoteTracking{
+			Cmd:                      *flGitCmd,
+			RootDir:                  absRoot,
+			Depth:                    *flDepth,
+			Submodules:               *flSubmodules,
+			SubmodulesRemoteTracking: *flSubmodulesRemoteTracking,
+			Period:                   waitTime(*flWait),
+			State:                    NewSubmodulesRemoteTrackingState(),
+		}
+		go submodulesRemoteTracking.run()
+	}
+
 	initialSync := true
 	failCount := 0
 	for {
@@ -679,8 +704,19 @@ func main() {
 			if webhook != nil {
 				webhook.Send(hash)
 			}
+
+			if submodulesRemoteTracking != nil {
+				submodulesRemoteTracking.UpdateState(hash)
+			}
+
 			updateSyncMetrics(metricKeySuccess, start)
 		} else {
+			if submodulesRemoteTracking != nil {
+				if hash, err := localHashForRev(ctx, *flRev, *flRoot); err == nil {
+					submodulesRemoteTracking.UpdateState(hash)
+				}
+			}
+
 			updateSyncMetrics(metricKeyNoOp, start)
 		}
 
