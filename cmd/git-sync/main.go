@@ -144,6 +144,11 @@ var (
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
 
+	syncHookCommandError = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "git_sync_hook_command_last_error",
+		Help: "Whether the last sync hook command resulted in an error (1 for error, 0 for success).",
+	})
+
 	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",
@@ -265,6 +270,7 @@ func (l *customLogger) deleteErrorFile() {
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
+	prometheus.MustRegister(syncHookCommandError)
 	prometheus.MustRegister(askpassCount)
 }
 
@@ -600,6 +606,10 @@ func updateSyncMetrics(key string, start time.Time) {
 	syncCount.WithLabelValues(key).Inc()
 }
 
+func updateSyncHookCommandStatus(status float64) {
+	syncHookCommandError.Set(status)
+}
+
 func waitTime(seconds float64) time.Duration {
 	return time.Duration(int(seconds*1000)) * time.Millisecond
 }
@@ -855,7 +865,10 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		log.V(1).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
 		if _, err := runCommand(ctx, worktreePath, *flSyncHookCommand); err != nil {
 			// Save it until after cleanup runs.
+			updateSyncHookCommandStatus(1)
 			execErr = err
+		} else {
+			updateSyncHookCommandStatus(0)
 		}
 	}
 
