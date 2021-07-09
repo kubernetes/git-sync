@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors All rights reserved.
+Copyright 2021 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,21 +17,31 @@ limitations under the License.
 package main
 
 import (
-	"testing"
+	"context"
+	"path/filepath"
 	"time"
 )
 
-func TestWebhookDo(t *testing.T) {
-	t.Run("test invalid urls are handled", func(t *testing.T) {
-		wh := Webhook{
-			URL:     ":http://localhost:601426/hooks/webhook",
-			Method:  "POST",
-			Success: 200,
-			Timeout: time.Second,
-		}
-		err := wh.Do("hash")
-		if err == nil {
-			t.Fatalf("expected error for invalid url but got none")
-		}
-	})
+// Cmdhook structure
+type Cmdhook struct {
+	// Command to run
+	Command string
+	// Git root path
+	GitRoot string
+	// Timeout for the command
+	Timeout time.Duration
+}
+
+func (w *Cmdhook) Name() string {
+	return "cmdhook"
+}
+
+func (c *Cmdhook) Do(hash string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
+	defer cancel()
+
+	worktreePath := filepath.Join(c.GitRoot, hash)
+
+	_, err := runCommand(ctx, worktreePath, c.Command)
+	return err
 }

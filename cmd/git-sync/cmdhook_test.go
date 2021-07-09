@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors All rights reserved.
+Copyright 2021 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,17 +21,16 @@ import (
 	"time"
 )
 
-func TestWebhookDo(t *testing.T) {
-	t.Run("test invalid urls are handled", func(t *testing.T) {
-		wh := Webhook{
-			URL:     ":http://localhost:601426/hooks/webhook",
-			Method:  "POST",
-			Success: 200,
+func TestCmdhookDo(t *testing.T) {
+	t.Run("test not zero return code", func(t *testing.T) {
+		ch := Cmdhook{
+			Command: "false",
+			GitRoot: "/tmp",
 			Timeout: time.Second,
 		}
-		err := wh.Do("hash")
+		err := ch.Do("")
 		if err == nil {
-			t.Fatalf("expected error for invalid url but got none")
+			t.Fatalf("expected error but got none")
 		}
 	})
 }
