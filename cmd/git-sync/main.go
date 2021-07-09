@@ -79,6 +79,10 @@ var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
 		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
+var flSynchookCommandTimeout = flag.Duration("sync-hook-command-timeout", envDuration("GIT_SYNC_HOOK_COMMAND_TIMEOUT", time.Second),
+	"the timeout for the command")
+var flSynchookCommandBackoff = flag.Duration("sync-hook-command-backoff", envDuration("GIT_SYNC_HOOK_COMMAND_BACKOFF", time.Second*3),
+	"the time to wait before retrying a failed the command")
 var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file.")
 
@@ -144,10 +148,10 @@ var (
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
 
-	syncHookCommandError = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "git_sync_hook_command_last_error",
-		Help: "Whether the last sync hook command resulted in an error (1 for error, 0 for success).",
-	})
+	hookRunCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_hook_run_count_total",
+		Help: "How many hook runs completed, partitioned by name and state (success, error)",
+	}, []string{"name", "status"})
 
 	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
@@ -270,7 +274,7 @@ func (l *customLogger) deleteErrorFile() {
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
-	prometheus.MustRegister(syncHookCommandError)
+	prometheus.MustRegister(hookRunCount)
 	prometheus.MustRegister(askpassCount)
 }
 
@@ -407,6 +411,15 @@ func main() {
 		}
 	}
 
+	if *flSyncHookCommand != "" {
+		if *flSynchookCommandTimeout < time.Second {
+			handleError(true, "ERROR: --sync-hook-command-timeout must be at least 1s")
+		}
+		if *flSynchookCommandBackoff < time.Second {
+			handleError(true, "ERROR: --sync-hook-command-backoff must be at least 1s")
+		}
+	}
+
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		handleError(false, "ERROR: git executable %q not found: %v", *flGitCmd, err)
 	}
@@ -536,17 +549,34 @@ func main() {
 	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
-	var webhook *Webhook
+	var webhook *HookRunner
 	if *flWebhookURL != "" {
-		webhook = &Webhook{
-			URL:     *flWebhookURL,
-			Method:  *flWebhookMethod,
-			Success: *flWebhookStatusSuccess,
-			Timeout: *flWebhookTimeout,
+		webhook = &HookRunner{
+			Hook: &Webhook{
+				URL:     *flWebhookURL,
+				Method:  *flWebhookMethod,
+				Success: *flWebhookStatusSuccess,
+				Timeout: *flWebhookTimeout,
+			},
 			Backoff: *flWebhookBackoff,
-			Data:    NewWebhookData(),
+			Data:    NewHookData(),
 		}
 		go webhook.run()
+	}
+
+	// Startup synchookcommands goroutine
+	var cmdhook *HookRunner
+	if *flSyncHookCommand != "" {
+		cmdhook = &HookRunner{
+			Hook: &Cmdhook{
+				Command: *flSyncHookCommand,
+				GitRoot: *flRepo,
+				Timeout: *flSynchookCommandTimeout,
+			},
+			Backoff: *flSynchookCommandBackoff,
+			Data:    NewHookData(),
+		}
+		go cmdhook.run()
 	}
 
 	initialSync := true
@@ -571,6 +601,9 @@ func main() {
 		} else if changed {
 			if webhook != nil {
 				webhook.Send(hash)
+			}
+			if cmdhook != nil {
+				cmdhook.Send(hash)
 			}
 			updateSyncMetrics(metricKeySuccess, start)
 		} else {
@@ -604,10 +637,6 @@ func main() {
 func updateSyncMetrics(key string, start time.Time) {
 	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
 	syncCount.WithLabelValues(key).Inc()
-}
-
-func updateSyncHookCommandStatus(status float64) {
-	syncHookCommandError.Set(status)
 }
 
 func waitTime(seconds float64) time.Duration {
@@ -859,19 +888,6 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	// From here on we have to save errors until the end.
 
-	// Execute the hook command, if requested.
-	var execErr error
-	if *flSyncHookCommand != "" {
-		log.V(1).Info("executing command for git sync hooks", "command", *flSyncHookCommand)
-		if _, err := runCommand(ctx, worktreePath, *flSyncHookCommand); err != nil {
-			// Save it until after cleanup runs.
-			updateSyncHookCommandStatus(1)
-			execErr = err
-		} else {
-			updateSyncHookCommandStatus(0)
-		}
-	}
-
 	// Clean up previous worktree(s).
 	var cleanupErr error
 	if oldWorktree != "" {
@@ -880,9 +896,6 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	if cleanupErr != nil {
 		return cleanupErr
-	}
-	if execErr != nil {
-		return execErr
 	}
 	return nil
 }
@@ -1088,7 +1101,6 @@ func runCommand(ctx context.Context, cwd, command string, args ...string) (strin
 
 func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
 	cmdStr := cmdForLog(command, args...)
-	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
@@ -1109,7 +1121,6 @@ func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args .
 	if err != nil {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
-	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
 
 	return stdout, nil
 }
