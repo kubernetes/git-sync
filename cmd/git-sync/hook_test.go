@@ -28,51 +28,51 @@ const (
 
 func TestHookData(t *testing.T) {
 	t.Run("hook consumes first hash value", func(t *testing.T) {
-		whd := NewHookData()
+		hd := NewHookData()
 
-		whd.send(hash1)
+		hd.send(hash1)
 
-		<-whd.events()
+		<-hd.events()
 
-		hash := whd.get()
+		hash := hd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
 	})
 
 	t.Run("last update wins when channel buffer is full", func(t *testing.T) {
-		whd := NewHookData()
+		hd := NewHookData()
 
 		for i := 0; i < 10; i++ {
 			h := fmt.Sprintf("111111111111111111111111111111111111111%d", i)
-			whd.send(h)
+			hd.send(h)
 		}
-		whd.send(hash2)
+		hd.send(hash2)
 
-		<-whd.events()
+		<-hd.events()
 
-		hash := whd.get()
+		hash := hd.get()
 		if hash2 != hash {
 			t.Fatalf("expected hash %s but got %s", hash2, hash)
 		}
 	})
 
 	t.Run("same hash value", func(t *testing.T) {
-		whd := NewHookData()
-		events := whd.events()
+		hd := NewHookData()
+		events := hd.events()
 
-		whd.send(hash1)
+		hd.send(hash1)
 		<-events
 
-		hash := whd.get()
+		hash := hd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
 
-		whd.send(hash1)
+		hd.send(hash1)
 		<-events
 
-		hash = whd.get()
+		hash = hd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
