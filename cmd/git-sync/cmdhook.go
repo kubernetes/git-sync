@@ -26,6 +26,8 @@ import (
 type Cmdhook struct {
 	// Command to run
 	Command string
+	// Command args
+	Args []string
 	// Git root path
 	GitRoot string
 	// Timeout for the command
@@ -42,6 +44,6 @@ func (c *Cmdhook) Do(hash string) error {
 
 	worktreePath := filepath.Join(c.GitRoot, hash)
 
-	_, err := runCommand(ctx, worktreePath, c.Command)
+	_, err := runCommand(ctx, worktreePath, c.Command, c.Args...)
 	return err
 }
