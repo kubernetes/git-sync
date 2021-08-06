@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-func TestCmdhookDo(t *testing.T) {
+func TestNotZeroReturnCmdhookDo(t *testing.T) {
 	t.Run("test not zero return code", func(t *testing.T) {
 		ch := Cmdhook{
 			Command: "false",
@@ -31,6 +31,35 @@ func TestCmdhookDo(t *testing.T) {
 		err := ch.Do("")
 		if err == nil {
 			t.Fatalf("expected error but got none")
+		}
+	})
+}
+
+func TestZeroReturnCmdhookDo(t *testing.T) {
+	t.Run("test zero return code", func(t *testing.T) {
+		ch := Cmdhook{
+			Command: "true",
+			GitRoot: "/tmp",
+			Timeout: time.Second,
+		}
+		err := ch.Do("")
+		if err != nil {
+			t.Fatalf("expected nil but got err")
+		}
+	})
+}
+
+func TestTimeoutCmdhookDo(t *testing.T) {
+	t.Run("test timeout", func(t *testing.T) {
+		ch := Cmdhook{
+			Command: "/bin/sh",
+			Args:    []string{"-c", "sleep 2"},
+			GitRoot: "/tmp",
+			Timeout: time.Second,
+		}
+		err := ch.Do("")
+		if err == nil {
+			t.Fatalf("expected err but got nil")
 		}
 	})
 }
