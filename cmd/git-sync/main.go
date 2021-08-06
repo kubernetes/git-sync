@@ -79,7 +79,7 @@ var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
 		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
-var flSynchookCommandTimeout = flag.Duration("sync-hook-command-timeout", envDuration("GIT_SYNC_HOOK_COMMAND_TIMEOUT", time.Second),
+var flSynchookCommandTimeout = flag.Duration("sync-hook-command-timeout", envDuration("GIT_SYNC_HOOK_COMMAND_TIMEOUT", time.Second*30),
 	"the timeout for the command")
 var flSynchookCommandBackoff = flag.Duration("sync-hook-command-backoff", envDuration("GIT_SYNC_HOOK_COMMAND_BACKOFF", time.Second*3),
 	"the time to wait before retrying a failed the command")
