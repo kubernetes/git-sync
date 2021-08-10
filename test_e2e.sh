@@ -878,7 +878,7 @@ GIT_SYNC \
     --root="$ROOT" \
     --dest="link" \
     --exechook-command="$EXECHOOK_COMMAND_FAIL" \
-    --exechook-command-backoff=1s \
+    --exechook-backoff=1s \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 # Check that exechook was called
 sleep 5

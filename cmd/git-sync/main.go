@@ -81,9 +81,9 @@ var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOO
 var flExechookCommand = flag.String("exechook-command", envString("GIT_EXECHOOK_COMMAND", ""),
 	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
 		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
-var flExechookCommandTimeout = flag.Duration("exechook-command-timeout", envDuration("GIT_EXECHOOK_COMMAND_TIMEOUT", time.Second*30),
+var flExechookTimeout = flag.Duration("exechook-timeout", envDuration("GIT_EXECHOOK_TIMEOUT", time.Second*30),
 	"the timeout for the command")
-var flExechookCommandBackoff = flag.Duration("exechook-command-backoff", envDuration("GIT_EXECHOOK_COMMAND_BACKOFF", time.Second*3),
+var flExechookBackoff = flag.Duration("exechook-backoff", envDuration("GIT_EXECHOOK_BACKOFF", time.Second*3),
 	"the time to wait before retrying a failed command")
 var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file.")
@@ -319,11 +319,11 @@ func main() {
 	}
 
 	if *flExechookCommand != "" {
-		if *flExechookCommandTimeout < time.Second {
-			handleError(true, "ERROR: --exechook-command-timeout must be at least 1s")
+		if *flExechookTimeout < time.Second {
+			handleError(true, "ERROR: --exechook-timeout must be at least 1s")
 		}
-		if *flExechookCommandBackoff < time.Second {
-			handleError(true, "ERROR: --exechook-command-backoff must be at least 1s")
+		if *flExechookBackoff < time.Second {
+			handleError(true, "ERROR: --exechook-backoff must be at least 1s")
 		}
 	}
 
@@ -482,12 +482,12 @@ func main() {
 			*flExechookCommand,
 			*flRoot,
 			[]string{},
-			*flExechookCommandTimeout,
+			*flExechookTimeout,
 			logger,
 		)
 		cmdhookRunner = hook.NewHookRunner(
 			cmdhook,
-			*flExechookCommandBackoff,
+			*flExechookBackoff,
 			hook.NewHookData(),
 			logger,
 		)
