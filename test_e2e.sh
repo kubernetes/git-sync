@@ -164,7 +164,11 @@ trap finish INT EXIT
 SLOW_GIT_CLONE=/slow_git_clone.sh
 SLOW_GIT_FETCH=/slow_git_fetch.sh
 ASKPASS_GIT=/askpass_git.sh
-SYNC_HOOK_COMMAND=/test_sync_hook_command.sh
+EXECHOOK_COMMAND=/test_exechook_command.sh
+EXECHOOK_COMMAND_FAIL=/test_exechook_command_fail.sh
+RUNLOG="$DIR/runlog.exechook-fail-retry"
+rm -f $RUNLOG
+touch $RUNLOG
 
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
@@ -178,7 +182,9 @@ function GIT_SYNC() {
         -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
         -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
-        -v "$(pwd)/test_sync_hook_command.sh":"$SYNC_HOOK_COMMAND":ro \
+        -v "$(pwd)/test_exechook_command.sh":"$EXECHOOK_COMMAND":ro \
+        -v "$(pwd)/test_exechook_command_fail.sh":"$EXECHOOK_COMMAND_FAIL":ro \
+        -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
@@ -821,9 +827,9 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
-# Test sync_hook_command
+# Test exechook-success
 ##############################################
-testcase "sync_hook_command"
+testcase "exechook-success"
 # First sync
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
@@ -833,28 +839,53 @@ GIT_SYNC \
     --branch=e2e-branch \
     --root="$ROOT" \
     --dest="link" \
-    --sync-hook-command="$SYNC_HOOK_COMMAND" \
+    --exechook-command="$EXECHOOK_COMMAND" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
-assert_file_exists "$ROOT"/link/sync-hook
-assert_file_exists "$ROOT"/link/link-sync-hook
+assert_file_exists "$ROOT"/link/exechook
+assert_file_exists "$ROOT"/link/link-exechook
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
-assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 1"
-assert_file_eq "$ROOT"/link/link-sync-hook "$TESTCASE 1"
+assert_file_eq "$ROOT"/link/exechook "$TESTCASE 1"
+assert_file_eq "$ROOT"/link/link-exechook "$TESTCASE 1"
 # Move forward
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
-assert_file_exists "$ROOT"/link/sync-hook
-assert_file_exists "$ROOT"/link/link-sync-hook
+assert_file_exists "$ROOT"/link/exechook
+assert_file_exists "$ROOT"/link/link-exechook
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
-assert_file_eq "$ROOT"/link/sync-hook "$TESTCASE 2"
-assert_file_eq "$ROOT"/link/link-sync-hook "$TESTCASE 2"
+assert_file_eq "$ROOT"/link/exechook "$TESTCASE 2"
+assert_file_eq "$ROOT"/link/link-exechook "$TESTCASE 2"
 # Wrap up
+pass
+
+##############################################
+# Test exechook-fail-retry
+##############################################
+testcase "exechook-fail-retry"
+cat /dev/null > "$RUNLOG"
+# First sync - return a failure to ensure that we try again
+echo "$TESTCASE 1" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 1"
+GIT_SYNC \
+    --wait=0.1 \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --root="$ROOT" \
+    --dest="link" \
+    --exechook-command="$EXECHOOK_COMMAND_FAIL" \
+    --exechook-command-backoff=1s \
+    > "$DIR"/log."$TESTCASE" 2>&1 &
+# Check that exechook was called
+sleep 5
+RUNS=$(cat "$RUNLOG" | wc -l)
+if [ "$RUNS" -lt 2 ]; then
+    fail "exechook called $RUNS times, it should be at least 2"
+fi
 pass
 
 ##############################################

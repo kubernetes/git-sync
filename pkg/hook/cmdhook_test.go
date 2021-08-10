@@ -14,21 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package hook
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"k8s.io/git-sync/pkg/cmd"
+	"k8s.io/git-sync/pkg/logging"
 )
 
 func TestNotZeroReturnCmdhookDo(t *testing.T) {
 	t.Run("test not zero return code", func(t *testing.T) {
-		ch := Cmdhook{
-			Command: "false",
-			GitRoot: "/tmp",
-			Timeout: time.Second,
-		}
-		err := ch.Do("")
+		l := logging.NewLogger("", "")
+		ch := NewCmdhook(
+			cmd.NewCommandRunner(l),
+			"false",
+			"/tmp",
+			[]string{},
+			time.Second,
+			l,
+		)
+		err := ch.Do(context.Background(), "")
 		if err == nil {
 			t.Fatalf("expected error but got none")
 		}
@@ -37,12 +45,16 @@ func TestNotZeroReturnCmdhookDo(t *testing.T) {
 
 func TestZeroReturnCmdhookDo(t *testing.T) {
 	t.Run("test zero return code", func(t *testing.T) {
-		ch := Cmdhook{
-			Command: "true",
-			GitRoot: "/tmp",
-			Timeout: time.Second,
-		}
-		err := ch.Do("")
+		l := logging.NewLogger("", "")
+		ch := NewCmdhook(
+			cmd.NewCommandRunner(l),
+			"true",
+			"/tmp",
+			[]string{},
+			time.Second,
+			l,
+		)
+		err := ch.Do(context.Background(), "")
 		if err != nil {
 			t.Fatalf("expected nil but got err")
 		}
@@ -51,13 +63,16 @@ func TestZeroReturnCmdhookDo(t *testing.T) {
 
 func TestTimeoutCmdhookDo(t *testing.T) {
 	t.Run("test timeout", func(t *testing.T) {
-		ch := Cmdhook{
-			Command: "/bin/sh",
-			Args:    []string{"-c", "sleep 2"},
-			GitRoot: "/tmp",
-			Timeout: time.Second,
-		}
-		err := ch.Do("")
+		l := logging.NewLogger("", "")
+		ch := NewCmdhook(
+			cmd.NewCommandRunner(l),
+			"/bin/sh",
+			"/tmp",
+			[]string{"-c", "sleep 2"},
+			time.Second,
+			l,
+		)
+		err := ch.Do(context.Background(), "")
 		if err == nil {
 			t.Fatalf("expected err but got nil")
 		}

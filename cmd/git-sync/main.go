@@ -19,9 +19,7 @@ limitations under the License.
 package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -38,11 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/glogr"
-	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
+	"k8s.io/git-sync/pkg/cmd"
+	"k8s.io/git-sync/pkg/hook"
+	"k8s.io/git-sync/pkg/logging"
 	"k8s.io/git-sync/pkg/pid1"
 	"k8s.io/git-sync/pkg/version"
 )
@@ -77,19 +76,22 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
+	"(deprecated) the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
+		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
+var flExechookCommand = flag.String("exechook-command", envString("GIT_EXECHOOK_COMMAND", ""),
 	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
 		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
-var flSynchookCommandTimeout = flag.Duration("sync-hook-command-timeout", envDuration("GIT_SYNC_HOOK_COMMAND_TIMEOUT", time.Second*30),
+var flExechookCommandTimeout = flag.Duration("exechook-command-timeout", envDuration("GIT_EXECHOOK_COMMAND_TIMEOUT", time.Second*30),
 	"the timeout for the command")
-var flSynchookCommandBackoff = flag.Duration("sync-hook-command-backoff", envDuration("GIT_SYNC_HOOK_COMMAND_BACKOFF", time.Second*3),
-	"the time to wait before retrying a failed the command")
+var flExechookCommandBackoff = flag.Duration("exechook-command-backoff", envDuration("GIT_EXECHOOK_COMMAND_BACKOFF", time.Second*3),
+	"the time to wait before retrying a failed command")
 var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file.")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
-	"the URL for a webook notification when syncs complete (default is no webook)")
+	"the URL for a webhook notification when syncs complete (default is no webook)")
 var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
-	"the HTTP method for the webook")
+	"the HTTP method for the webhook")
 var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
 	"the HTTP status code indicating a successful webhook (-1 disables success checks to make webhooks fire-and-forget)")
 var flWebhookTimeout = flag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
@@ -133,7 +135,8 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
-var log *customLogger
+var cmdRunner *cmd.CommandRunner
+var logger *logging.Logger
 
 // Total pull/error, summary on pull duration
 var (
@@ -147,11 +150,6 @@ var (
 		Name: "git_sync_count_total",
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
-
-	hookRunCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "git_sync_hook_run_count_total",
-		Help: "How many hook runs completed, partitioned by name and state (success, error)",
-	}, []string{"name", "status"})
 
 	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
@@ -174,107 +172,9 @@ const (
 	submodulesOff       = "off"
 )
 
-type customLogger struct {
-	logr.Logger
-	root      string
-	errorFile string
-}
-
-func (l customLogger) Error(err error, msg string, kvList ...interface{}) {
-	l.Logger.Error(err, msg, kvList...)
-	if l.errorFile == "" {
-		return
-	}
-	payload := struct {
-		Msg  string
-		Err  string
-		Args map[string]interface{}
-	}{
-		Msg:  msg,
-		Err:  err.Error(),
-		Args: map[string]interface{}{},
-	}
-	if len(kvList)%2 != 0 {
-		kvList = append(kvList, "<no-value>")
-	}
-	for i := 0; i < len(kvList); i += 2 {
-		k, ok := kvList[i].(string)
-		if !ok {
-			k = fmt.Sprintf("%v", kvList[i])
-		}
-		payload.Args[k] = kvList[i+1]
-	}
-	jb, err := json.Marshal(payload)
-	if err != nil {
-		l.Logger.Error(err, "can't encode error payload")
-		content := fmt.Sprintf("%v", err)
-		l.writeContent([]byte(content))
-	} else {
-		l.writeContent(jb)
-	}
-}
-
-// exportError exports the error to the error file if --export-error is enabled.
-func (l *customLogger) exportError(content string) {
-	if l.errorFile == "" {
-		return
-	}
-	l.writeContent([]byte(content))
-}
-
-// writeContent writes the error content to the error file.
-func (l *customLogger) writeContent(content []byte) {
-	if _, err := os.Stat(l.root); os.IsNotExist(err) {
-		fileMode := os.FileMode(0755)
-		if err := os.Mkdir(l.root, fileMode); err != nil {
-			l.Logger.Error(err, "can't create the root directory", "root", l.root)
-			return
-		}
-	}
-	tmpFile, err := ioutil.TempFile(l.root, "tmp-err-")
-	if err != nil {
-		l.Logger.Error(err, "can't create temporary error-file", "directory", l.root, "prefix", "tmp-err-")
-		return
-	}
-	defer func() {
-		if err := tmpFile.Close(); err != nil {
-			l.Logger.Error(err, "can't close temporary error-file", "filename", tmpFile.Name())
-		}
-	}()
-
-	if _, err = tmpFile.Write(content); err != nil {
-		l.Logger.Error(err, "can't write to temporary error-file", "filename", tmpFile.Name())
-		return
-	}
-
-	errorFile := filepath.Join(l.root, l.errorFile)
-	if err := os.Rename(tmpFile.Name(), errorFile); err != nil {
-		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", errorFile)
-		return
-	}
-	if err := os.Chmod(errorFile, 0644); err != nil {
-		l.Logger.Error(err, "can't change permissions on the error-file", "error-file", errorFile)
-	}
-}
-
-// deleteErrorFile deletes the error file.
-func (l *customLogger) deleteErrorFile() {
-	if l.errorFile == "" {
-		return
-	}
-	errorFile := filepath.Join(l.root, l.errorFile)
-	if err := os.Remove(errorFile); err != nil {
-		if os.IsNotExist(err) {
-			return
-		}
-		l.Logger.Error(err, "can't delete the error-file", "filename", errorFile)
-	}
-}
-
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
-	prometheus.MustRegister(hookRunCount)
 	prometheus.MustRegister(askpassCount)
 }
 
@@ -357,7 +257,8 @@ func main() {
 	setFlagDefaults()
 	flag.Parse()
 
-	log = &customLogger{glogr.New(), *flRoot, *flErrorFile}
+	logger = logging.NewLogger(*flRoot, *flErrorFile)
+	cmdRunner = cmd.NewCommandRunner(logger)
 
 	if *flVer {
 		fmt.Println(version.VERSION)
@@ -411,12 +312,18 @@ func main() {
 		}
 	}
 
-	if *flSyncHookCommand != "" {
-		if *flSynchookCommandTimeout < time.Second {
-			handleError(true, "ERROR: --sync-hook-command-timeout must be at least 1s")
+	// Convert deprecated sync-hook-command flag to exechook-command flag
+	if *flExechookCommand == "" && *flSyncHookCommand != "" {
+		*flExechookCommand = *flSyncHookCommand
+		logger.Info("--sync-hook-command is deprecated, please use --exechook-command instead")
+	}
+
+	if *flExechookCommand != "" {
+		if *flExechookCommandTimeout < time.Second {
+			handleError(true, "ERROR: --exechook-command-timeout must be at least 1s")
 		}
-		if *flSynchookCommandBackoff < time.Second {
-			handleError(true, "ERROR: --sync-hook-command-backoff must be at least 1s")
+		if *flExechookCommandBackoff < time.Second {
+			handleError(true, "ERROR: --exechook-command-backoff must be at least 1s")
 		}
 	}
 
@@ -473,7 +380,7 @@ func main() {
 		if *flPasswordFile != "" {
 			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
 			if err != nil {
-				log.Error(err, "ERROR: can't read password file")
+				logger.Error(err, "ERROR: can't read password file")
 				os.Exit(1)
 			}
 			*flPassword = string(passwordFileBytes)
@@ -546,37 +453,45 @@ func main() {
 	}
 
 	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
+	logger.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
-	var webhook *HookRunner
+	var webhookRunner *hook.HookRunner
 	if *flWebhookURL != "" {
-		webhook = &HookRunner{
-			Hook: &Webhook{
-				URL:     *flWebhookURL,
-				Method:  *flWebhookMethod,
-				Success: *flWebhookStatusSuccess,
-				Timeout: *flWebhookTimeout,
-			},
-			Backoff: *flWebhookBackoff,
-			Data:    NewHookData(),
-		}
-		go webhook.run()
+		webhook := hook.NewWebhook(
+			*flWebhookURL,
+			*flWebhookMethod,
+			*flWebhookStatusSuccess,
+			*flWebhookTimeout,
+			logger,
+		)
+		webhookRunner = hook.NewHookRunner(
+			webhook,
+			*flWebhookBackoff,
+			hook.NewHookData(),
+			logger,
+		)
+		go webhookRunner.Run(context.Background())
 	}
 
 	// Startup synchookcommands goroutine
-	var cmdhook *HookRunner
-	if *flSyncHookCommand != "" {
-		cmdhook = &HookRunner{
-			Hook: &Cmdhook{
-				Command: *flSyncHookCommand,
-				GitRoot: *flRepo,
-				Timeout: *flSynchookCommandTimeout,
-			},
-			Backoff: *flSynchookCommandBackoff,
-			Data:    NewHookData(),
-		}
-		go cmdhook.run()
+	var cmdhookRunner *hook.HookRunner
+	if *flExechookCommand != "" {
+		cmdhook := hook.NewCmdhook(
+			cmd.NewCommandRunner(logger),
+			*flExechookCommand,
+			*flRoot,
+			[]string{},
+			*flExechookCommandTimeout,
+			logger,
+		)
+		cmdhookRunner = hook.NewHookRunner(
+			cmdhook,
+			*flExechookCommandBackoff,
+			hook.NewHookData(),
+			logger,
+		)
+		go cmdhookRunner.Run(context.Background())
 	}
 
 	initialSync := true
@@ -588,22 +503,22 @@ func main() {
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
-				log.Error(err, "too many failures, aborting", "failCount", failCount)
+				logger.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
 			}
 
 			failCount++
-			log.Error(err, "unexpected error syncing repo, will retry")
-			log.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
+			logger.Error(err, "unexpected error syncing repo, will retry")
+			logger.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
 		} else if changed {
-			if webhook != nil {
-				webhook.Send(hash)
+			if webhookRunner != nil {
+				webhookRunner.Send(hash)
 			}
-			if cmdhook != nil {
-				cmdhook.Send(hash)
+			if cmdhookRunner != nil {
+				cmdhookRunner.Send(hash)
 			}
 			updateSyncMetrics(metricKeySuccess, start)
 		} else {
@@ -612,23 +527,23 @@ func main() {
 
 		if initialSync {
 			if *flOneTime {
-				log.deleteErrorFile()
+				logger.DeleteErrorFile()
 				os.Exit(0)
 			}
 			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
-				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
+				logger.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
 				os.Exit(1)
 			} else if isHash {
-				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
-				log.deleteErrorFile()
+				logger.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
+				logger.DeleteErrorFile()
 				sleepForever()
 			}
 			initialSync = false
 		}
 
 		failCount = 0
-		log.deleteErrorFile()
-		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
+		logger.DeleteErrorFile()
+		logger.V(1).Info("next sync", "wait_time", waitTime(*flWait))
 		cancel()
 		time.Sleep(waitTime(*flWait))
 	}
@@ -660,7 +575,7 @@ func handleError(printUsage bool, format string, a ...interface{}) {
 	if printUsage {
 		flag.Usage()
 	}
-	log.exportError(s)
+	logger.ExportError(s)
 	os.Exit(1)
 }
 
@@ -706,13 +621,13 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	}
 
 	const tmplink = "tmp-link"
-	log.V(1).Info("creating tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
-	if _, err := runCommand(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	logger.V(1).Info("creating tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
+	if _, err := cmdRunner.Run(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
-	log.V(1).Info("renaming symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
-	if _, err := runCommand(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
+	logger.V(1).Info("renaming symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
+	if _, err := cmdRunner.Run(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -738,10 +653,10 @@ func setRepoReady() {
 // cleanupWorkTree() is used to remove a worktree and its folder
 func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
 	// Clean up worktree(s)
-	log.V(1).Info("removing worktree", "path", worktree)
+	logger.V(1).Info("removing worktree", "path", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
-	} else if _, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+	} else if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
 		return err
 	}
 	return nil
@@ -749,7 +664,7 @@ func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
 func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
-	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
+	logger.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
 	if depth != 0 {
@@ -758,7 +673,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	args = append(args, "origin", branch)
 
 	// Update from the remote.
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, args...); err != nil {
+	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, args...); err != nil {
 		return err
 	}
 
@@ -766,12 +681,12 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// end up NOT fetching the hash we wanted. If we can't resolve that hash
 	// to a commit we can just end early and leave it for the next sync period.
 	if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
-		log.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
+		logger.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
 		return nil
 	}
 
 	// GC clone
-	if _, err := runCommand(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
+	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
@@ -788,8 +703,8 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
-	_, err := runCommand(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch, "--no-checkout")
-	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
+	_, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch, "--no-checkout")
+	logger.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
 	}
@@ -809,7 +724,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 
 	if *flSparseCheckoutFile != "" {
 		// This is required due to the undocumented behavior outlined here: https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
-		log.V(0).Info("configuring worktree sparse checkout")
+		logger.V(0).Info("configuring worktree sparse checkout")
 		checkoutFile := *flSparseCheckoutFile
 
 		gitInfoPath := filepath.Join(gitRoot, fmt.Sprintf(".git/worktrees/%s/info", hash))
@@ -840,22 +755,22 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = runCommand(ctx, worktreePath, *flGitCmd, args...)
+		_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, args...)
 		if err != nil {
 			return err
 		}
 	}
 
-	_, err = runCommand(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
+	_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
 	if err != nil {
 		return err
 	}
-	log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
+	logger.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
 	if submoduleMode != submodulesOff {
-		log.V(0).Info("updating submodules")
+		logger.V(0).Info("updating submodules")
 		submodulesArgs := []string{"submodule", "update", "--init"}
 		if submoduleMode == submodulesRecursive {
 			submodulesArgs = append(submodulesArgs, "--recursive")
@@ -863,7 +778,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		if depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
 		}
-		_, err = runCommand(ctx, worktreePath, *flGitCmd, submodulesArgs...)
+		_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, submodulesArgs...)
 		if err != nil {
 			return err
 		}
@@ -872,8 +787,8 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	// Change the file permissions, if requested.
 	if *flChmod != 0 {
 		mode := fmt.Sprintf("%#o", *flChmod)
-		log.V(0).Info("changing file permissions", "mode", mode)
-		_, err = runCommand(ctx, "", "chmod", "-R", mode, worktreePath)
+		logger.V(0).Info("changing file permissions", "mode", mode)
+		_, err = cmdRunner.Run(ctx, "", "chmod", "-R", mode, worktreePath)
 		if err != nil {
 			return err
 		}
@@ -906,18 +821,18 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
 	args = append(args, repo, gitRoot)
-	log.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
+	logger.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
 
-	_, err := runCommand(ctx, "", *flGitCmd, args...)
+	_, err := cmdRunner.Run(ctx, "", *flGitCmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
-			log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", gitRoot)
+			logger.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", gitRoot)
 			err := os.RemoveAll(gitRoot)
 			if err != nil {
 				return err
 			}
-			_, err = runCommand(ctx, "", *flGitCmd, args...)
+			_, err = cmdRunner.Run(ctx, "", *flGitCmd, args...)
 			if err != nil {
 				return err
 			}
@@ -927,7 +842,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 	}
 
 	if *flSparseCheckoutFile != "" {
-		log.V(0).Info("configuring sparse checkout")
+		logger.V(0).Info("configuring sparse checkout")
 		checkoutFile := *flSparseCheckoutFile
 
 		gitRepoPath := filepath.Join(gitRoot, ".git")
@@ -959,7 +874,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = runCommand(ctx, gitRoot, *flGitCmd, args...)
+		_, err = cmdRunner.Run(ctx, gitRoot, *flGitCmd, args...)
 		if err != nil {
 			return err
 		}
@@ -970,7 +885,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 
 // localHashForRev returns the locally known hash for a given rev.
 func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
+	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -979,7 +894,7 @@ func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 
 // remoteHashForRef returns the upstream hash for a given ref.
 func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
+	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
 	if err != nil {
 		return "", err
 	}
@@ -989,7 +904,7 @@ func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) 
 
 func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := runCommand(ctx, gitRoot, *flGitCmd, "cat-file", "-t", rev)
+	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "cat-file", "-t", rev)
 	if err != nil {
 		return false, err
 	}
@@ -1046,10 +961,10 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 			return false, "", err
 		}
 		if local == remote {
-			log.V(1).Info("no update required", "rev", rev, "local", local, "remote", remote)
+			logger.V(1).Info("no update required", "rev", rev, "local", local, "remote", remote)
 			return false, "", nil
 		}
-		log.V(0).Info("update required", "rev", rev, "local", local, "remote", remote)
+		logger.V(0).Info("update required", "rev", rev, "local", local, "remote", remote)
 		hash = remote
 	}
 
@@ -1081,60 +996,16 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 	return local, remote, nil
 }
 
-func cmdForLog(command string, args ...string) string {
-	if strings.ContainsAny(command, " \t\n") {
-		command = fmt.Sprintf("%q", command)
-	}
-	argsCopy := make([]string, len(args))
-	copy(argsCopy, args)
-	for i := range args {
-		if strings.ContainsAny(args[i], " \t\n") {
-			argsCopy[i] = fmt.Sprintf("%q", args[i])
-		}
-	}
-	return command + " " + strings.Join(argsCopy, " ")
-}
-
-func runCommand(ctx context.Context, cwd, command string, args ...string) (string, error) {
-	return runCommandWithStdin(ctx, cwd, "", command, args...)
-}
-
-func runCommandWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
-	cmdStr := cmdForLog(command, args...)
-
-	cmd := exec.CommandContext(ctx, command, args...)
-	if cwd != "" {
-		cmd.Dir = cwd
-	}
-	outbuf := bytes.NewBuffer(nil)
-	errbuf := bytes.NewBuffer(nil)
-	cmd.Stdout = outbuf
-	cmd.Stderr = errbuf
-	cmd.Stdin = bytes.NewBufferString(stdin)
-
-	err := cmd.Run()
-	stdout := outbuf.String()
-	stderr := errbuf.String()
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
-	}
-	if err != nil {
-		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
-	}
-
-	return stdout, nil
-}
-
 func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
-	log.V(1).Info("setting up git credential store")
+	logger.V(1).Info("setting up git credential store")
 
-	_, err := runCommand(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
+	_, err := cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
 		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
-	_, err = runCommandWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
+	_, err = cmdRunner.RunWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1143,7 +1014,7 @@ func setupGitAuth(ctx context.Context, username, password, gitURL string) error 
 }
 
 func setupGitSSH(setupKnownHosts bool) error {
-	log.V(1).Info("setting up git SSH credentials")
+	logger.V(1).Info("setting up git SSH credentials")
 
 	var pathToSSHSecret = *flSSHKeyFile
 	var pathToSSHKnownHosts = *flSSHKnownHostsFile
@@ -1172,7 +1043,7 @@ func setupGitSSH(setupKnownHosts bool) error {
 }
 
 func setupGitCookieFile(ctx context.Context) error {
-	log.V(1).Info("configuring git cookie file")
+	logger.V(1).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
 
@@ -1181,7 +1052,7 @@ func setupGitCookieFile(ctx context.Context) error {
 		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
-	if _, err = runCommand(ctx, "", *flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+	if _, err = cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
@@ -1193,7 +1064,7 @@ func setupGitCookieFile(ctx context.Context) error {
 // username=xxx@example.com
 // password=xxxyyyzzz
 func callGitAskPassURL(ctx context.Context, url string) error {
-	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
+	logger.V(1).Info("calling GIT_ASKPASS URL to get credentials")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
@@ -1247,14 +1118,14 @@ func callGitAskPassURL(ctx context.Context, url string) error {
 }
 
 func setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
-	log.V(1).Info("setting additional git configs")
+	logger.V(1).Info("setting additional git configs")
 
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
 	for _, kv := range configs {
-		if _, err := runCommand(ctx, "", *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
+		if _, err := cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
 		}
 	}

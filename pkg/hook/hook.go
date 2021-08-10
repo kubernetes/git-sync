@@ -14,18 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package hook
 
 import (
+	"context"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"k8s.io/git-sync/pkg/logging"
 )
 
+var (
+	hookRunCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_hook_run_count_total",
+		Help: "How many hook runs completed, partitioned by name and state (success, error)",
+	}, []string{"name", "status"})
+)
+
+// Describes what a Hook needs to implement, run by HookRunner
 type Hook interface {
 	// Describes hook
 	Name() string
 	// Function that called by HookRunner
-	Do(hash string) error
+	Do(ctx context.Context, hash string) error
 }
 
 type hookData struct {
@@ -34,6 +46,7 @@ type hookData struct {
 	hash  string
 }
 
+// NewHookData returns a new HookData
 func NewHookData() *hookData {
 	return &hookData{
 		ch: make(chan struct{}, 1),
@@ -68,41 +81,51 @@ func (d *hookData) send(newHash string) {
 	}
 }
 
+// NewHookRunner returns a new HookRunner
+func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger) *HookRunner {
+	return &HookRunner{hook: hook, backoff: backoff, data: data, logger: log}
+}
+
+// HookRunner struct
 type HookRunner struct {
 	// Hook to run and check
-	Hook Hook
+	hook Hook
 	// Backoff for failed hooks
-	Backoff time.Duration
+	backoff time.Duration
 	// Holds the data as it crosses from producer to consumer.
-	Data *hookData
+	data *hookData
+	// Logger
+	logger *logging.Logger
 }
 
+// Send sends hash to hookdata
 func (r *HookRunner) Send(hash string) {
-	r.Data.send(hash)
+	r.data.send(hash)
 }
 
-// Wait for trigger events from the channel, and run hook when triggered
-func (r *HookRunner) run() {
+// Run waits for trigger events from the channel, and run hook when triggered
+func (r *HookRunner) Run(ctx context.Context) {
 	var lastHash string
+	prometheus.MustRegister(hookRunCount)
 
 	// Wait for trigger from hookData.Send
-	for range r.Data.events() {
+	for range r.data.events() {
 		// Retry in case of error
 		for {
 			// Always get the latest value, in case we fail-and-retry and the
 			// value changed in the meantime.  This means that we might not send
 			// every single hash.
-			hash := r.Data.get()
+			hash := r.data.get()
 			if hash == lastHash {
 				break
 			}
 
-			if err := r.Hook.Do(hash); err != nil {
-				log.Error(err, "hook failed")
-				updateHookRunCountMetric(r.Hook.Name(), metricKeyError)
-				time.Sleep(r.Backoff)
+			if err := r.hook.Do(ctx, hash); err != nil {
+				r.logger.Error(err, "hook failed")
+				updateHookRunCountMetric(r.hook.Name(), "error")
+				time.Sleep(r.backoff)
 			} else {
-				updateHookRunCountMetric(r.Hook.Name(), metricKeySuccess)
+				updateHookRunCountMetric(r.hook.Name(), "success")
 				lastHash = hash
 				break
 			}

@@ -14,22 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package hook
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"k8s.io/git-sync/pkg/logging"
 )
 
 func TestWebhookDo(t *testing.T) {
 	t.Run("test invalid urls are handled", func(t *testing.T) {
-		wh := Webhook{
-			URL:     ":http://localhost:601426/hooks/webhook",
-			Method:  "POST",
-			Success: 200,
-			Timeout: time.Second,
-		}
-		err := wh.Do("hash")
+		wh := NewWebhook(
+			":http://localhost:601426/hooks/webhook",
+			"POST",
+			200,
+			time.Second,
+			logging.NewLogger("", ""),
+		)
+		err := wh.Do(context.Background(), "hash")
 		if err == nil {
 			t.Fatalf("expected error for invalid url but got none")
 		}
