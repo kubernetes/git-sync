@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use for e2e test of --sync-hook-command.
+# Use for e2e test of --exechook-command.
 # This option takes no command arguments, so requires a wrapper script.
 
-cat file > sync-hook
-cat ../link/file > link-sync-hook
+cat file > exechook
+cat ../link/file > link-exechook
