@@ -26,24 +26,24 @@ import (
 	"k8s.io/git-sync/pkg/logging"
 )
 
-// CommandRunner structure
-type CommandRunner struct {
+// Runner structure
+type Runner struct {
 	// Logger
 	logger *logging.Logger
 }
 
-// NewCommandRunner returns a new CommandRunner
-func NewCommandRunner(logger *logging.Logger) *CommandRunner {
-	return &CommandRunner{logger: logger}
+// NewRunner returns a new CommandRunner
+func NewRunner(logger *logging.Logger) *Runner {
+	return &Runner{logger: logger}
 }
 
 // Run runs given command
-func (c *CommandRunner) Run(ctx context.Context, cwd, command string, args ...string) (string, error) {
+func (c *Runner) Run(ctx context.Context, cwd, command string, args ...string) (string, error) {
 	return c.RunWithStdin(ctx, cwd, "", command, args...)
 }
 
 // RunWithStdin runs given command with stardart input
-func (c *CommandRunner) RunWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
+func (c *Runner) RunWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
 	cmdStr := cmdForLog(command, args...)
 	c.logger.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 

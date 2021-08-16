@@ -25,10 +25,10 @@ import (
 	"k8s.io/git-sync/pkg/logging"
 )
 
-// Cmdhook structure, implements Hook
-type Cmdhook struct {
+// Exechook structure, implements Hook
+type Exechook struct {
 	// Runner
-	cmdrunner *cmd.CommandRunner
+	cmdrunner *cmd.Runner
 	// Command to run
 	command string
 	// Command args
@@ -41,9 +41,9 @@ type Cmdhook struct {
 	logger *logging.Logger
 }
 
-// NewLogger returns a new Cmdhook
-func NewCmdhook(cmdrunner *cmd.CommandRunner, command, gitroot string, args []string, timeout time.Duration, l *logging.Logger) *Cmdhook {
-	return &Cmdhook{
+// NewExechook returns a new Exechook
+func NewExechook(cmdrunner *cmd.Runner, command, gitroot string, args []string, timeout time.Duration, l *logging.Logger) *Exechook {
+	return &Exechook{
 		cmdrunner: cmdrunner,
 		command:   command,
 		gitRoot:   gitroot,
@@ -54,18 +54,18 @@ func NewCmdhook(cmdrunner *cmd.CommandRunner, command, gitroot string, args []st
 }
 
 // Name describes hook, implements Hook.Name
-func (w *Cmdhook) Name() string {
-	return "cmdhook"
+func (w *Exechook) Name() string {
+	return "exechook"
 }
 
-// Do runs cmdhook.command, implements Hook.Do
-func (c *Cmdhook) Do(ctx context.Context, hash string) error {
+// Do runs exechook.command, implements Hook.Do
+func (c *Exechook) Do(ctx context.Context, hash string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
 	worktreePath := filepath.Join(c.gitRoot, hash)
 
-	c.logger.V(0).Info("running cmdhook", "command", c.command, "timeout", c.timeout)
+	c.logger.V(0).Info("running exechook", "command", c.command, "timeout", c.timeout)
 	_, err := c.cmdrunner.Run(ctx, worktreePath, c.command, c.args...)
 	return err
 }

@@ -76,11 +76,10 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
-	"(deprecated) the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
-		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
+	"DEPRECATED: use --exechook-command instead.")
 var flExechookCommand = flag.String("exechook-command", envString("GIT_EXECHOOK_COMMAND", ""),
-	"the command executed with the syncing repository as its working directory after syncing a new hash of the remote repository. "+
-		"it is subject to the sync time out and will extend period between syncs. (doesn't support the command arguments)")
+	"a command to be executed (without arguments, with the syncing repository as its working directory) after syncing a new hash of the remote repository. "+
+		"It is subject to --timeout out and will extend period between syncs.")
 var flExechookTimeout = flag.Duration("exechook-timeout", envDuration("GIT_EXECHOOK_TIMEOUT", time.Second*30),
 	"the timeout for the command")
 var flExechookBackoff = flag.Duration("exechook-backoff", envDuration("GIT_EXECHOOK_BACKOFF", time.Second*3),
@@ -135,7 +134,7 @@ var flHTTPMetrics = flag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", t
 var flHTTPprof = flag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
-var cmdRunner *cmd.CommandRunner
+var cmdRunner *cmd.Runner
 var logger *logging.Logger
 
 // Total pull/error, summary on pull duration
@@ -258,7 +257,7 @@ func main() {
 	flag.Parse()
 
 	logger = logging.NewLogger(*flRoot, *flErrorFile)
-	cmdRunner = cmd.NewCommandRunner(logger)
+	cmdRunner = cmd.NewRunner(logger)
 
 	if *flVer {
 		fmt.Println(version.VERSION)
@@ -475,23 +474,23 @@ func main() {
 	}
 
 	// Startup synchookcommands goroutine
-	var cmdhookRunner *hook.HookRunner
+	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
-		cmdhook := hook.NewCmdhook(
-			cmd.NewCommandRunner(logger),
+		exechook := hook.NewExechook(
+			cmd.NewRunner(logger),
 			*flExechookCommand,
 			*flRoot,
 			[]string{},
 			*flExechookTimeout,
 			logger,
 		)
-		cmdhookRunner = hook.NewHookRunner(
-			cmdhook,
+		exechookRunner = hook.NewHookRunner(
+			exechook,
 			*flExechookBackoff,
 			hook.NewHookData(),
 			logger,
 		)
-		go cmdhookRunner.Run(context.Background())
+		go exechookRunner.Run(context.Background())
 	}
 
 	initialSync := true
@@ -517,8 +516,8 @@ func main() {
 			if webhookRunner != nil {
 				webhookRunner.Send(hash)
 			}
-			if cmdhookRunner != nil {
-				cmdhookRunner.Send(hash)
+			if exechookRunner != nil {
+				exechookRunner.Send(hash)
 			}
 			updateSyncMetrics(metricKeySuccess, start)
 		} else {

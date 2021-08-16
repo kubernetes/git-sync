@@ -25,11 +25,11 @@ import (
 	"k8s.io/git-sync/pkg/logging"
 )
 
-func TestNotZeroReturnCmdhookDo(t *testing.T) {
+func TestNotZeroReturnExechookDo(t *testing.T) {
 	t.Run("test not zero return code", func(t *testing.T) {
 		l := logging.NewLogger("", "")
-		ch := NewCmdhook(
-			cmd.NewCommandRunner(l),
+		ch := NewExechook(
+			cmd.NewRunner(l),
 			"false",
 			"/tmp",
 			[]string{},
@@ -43,11 +43,11 @@ func TestNotZeroReturnCmdhookDo(t *testing.T) {
 	})
 }
 
-func TestZeroReturnCmdhookDo(t *testing.T) {
+func TestZeroReturnExechookDo(t *testing.T) {
 	t.Run("test zero return code", func(t *testing.T) {
 		l := logging.NewLogger("", "")
-		ch := NewCmdhook(
-			cmd.NewCommandRunner(l),
+		ch := NewExechook(
+			cmd.NewRunner(l),
 			"true",
 			"/tmp",
 			[]string{},
@@ -61,11 +61,11 @@ func TestZeroReturnCmdhookDo(t *testing.T) {
 	})
 }
 
-func TestTimeoutCmdhookDo(t *testing.T) {
+func TestTimeoutExechookDo(t *testing.T) {
 	t.Run("test timeout", func(t *testing.T) {
 		l := logging.NewLogger("", "")
-		ch := NewCmdhook(
-			cmd.NewCommandRunner(l),
+		ch := NewExechook(
+			cmd.NewRunner(l),
 			"/bin/sh",
 			"/tmp",
 			[]string{"-c", "sleep 2"},
