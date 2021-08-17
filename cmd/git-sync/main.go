@@ -77,12 +77,12 @@ var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"DEPRECATED: use --exechook-command instead")
-var flExechookCommand = flag.String("exechook-command", envString("GIT_EXECHOOK_COMMAND", ""),
+var flExechookCommand = flag.String("exechook-command", envString("GIT_SYNC_EXECHOOK_COMMAND", ""),
 	"a command to be executed (without arguments, with the syncing repository as its working directory) after syncing a new hash of the remote repository. "+
 		"It is subject to --timeout out and will extend period between syncs.")
-var flExechookTimeout = flag.Duration("exechook-timeout", envDuration("GIT_EXECHOOK_TIMEOUT", time.Second*30),
+var flExechookTimeout = flag.Duration("exechook-timeout", envDuration("GIT_SYNC_EXECHOOK_TIMEOUT", time.Second*30),
 	"the timeout for the command")
-var flExechookBackoff = flag.Duration("exechook-backoff", envDuration("GIT_EXECHOOK_BACKOFF", time.Second*3),
+var flExechookBackoff = flag.Duration("exechook-backoff", envDuration("GIT_SYNC_EXECHOOK_BACKOFF", time.Second*3),
 	"the time to wait before retrying a failed command")
 var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file.")
