@@ -326,7 +326,7 @@ func TestRemoveDirContents(t *testing.T) {
 	}
 
 	// Test removal.
-	if err := removeDirContents(root); err != nil {
+	if err := removeDirContents(root, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
@@ -352,12 +352,12 @@ func TestRemoveDirContents(t *testing.T) {
 	}
 
 	// Test removal.
-	if err := removeDirContents(root); err != nil {
+	if err := removeDirContents(root, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
 	// Test error path.
-	if err := removeDirContents(filepath.Join(root, "does-not-exist")); err == nil {
+	if err := removeDirContents(filepath.Join(root, "does-not-exist"), nil); err == nil {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
