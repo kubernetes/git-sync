@@ -84,11 +84,11 @@ var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 var flSparseCheckoutFile = pflag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file")
 
-var flExechookCommand = pflag.String("exechook-command", envString("GIT_EXECHOOK_COMMAND", ""),
+var flExechookCommand = pflag.String("exechook-command", envString("GIT_SYNC_EXECHOOK_COMMAND", ""),
 	"an optional command to be run when syncs complete")
-var flExechookTimeout = pflag.Duration("exechook-timeout", envDuration("GIT_EXECHOOK_TIMEOUT", time.Second*30),
+var flExechookTimeout = pflag.Duration("exechook-timeout", envDuration("GIT_SYNC_EXECHOOK_TIMEOUT", time.Second*30),
 	"the timeout for the exechook")
-var flExechookBackoff = pflag.Duration("exechook-backoff", envDuration("GIT_EXECHOOK_BACKOFF", time.Second*3),
+var flExechookBackoff = pflag.Duration("exechook-backoff", envDuration("GIT_SYNC_EXECHOOK_BACKOFF", time.Second*3),
 	"the time to wait before retrying a failed exechook")
 
 var flWebhookURL = pflag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
@@ -1584,7 +1584,7 @@ OPTIONS
             The time to wait before retrying a failed --exechook-command.
             (default: 3s)
 
-    --exechook-command <string>, $GIT_EXECHOOK_COMMAND
+    --exechook-command <string>, $GIT_SYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
