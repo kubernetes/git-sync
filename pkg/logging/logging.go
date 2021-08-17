@@ -29,24 +29,19 @@ import (
 
 // A logger embeds logr.Logger
 type Logger struct {
-	log       logr.Logger
+	logr.Logger
 	root      string
 	errorFile string
 }
 
 // NewLogger returns glogr implemented logr.Logger.
 func New(root string, errorFile string) *Logger {
-	return &Logger{log: glogr.New(), root: root, errorFile: errorFile}
-}
-
-// Info implements logr.Logger.Info.
-func (l *Logger) Info(msg string, keysAndValues ...interface{}) {
-	l.log.Info(msg, keysAndValues...)
+	return &Logger{Logger: glogr.New(), root: root, errorFile: errorFile}
 }
 
 // Error implements logr.Logger.Error.
 func (l *Logger) Error(err error, msg string, kvList ...interface{}) {
-	l.log.Error(err, msg, kvList...)
+	l.Logger.WithCallDepth(1).Error(err, msg, kvList...)
 	if l.errorFile == "" {
 		return
 	}
@@ -71,27 +66,12 @@ func (l *Logger) Error(err error, msg string, kvList ...interface{}) {
 	}
 	jb, err := json.Marshal(payload)
 	if err != nil {
-		l.log.Error(err, "can't encode error payload")
+		l.Logger.Error(err, "can't encode error payload")
 		content := fmt.Sprintf("%v", err)
 		l.writeContent([]byte(content))
 	} else {
 		l.writeContent(jb)
 	}
-}
-
-// V implements logr.Logger.V.
-func (l *Logger) V(level int) logr.Logger {
-	return l.log.V(level)
-}
-
-// WithValues implements logr.Logger.WithValues.
-func (l *Logger) WithValues(keysAndValues ...interface{}) logr.Logger {
-	return l.log.WithValues(keysAndValues...)
-}
-
-// WithName implements logr.Logger.WithName.
-func (l *Logger) WithName(name string) logr.Logger {
-	return l.log.WithName(name)
 }
 
 // ExportError exports the error to the error file if --export-error is enabled.
@@ -112,7 +92,7 @@ func (l *Logger) DeleteErrorFile() {
 		if os.IsNotExist(err) {
 			return
 		}
-		l.log.Error(err, "can't delete the error-file", "filename", errorFile)
+		l.Logger.Error(err, "can't delete the error-file", "filename", errorFile)
 	}
 }
 
@@ -121,32 +101,32 @@ func (l *Logger) writeContent(content []byte) {
 	if _, err := os.Stat(l.root); os.IsNotExist(err) {
 		fileMode := os.FileMode(0755)
 		if err := os.Mkdir(l.root, fileMode); err != nil {
-			l.log.Error(err, "can't create the root directory", "root", l.root)
+			l.Logger.Error(err, "can't create the root directory", "root", l.root)
 			return
 		}
 	}
 	tmpFile, err := ioutil.TempFile(l.root, "tmp-err-")
 	if err != nil {
-		l.log.Error(err, "can't create temporary error-file", "directory", l.root, "prefix", "tmp-err-")
+		l.Logger.Error(err, "can't create temporary error-file", "directory", l.root, "prefix", "tmp-err-")
 		return
 	}
 	defer func() {
 		if err := tmpFile.Close(); err != nil {
-			l.log.Error(err, "can't close temporary error-file", "filename", tmpFile.Name())
+			l.Logger.Error(err, "can't close temporary error-file", "filename", tmpFile.Name())
 		}
 	}()
 
 	if _, err = tmpFile.Write(content); err != nil {
-		l.log.Error(err, "can't write to temporary error-file", "filename", tmpFile.Name())
+		l.Logger.Error(err, "can't write to temporary error-file", "filename", tmpFile.Name())
 		return
 	}
 
 	errorFile := filepath.Join(l.root, l.errorFile)
 	if err := os.Rename(tmpFile.Name(), errorFile); err != nil {
-		l.log.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", errorFile)
+		l.Logger.Error(err, "can't rename to error-file", "temp-file", tmpFile.Name(), "error-file", errorFile)
 		return
 	}
 	if err := os.Chmod(errorFile, 0644); err != nil {
-		l.log.Error(err, "can't change permissions on the error-file", "error-file", errorFile)
+		l.Logger.Error(err, "can't change permissions on the error-file", "error-file", errorFile)
 	}
 }
