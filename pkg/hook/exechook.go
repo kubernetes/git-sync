@@ -54,18 +54,18 @@ func NewExechook(cmdrunner *cmd.Runner, command, gitroot string, args []string, 
 }
 
 // Name describes hook, implements Hook.Name
-func (w *Exechook) Name() string {
+func (h *Exechook) Name() string {
 	return "exechook"
 }
 
 // Do runs exechook.command, implements Hook.Do
-func (c *Exechook) Do(ctx context.Context, hash string) error {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+func (h *Exechook) Do(ctx context.Context, hash string) error {
+	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
-	worktreePath := filepath.Join(c.gitRoot, hash)
+	worktreePath := filepath.Join(h.gitRoot, hash)
 
-	c.logger.V(0).Info("running exechook", "command", c.command, "timeout", c.timeout)
-	_, err := c.cmdrunner.Run(ctx, worktreePath, c.command, c.args...)
+	h.logger.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
+	_, err := h.cmdrunner.Run(ctx, worktreePath, h.command, h.args...)
 	return err
 }
