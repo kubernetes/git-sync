@@ -896,11 +896,6 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return nil
 	}
 
-	// GC clone
-	if _, err := git.run.Run(ctx, git.root, git.cmd, "gc", "--prune=all"); err != nil {
-		return err
-	}
-
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(git.root, hash)
 
@@ -912,9 +907,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 
-	_, err := git.run.Run(ctx, git.root, git.cmd, "worktree", "add", worktreePath, "origin/"+git.branch, "--no-checkout")
+	_, err := git.run.Run(ctx, git.root, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	git.log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
 	if err != nil {
+		return err
+	}
+
+	// GC clone
+	if _, err := git.run.Run(ctx, git.root, git.cmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
