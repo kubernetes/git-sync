@@ -729,7 +729,7 @@ GIT_SYNC \
     --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
@@ -763,7 +763,7 @@ GIT_SYNC \
     --branch=e2e-branch \
     --root="$ROOT" \
     --link="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1 &
+    >> "$DIR"/log."$TESTCASE" 2>&1 &
 sleep 10
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -900,7 +900,7 @@ GIT_SYNC \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
-    > "$DIR"/log."$TESTCASE" 2>&1
+    >> "$DIR"/log."$TESTCASE" 2>&1
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
