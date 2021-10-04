@@ -684,11 +684,6 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return nil
 	}
 
-	// GC clone
-	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
-		return err
-	}
-
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(gitRoot, hash)
 
@@ -702,9 +697,14 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
-	_, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "add", worktreePath, "origin/"+branch, "--no-checkout")
+	_, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
+		return err
+	}
+
+	// GC clone
+	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 

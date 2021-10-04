@@ -427,6 +427,43 @@ assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 pass
 
 ##############################################
+# Test switching branch after depth=1 checkout
+##############################################
+testcase "branch-switch"
+# First sync
+echo "$TESTCASE" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=e2e-branch \
+    --rev=HEAD \
+    --depth=1 \
+    --root="$ROOT" \
+    --dest="link" \
+    > "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE"
+BRANCH="${TESTCASE}2"
+git -C "$REPO" checkout -q -b $BRANCH
+echo "$TESTCASE 2" > "$REPO"/file
+git -C "$REPO" commit -qam "$TESTCASE 2"
+GIT_SYNC \
+    --one-time \
+    --repo="file://$REPO" \
+    --branch=$BRANCH \
+    --rev=HEAD \
+    --root="$ROOT" \
+    --dest="link" \
+    >> "$DIR"/log."$TESTCASE" 2>&1
+assert_link_exists "$ROOT"/link
+assert_file_exists "$ROOT"/link/file
+assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
+# Wrap up
+pass
+
+##############################################
 # Test tag syncing
 ##############################################
 testcase "tag-sync"
