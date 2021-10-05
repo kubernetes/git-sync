@@ -130,10 +130,11 @@ echo "test root is $DIR"
 echo
 
 REPO="$DIR/repo"
+MAIN_BRANCH="e2e-branch"
 function init_repo() {
     rm -rf "$REPO"
     mkdir -p "$REPO"
-    git -C "$REPO" init -q -b e2e-branch
+    git -C "$REPO" init -q -b "$MAIN_BRANCH"
     touch "$REPO"/file
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
@@ -211,7 +212,7 @@ rm -rf "$ROOT" # remove the root to test
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -231,7 +232,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -251,7 +252,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="../../../../../$ROOT/../../../../../../$ROOT" \
     --link="link" \
@@ -272,7 +273,7 @@ ln -s "$ROOT" "$DIR/rootlink" # symlink to test
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$DIR/rootlink" \
     --link="link" \
@@ -295,7 +296,7 @@ ln -s "$ROOT" "$DIR/rootlink" # symlink to test
   GIT_SYNC \
       --one-time \
       --repo="file://$REPO" \
-      --branch=e2e-branch \
+      --branch="$MAIN_BRANCH" \
       --rev=does-not-exit \
       --root="$DIR/rootlink" \
       --link="link" \
@@ -323,7 +324,7 @@ git -C "$ROOT/subdir" init >/dev/null
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT/subdir/root" \
     --link="link" \
@@ -348,7 +349,7 @@ echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev="HEAD" \
     --root="$ROOT" \
     --link="link" \
@@ -407,7 +408,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -442,7 +443,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --dest="link" \
@@ -490,7 +491,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -516,16 +517,16 @@ pass
 # Test branch syncing
 ##############################################
 testcase "branch-sync"
-BRANCH="$TESTCASE"--BRANCH
+OTHER_BRANCH="other-branch"
 # First sync
-git -C "$REPO" checkout -q -b "$BRANCH"
+git -C "$REPO" checkout -q -b "$OTHER_BRANCH"
 echo "$TESTCASE 1" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 1"
-git -C "$REPO" checkout -q e2e-branch
+git -C "$REPO" checkout -q "$MAIN_BRANCH"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch="$BRANCH" \
+    --branch="$OTHER_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -534,18 +535,18 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 # Add to the branch.
-git -C "$REPO" checkout -q "$BRANCH"
+git -C "$REPO" checkout -q "$OTHER_BRANCH"
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
-git -C "$REPO" checkout -q e2e-branch
+git -C "$REPO" checkout -q "$MAIN_BRANCH"
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 # Move the branch backward
-git -C "$REPO" checkout -q "$BRANCH"
+git -C "$REPO" checkout -q "$OTHER_BRANCH"
 git -C "$REPO" reset -q --hard HEAD^
-git -C "$REPO" checkout -q e2e-branch
+git -C "$REPO" checkout -q "$MAIN_BRANCH"
 sleep 3
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
@@ -563,7 +564,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --depth=1 \
     --root="$ROOT" \
     --link="link" \
@@ -571,14 +572,14 @@ GIT_SYNC \
 assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE"
-BRANCH="${TESTCASE}2"
-git -C "$REPO" checkout -q -b $BRANCH
+OTHER_BRANCH="${MAIN_BRANCH}2"
+git -C "$REPO" checkout -q -b $OTHER_BRANCH
 echo "$TESTCASE 2" > "$REPO"/file
 git -C "$REPO" commit -qam "$TESTCASE 2"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=$BRANCH \
+    --branch=$OTHER_BRANCH \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -601,7 +602,7 @@ git -C "$REPO" tag -f "$TAG" >/dev/null
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev="$TAG" \
     --root="$ROOT" \
     --link="link" \
@@ -647,7 +648,7 @@ git -C "$REPO" tag -af "$TAG" -m "$TESTCASE 1" >/dev/null
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev="$TAG" \
     --root="$ROOT" \
     --link="link" \
@@ -692,7 +693,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev="$REV" \
     --root="$ROOT" \
     --link="link" \
@@ -728,7 +729,7 @@ REV=$(git -C "$REPO" rev-list -n1 HEAD)
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev="$REV" \
     --root="$ROOT" \
     --link="link" \
@@ -749,7 +750,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1
@@ -762,7 +763,7 @@ rm -f "$ROOT"/link
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     >> "$DIR"/log."$TESTCASE" 2>&1
@@ -784,7 +785,7 @@ GIT_SYNC \
     --one-time \
     --sync-timeout=1s \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 || true
@@ -796,7 +797,7 @@ GIT_SYNC \
     --period=100ms \
     --sync-timeout=16s \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     >> "$DIR"/log."$TESTCASE" 2>&1 &
@@ -825,7 +826,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --link="link" \
@@ -873,7 +874,7 @@ GIT_SYNC \
     --period=100ms \
     --depth=1 \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -918,7 +919,7 @@ GIT_SYNC \
     --password="wrong" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -932,7 +933,7 @@ GIT_SYNC \
     --password="my-password" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -959,7 +960,7 @@ GIT_SYNC \
     --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -978,7 +979,7 @@ GIT_SYNC \
     --askpass-url="http://$IP/git_askpass" \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -1000,7 +1001,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     --exechook-command="$EXECHOOK_COMMAND" \
@@ -1038,7 +1039,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     --exechook-command="$EXECHOOK_COMMAND_FAIL" \
@@ -1069,7 +1070,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --webhook-url="http://$IP" \
     --webhook-success-status=200 \
@@ -1112,7 +1113,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --webhook-url="http://$IP" \
     --webhook-success-status=200 \
@@ -1159,7 +1160,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --webhook-url="http://$IP" \
     --webhook-success-status=-1 \
@@ -1187,7 +1188,7 @@ GIT_SYNC \
     --git="$SLOW_GIT_CLONE" \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --http-bind=":$BINDPORT" \
     --http-metrics \
@@ -1228,7 +1229,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b e2e-branch
+git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -1238,7 +1239,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q -b e2e-branch
+git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -1249,7 +1250,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     > "$DIR"/log."$TESTCASE" 2>&1 &
@@ -1324,7 +1325,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b e2e-branch
+git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
 
 # First sync
 expected_depth="1"
@@ -1337,7 +1338,7 @@ git -C "$REPO" commit -qam "$TESTCASE 1"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --depth="$expected_depth" \
     --root="$ROOT" \
     --link="link" \
@@ -1401,7 +1402,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b e2e-branch
+git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -1413,7 +1414,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     --submodules=off \
@@ -1433,7 +1434,7 @@ SUBMODULE_REPO_NAME="sub"
 SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
 mkdir "$SUBMODULE"
 
-git -C "$SUBMODULE" init -q -b e2e-branch
+git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
 echo "submodule" > "$SUBMODULE"/submodule
 git -C "$SUBMODULE" add submodule
 git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -1442,7 +1443,7 @@ NESTED_SUBMODULE_REPO_NAME="nested-sub"
 NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
 mkdir "$NESTED_SUBMODULE"
 
-git -C "$NESTED_SUBMODULE" init -q -b e2e-branch
+git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
 echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
 git -C "$NESTED_SUBMODULE" add nested-submodule
 git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -1456,7 +1457,7 @@ git -C "$REPO" commit -aqm "add submodule"
 GIT_SYNC \
     --period=100ms \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     --submodules=shallow \
@@ -1485,7 +1486,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="test@$IP:/src" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -1507,7 +1508,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
@@ -1547,7 +1548,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --root="$ROOT" \
     --link="link" \
     --error-file="error.json" \
@@ -1576,7 +1577,7 @@ git -C "$REPO" commit -qam "$TESTCASE"
 GIT_SYNC \
     --one-time \
     --repo="file://$REPO" \
-    --branch=e2e-branch \
+    --branch="$MAIN_BRANCH" \
     --rev=HEAD \
     --root="$ROOT" \
     --link="link" \
