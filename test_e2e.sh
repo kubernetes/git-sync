@@ -952,7 +952,7 @@ function e2e::password() {
 }
 
 ##############################################
-# Test askpass_url
+# Test askpass-url
 ##############################################
 function e2e::askpass_url() {
     echo "$FUNCNAME 1" > "$REPO"/file
@@ -1530,6 +1530,37 @@ function e2e::ssh() {
 }
 
 ##############################################
+# Test sparse-checkout files
+##############################################
+function e2e::sparse_checkout() {
+    echo "!/*" > "$DIR"/sparseconfig
+    echo "!/*/" >> "$DIR"/sparseconfig
+    echo "file2" >> "$DIR"/sparseconfig
+    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO"/file2
+    mkdir "$REPO"/dir
+    echo "$FUNCNAME" > "$REPO"/dir/file3
+    git -C "$REPO" add file2
+    git -C "$REPO" add dir
+    git -C "$REPO" commit -qam "$FUNCNAME"
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        --sparse-checkout-file="$DIR/sparseconfig" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file2
+    assert_file_absent "$ROOT"/link/file
+    assert_file_absent "$ROOT"/link/dir/file3
+    assert_file_absent "$ROOT"/link/dir
+    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME"
+}
+
+##############################################
 # Test additional git configs
 ##############################################
 function e2e::additional_git_configs() {
@@ -1586,37 +1617,6 @@ function e2e::export_error() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
     assert_file_absent "$ROOT"/error.json
-}
-
-##############################################
-# Test sparse-checkout files
-##############################################
-function e2e::sparse_checkout() {
-    echo "!/*" > "$DIR"/sparseconfig
-    echo "!/*/" >> "$DIR"/sparseconfig
-    echo "file2" >> "$DIR"/sparseconfig
-    echo "$FUNCNAME" > "$REPO"/file
-    echo "$FUNCNAME" > "$REPO"/file2
-    mkdir "$REPO"/dir
-    echo "$FUNCNAME" > "$REPO"/dir/file3
-    git -C "$REPO" add file2
-    git -C "$REPO" add dir
-    git -C "$REPO" commit -qam "$FUNCNAME"
-    GIT_SYNC \
-        --one-time \
-        --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
-        --root="$ROOT" \
-        --link="link" \
-        --sparse-checkout-file="$DIR/sparseconfig" \
-        >> "$1" 2>&1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_absent "$ROOT"/link/file
-    assert_file_absent "$ROOT"/link/dir/file3
-    assert_file_absent "$ROOT"/link/dir
-    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME"
 }
 
 ##############################################
