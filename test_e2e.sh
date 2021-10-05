@@ -1213,9 +1213,15 @@ function e2e::http() {
         --http-pprof \
         --link="link" \
         >> "$1" 2>&1 &
-    while ! curl --silent --output /dev/null http://localhost:$BINDPORT; do
-        # do nothing, just wait for the HTTP to come up
-        true
+    # do nothing, just wait for the HTTP to come up
+    for i in $(seq 1 5); do
+        sleep 1
+        if curl --silent --output /dev/null http://localhost:$BINDPORT; then
+            break
+        fi
+        if [[ "$i" == 5 ]]; then
+            fail "HTTP server failed to start"
+        fi
     done
 
     # check that health endpoint fails
