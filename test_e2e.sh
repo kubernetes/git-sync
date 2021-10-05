@@ -98,27 +98,9 @@ function docker_kill() {
     docker kill "$1" >/dev/null
 }
 
-# #####################
-# main
-# #####################
-
-# Build it
-make container REGISTRY=e2e VERSION=$(make -s version)
-make test-tools REGISTRY=e2e
-
 RUNID="${RANDOM}${RANDOM}"
-DIR=""
-for i in $(seq 1 10); do
-    DIR="/tmp/git-sync-e2e.$RUNID"
-    mkdir "$DIR" && break
-done
-if [[ -z "$DIR" ]]; then
-    echo "Failed to make a temp dir"
-    exit 1
-fi
-echo
-echo "test root is $DIR"
-echo
+DIR="/tmp/git-sync-e2e.$RUNID"
+mkdir "$DIR"
 
 REPO="$DIR/repo"
 MAIN_BRANCH="e2e-branch"
@@ -305,9 +287,9 @@ function e2e::non_zero_exit() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/link/file
     )
-    assert_file_absent "$ROOT"/link
-    assert_file_absent "$ROOT"/link/file
 }
 
 ##############################################
@@ -1689,9 +1671,10 @@ function list_tests() {
     )
 }
 
-# Iterate over all tests and run them.
+# Figure out which, if any, tests to run.
 tests=($(list_tests))
 
+# Use -? to just list tests.
 if [[ "$#" == 1 && "$1" == "-?" ]]; then
     echo "available tests:"
     for t in "${tests[@]}"; do
@@ -1700,10 +1683,20 @@ if [[ "$#" == 1 && "$1" == "-?" ]]; then
     exit 0
 fi
 
+# If no tests specified, run them all.
 if [[ "$#" == 0 ]]; then
     set -- "${tests[@]}"
 fi
 
+# Build it
+make container REGISTRY=e2e VERSION=$(make -s version)
+make test-tools REGISTRY=e2e
+
+echo
+echo "test root is $DIR"
+echo
+
+# Iterate over the chosen tests and run them.
 for t; do
     clean_root
     init_repo
