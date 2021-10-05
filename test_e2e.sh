@@ -208,6 +208,7 @@ function e2e::head_once_root_doesnt_exist() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     rm -rf "$ROOT" # remove the root to test
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -227,6 +228,7 @@ function e2e::head_once_root_doesnt_exist() {
 function e2e::head_once_root_exists_empty() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -246,6 +248,7 @@ function e2e::head_once_root_exists_empty() {
 function e2e::head_once_root_flag_is_weird() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -266,6 +269,7 @@ function e2e::head_once_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     ln -s "$ROOT" "$DIR/rootlink" # symlink to test
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -286,6 +290,7 @@ function e2e::non_zero_exit() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     ln -s "$ROOT" "$DIR/rootlink" # symlink to test
+
     (
         set +o errexit
         GIT_SYNC \
@@ -300,9 +305,9 @@ function e2e::non_zero_exit() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
     )
+    assert_file_absent "$ROOT"/link
+    assert_file_absent "$ROOT"/link/file
 }
 
 ##############################################
@@ -316,6 +321,7 @@ function e2e::head_once_root_exists_but_is_not_git_root() {
     mkdir -p "$ROOT/subdir/root"
     date > "$ROOT/subdir/root/file" # so it is not empty
     git -C "$ROOT/subdir" init >/dev/null
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -341,6 +347,7 @@ function e2e::head_once_root_exists_but_fails_sanity() {
     mkdir -p "$ROOT"
     git -C "$ROOT" init >/dev/null
     echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -366,6 +373,7 @@ function e2e::default_sync_master() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" checkout -q -b master
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -400,6 +408,7 @@ function e2e::head_sync() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -435,6 +444,7 @@ function e2e::head_sync() {
 function e2e::worktree_cleanup() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -483,6 +493,7 @@ function e2e::readlink() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -520,6 +531,7 @@ function e2e::branch_sync() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" checkout -q "$MAIN_BRANCH"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -559,6 +571,7 @@ function e2e::branch_switch() {
     # First sync
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -570,10 +583,12 @@ function e2e::branch_switch() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+
     OTHER_BRANCH="${MAIN_BRANCH}2"
     git -C "$REPO" checkout -q -b $OTHER_BRANCH
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -597,6 +612,7 @@ function e2e::tag_sync() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" tag -f "$TAG" >/dev/null
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -646,6 +662,7 @@ function e2e::tag_sync_annotated() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 1" >/dev/null
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -693,6 +710,7 @@ function e2e::rev_sync() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     REV=$(git -C "$REPO" rev-list -n1 HEAD)
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -730,6 +748,7 @@ function e2e::rev_once() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     REV=$(git -C "$REPO" rev-list -n1 HEAD)
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -750,6 +769,7 @@ function e2e::crash_cleanup_retry() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -784,6 +804,7 @@ function e2e::sync_loop_timeout() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --git="$SLOW_GIT_CLONE" \
         --one-time \
@@ -829,6 +850,7 @@ function e2e::depth() {
     echo "$FUNCNAME 1" > "$REPO"/file
     expected_depth="1"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -876,6 +898,7 @@ function e2e::depth() {
 function e2e::fetch_skip_depth_1() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --git="$SLOW_GIT_FETCH" \
         --period=100ms \
@@ -963,6 +986,7 @@ function e2e::askpass_url() {
         e2e/test/test-ncsvr \
         80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong"')
     IP=$(docker_ip "$CTR")
+
     GIT_SYNC \
         --git="$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
@@ -983,6 +1007,7 @@ function e2e::askpass_url() {
         e2e/test/test-ncsvr \
         80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password"')
     IP=$(docker_ip "$CTR")
+
     GIT_SYNC \
         --git="$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
@@ -1006,6 +1031,7 @@ function e2e::exechook_success() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1045,6 +1071,7 @@ function e2e::exechook_fail_retry() {
     # First sync - return a failure to ensure that we try again
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1078,6 +1105,7 @@ function e2e::webhook_success() {
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1124,6 +1152,7 @@ function e2e::webhook_fail_retry() {
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1163,7 +1192,6 @@ function e2e::webhook_fail_retry() {
 function e2e::webhook_fire_and_forget() {
     HITLOG="$DIR/hitlog"
 
-    # First sync
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
@@ -1174,6 +1202,7 @@ function e2e::webhook_fire_and_forget() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1202,6 +1231,7 @@ function e2e::http() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --git="$SLOW_GIT_CLONE" \
         --period=100ms \
@@ -1213,6 +1243,7 @@ function e2e::http() {
         --http-pprof \
         --link="link" \
         >> "$1" 2>&1 &
+
     # do nothing, just wait for the HTTP to come up
     for i in $(seq 1 5); do
         sleep 1
@@ -1273,6 +1304,7 @@ function e2e::submodule_sync() {
     # Add submodule
     git -C "$REPO" submodule add -q file://$SUBMODULE
     git -C "$REPO" commit -aqm "add submodule"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1365,6 +1397,7 @@ function e2e::submodule_sync_depth() {
     git -C "$REPO" submodule add -q file://$SUBMODULE
     git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
     git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1514,6 +1547,7 @@ function e2e::ssh() {
         e2e/test/test-sshd)
     IP=$(docker_ip "$CTR")
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="test@$IP:/src" \
@@ -1543,6 +1577,7 @@ function e2e::sparse_checkout() {
     git -C "$REPO" add file2
     git -C "$REPO" add dir
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -1566,6 +1601,7 @@ function e2e::sparse_checkout() {
 function e2e::additional_git_configs() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -1586,6 +1622,7 @@ function e2e::additional_git_configs() {
 function e2e::export_error() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
+
     (
         set +o errexit
         GIT_SYNC \
