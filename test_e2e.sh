@@ -204,7 +204,7 @@ function remove_containers() {
 ##############################################
 # Test HEAD one-time when root doesn't exist
 ##############################################
-function e2e::head-once-root-doesnt-exist() {
+function e2e::head_once_root_doesnt_exist() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     rm -rf "$ROOT" # remove the root to test
@@ -224,7 +224,7 @@ function e2e::head-once-root-doesnt-exist() {
 ##############################################
 # Test HEAD one-time when root exists and is empty
 ##############################################
-function e2e::head-once-root-exists-empty() {
+function e2e::head_once_root_exists_empty() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     GIT_SYNC \
@@ -243,7 +243,7 @@ function e2e::head-once-root-exists-empty() {
 ##############################################
 # Test HEAD one-time with a weird --root flag
 ##############################################
-function e2e::head-once-root-flag-is-weird() {
+function e2e::head_once_root_flag_is_weird() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     GIT_SYNC \
@@ -262,7 +262,7 @@ function e2e::head-once-root-flag-is-weird() {
 ##############################################
 # Test HEAD one-time with a symlink in --root
 ##############################################
-function e2e::head-once-root-flag-has-symlink() {
+function e2e::head_once_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     ln -s "$ROOT" "$DIR/rootlink" # symlink to test
@@ -282,7 +282,7 @@ function e2e::head-once-root-flag-has-symlink() {
 ##############################################
 # Test non-zero exit
 ##############################################
-function e2e::non-zero-exit() {
+function e2e::non_zero_exit() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     ln -s "$ROOT" "$DIR/rootlink" # symlink to test
@@ -308,7 +308,7 @@ function e2e::non-zero-exit() {
 ##############################################
 # Test HEAD one-time when root is under a git repo
 ##############################################
-function e2e::head-once-root-exists-but-is-not-git-root() {
+function e2e::head_once_root_exists_but_is_not_git_root() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -332,7 +332,7 @@ function e2e::head-once-root-exists-but-is-not-git-root() {
 ##############################################
 # Test HEAD one-time when root fails sanity
 ##############################################
-function e2e::head-once-root-exists-but-fails-sanity() {
+function e2e::head_once_root_exists_but_fails_sanity() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     SHA=$(git -C "$REPO" rev-parse HEAD)
@@ -361,7 +361,7 @@ function e2e::head-once-root-exists-but-fails-sanity() {
 ##############################################
 # Test default syncing (master)
 ##############################################
-function e2e::default-sync-master() {
+function e2e::default_sync_master() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -396,7 +396,7 @@ function e2e::default-sync-master() {
 ##############################################
 # Test HEAD syncing
 ##############################################
-function e2e::head-sync() {
+function e2e::head_sync() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -432,7 +432,7 @@ function e2e::head-sync() {
 ##############################################
 # Test worktree-cleanup
 ##############################################
-function e2e::worktree-cleanup() {
+function e2e::worktree_cleanup() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     GIT_SYNC \
@@ -512,7 +512,7 @@ function e2e::readlink() {
 ##############################################
 # Test branch syncing
 ##############################################
-function e2e::branch-sync() {
+function e2e::branch_sync() {
     OTHER_BRANCH="other-branch"
 
     # First sync
@@ -555,7 +555,7 @@ function e2e::branch-sync() {
 ##############################################
 # Test switching branch after depth=1 checkout
 ##############################################
-function e2e::branch-switch() {
+function e2e::branch_switch() {
     # First sync
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
@@ -590,7 +590,7 @@ function e2e::branch-switch() {
 ##############################################
 # Test tag syncing
 ##############################################
-function e2e::tag-sync() {
+function e2e::tag_sync() {
     TAG="e2e-tag"
 
     # First sync
@@ -639,7 +639,7 @@ function e2e::tag-sync() {
 ##############################################
 # Test tag syncing with annotated tags
 ##############################################
-function e2e::tag-sync-annotated() {
+function e2e::tag_sync_annotated() {
     TAG="e2e-tag"
 
     # First sync
@@ -688,7 +688,7 @@ function e2e::tag-sync-annotated() {
 ##############################################
 # Test rev syncing
 ##############################################
-function e2e::rev-sync() {
+function e2e::rev_sync() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -725,7 +725,7 @@ function e2e::rev-sync() {
 ##############################################
 # Test rev-sync one-time
 ##############################################
-function e2e::rev-once() {
+function e2e::rev_once() {
     # First sync
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
@@ -746,7 +746,7 @@ function e2e::rev-once() {
 ##############################################
 # Test syncing after a crash
 ##############################################
-function e2e::crash-cleanup-retry() {
+function e2e::crash_cleanup_retry() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -780,7 +780,7 @@ function e2e::crash-cleanup-retry() {
 ##############################################
 # Test sync loop timeout
 ##############################################
-function e2e::sync-loop-timeout() {
+function e2e::sync_loop_timeout() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -873,7 +873,7 @@ function e2e::depth() {
 ##############################################
 # Test fetch skipping commit
 ##############################################
-function e2e::fetch-skip-depth-1() {
+function e2e::fetch_skip_depth_1() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     GIT_SYNC \
@@ -1002,7 +1002,7 @@ function e2e::askpass_url() {
 ##############################################
 # Test exechook-success
 ##############################################
-function e2e::exechook-success() {
+function e2e::exechook_success() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1039,7 +1039,7 @@ function e2e::exechook-success() {
 ##############################################
 # Test exechook-fail-retry
 ##############################################
-function e2e::exechook-fail-retry() {
+function e2e::exechook_fail_retry() {
     cat /dev/null > "$RUNLOG"
 
     # First sync - return a failure to ensure that we try again
@@ -1066,7 +1066,7 @@ function e2e::exechook-fail-retry() {
 ##############################################
 # Test webhook success
 ##############################################
-function e2e::webhook-success() {
+function e2e::webhook_success() {
     HITLOG="$DIR/hitlog"
 
     # First sync
@@ -1112,7 +1112,7 @@ function e2e::webhook-success() {
 ##############################################
 # Test webhook fail-retry
 ##############################################
-function e2e::webhook-fail-retry() {
+function e2e::webhook_fail_retry() {
     HITLOG="$DIR/hitlog"
 
     # First sync - return a failure to ensure that we try again
@@ -1160,7 +1160,7 @@ function e2e::webhook-fail-retry() {
 ##############################################
 # Test webhook fire-and-forget
 ##############################################
-function e2e::webhook-fire-and-forget() {
+function e2e::webhook_fire_and_forget() {
     HITLOG="$DIR/hitlog"
 
     # First sync
@@ -1249,7 +1249,7 @@ function e2e::http() {
 ##############################################
 # Test submodule sync
 ##############################################
-function e2e::submodule-sync() {
+function e2e::submodule_sync() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
     SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
@@ -1349,7 +1349,7 @@ function e2e::submodule-sync() {
 ##############################################
 # Test submodules depth syncing
 ##############################################
-function e2e::submodule-sync-depth() {
+function e2e::submodule_sync_depth() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
     SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
@@ -1426,7 +1426,7 @@ function e2e::submodule-sync-depth() {
 ##############################################
 # Test submodules off
 ##############################################
-function e2e::submodule-sync-off() {
+function e2e::submodule_sync_off() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
     SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
@@ -1457,7 +1457,7 @@ function e2e::submodule-sync-off() {
 ##############################################
 # Test submodules shallow
 ##############################################
-function e2e::submodule-sync-shallow() {
+function e2e::submodule_sync_shallow() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
     SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
@@ -1532,7 +1532,7 @@ function e2e::ssh() {
 ##############################################
 # Test additional git configs
 ##############################################
-function e2e::additional-git-configs() {
+function e2e::additional_git_configs() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     GIT_SYNC \
@@ -1552,7 +1552,7 @@ function e2e::additional-git-configs() {
 ##############################################
 # Test export-error
 ##############################################
-function e2e::export-error() {
+function e2e::export_error() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     (
@@ -1591,7 +1591,7 @@ function e2e::export-error() {
 ##############################################
 # Test sparse-checkout files
 ##############################################
-function e2e::sparse-checkout() {
+function e2e::sparse_checkout() {
     echo "!/*" > "$DIR"/sparseconfig
     echo "!/*/" >> "$DIR"/sparseconfig
     echo "file2" >> "$DIR"/sparseconfig
@@ -1623,7 +1623,7 @@ function e2e::sparse-checkout() {
 # Test github HTTPS
 # TODO: it would be better if we set up a local HTTPS server
 ##############################################
-function e2e::github-https() {
+function e2e::github_https() {
     GIT_SYNC \
         --one-time \
         --repo="https://github.com/kubernetes/git-sync" \
