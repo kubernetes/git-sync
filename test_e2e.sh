@@ -92,7 +92,7 @@ function docker_run() {
 
 # Helper: get the IP of a docker container.
 function docker_ip() {
-    if [ -z "$1" ]; then
+    if [[ -z "$1" ]]; then
         echo "usage: $0 <id>"
         return 1
     fi
@@ -100,7 +100,7 @@ function docker_ip() {
 }
 
 function docker_kill() {
-    if [ -z "$1" ]; then
+    if [[ -z "$1" ]]; then
         echo "usage: $0 <id>"
         return 1
     fi
@@ -152,7 +152,7 @@ ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 function finish() {
-  if [ $? -ne 0 ]; then
+  if [[ $? -ne 0 ]]; then
     echo
     echo "the directory $DIR was not removed as it contains"\
          "log files useful for debugging"
@@ -709,7 +709,7 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "initial depth mismatch expected=$expected_depth actual=$depth"
 fi
 # Move forward
@@ -720,7 +720,7 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 2"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "forward depth mismatch expected=$expected_depth actual=$depth"
 fi
 # Move backward
@@ -730,7 +730,7 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/file
 assert_file_eq "$ROOT"/link/file "$TESTCASE 1"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "backward depth mismatch expected=$expected_depth actual=$depth"
 fi
 # Wrap up
@@ -920,7 +920,7 @@ GIT_SYNC \
 # Check that exechook was called
 sleep 5
 RUNS=$(cat "$RUNLOG" | wc -l)
-if [ "$RUNS" -lt 2 ]; then
+if [[ "$RUNS" < 2 ]]; then
     fail "exechook called $RUNS times, it should be at least 2"
 fi
 pass
@@ -951,7 +951,7 @@ GIT_SYNC \
 # check that basic call works
 sleep 2
 HITS=$(cat "$HITLOG" | wc -l)
-if [ "$HITS" -lt 1 ]; then
+if [[ "$HITS" < 1 ]]; then
     fail "webhook 1 called $HITS times"
 fi
 # Move forward
@@ -961,7 +961,7 @@ git -C "$REPO" commit -qam "$TESTCASE 2"
 # check that another call works
 sleep 2
 HITS=$(cat "$HITLOG" | wc -l)
-if [ "$HITS" -lt 1 ]; then
+if [[ "$HITS" < 1 ]]; then
     fail "webhook 2 called $HITS times"
 fi
 docker_kill "$CTR"
@@ -994,7 +994,7 @@ GIT_SYNC \
 # Check that webhook was called
 sleep 2
 HITS=$(cat "$HITLOG" | wc -l)
-if [ "$HITS" -lt 1 ]; then
+if [[ "$HITS" < 1 ]]; then
     fail "webhook 1 called $HITS times"
 fi
 docker_kill "$CTR"
@@ -1007,7 +1007,7 @@ CTR=$(docker_run \
     80 'echo -e "HTTP/1.1 200 OK\r\n"')
 sleep 2
 HITS=$(cat "$HITLOG" | wc -l)
-if [ "$HITS" -lt 1 ]; then
+if [[ "$HITS" < 1 ]]; then
     fail "webhook 2 called $HITS times"
 fi
 docker_kill "$CTR"
@@ -1041,7 +1041,7 @@ GIT_SYNC \
 # check that basic call works
 sleep 2
 HITS=$(cat "$HITLOG" | wc -l)
-if [ "$HITS" -lt 1 ]; then
+if [[ "$HITS" < 1 ]]; then
     fail "webhook called $HITS times"
 fi
 docker_kill "$CTR"
@@ -1219,11 +1219,11 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
 assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$TESTCASE 1"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "initial depth mismatch expected=$expected_depth actual=$depth"
 fi
 submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
-if [ $expected_depth != $submodule_depth ]; then
+if [[ $expected_depth != $submodule_depth ]]; then
     fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
 fi
 # Move forward
@@ -1236,11 +1236,11 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
 assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$TESTCASE 2"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "forward depth mismatch expected=$expected_depth actual=$depth"
 fi
 submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
-if [ $expected_depth != $submodule_depth ]; then
+if [[ $expected_depth != $submodule_depth ]]; then
     fail "forward submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
 fi
 # Move backward
@@ -1252,11 +1252,11 @@ assert_link_exists "$ROOT"/link
 assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
 assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$TESTCASE 1"
 depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-if [ $expected_depth != $depth ]; then
+if [[ $expected_depth != $depth ]]; then
     fail "initial depth mismatch expected=$expected_depth actual=$depth"
 fi
 submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
-if [ $expected_depth != $submodule_depth ]; then
+if [[ $expected_depth != $submodule_depth ]]; then
     fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
 fi
 # Wrap up
