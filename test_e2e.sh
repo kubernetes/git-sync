@@ -98,27 +98,9 @@ function docker_kill() {
     docker kill "$1" >/dev/null
 }
 
-# #####################
-# main
-# #####################
-
-# Build it
-make container REGISTRY=e2e VERSION=$(make -s version)
-make test-tools REGISTRY=e2e
-
 RUNID="${RANDOM}${RANDOM}"
-DIR=""
-for i in $(seq 1 10); do
-    DIR="/tmp/git-sync-e2e.$RUNID"
-    mkdir "$DIR" && break
-done
-if [[ -z "$DIR" ]]; then
-    echo "Failed to make a temp dir"
-    exit 1
-fi
-echo
-echo "test root is $DIR"
-echo
+DIR="/tmp/git-sync-e2e.$RUNID"
+mkdir "$DIR"
 
 REPO="$DIR/repo"
 MAIN_BRANCH="e2e-branch"
@@ -796,7 +778,6 @@ function e2e::fetch_skip_depth_1() {
     assert_file_eq "$ROOT"/link/file3 "$FUNCNAME-ok"
 }
 
-
 ##############################################
 # Test password
 ##############################################
@@ -1101,7 +1082,7 @@ function e2e::http() {
         --http-pprof \
         --dest="link" \
         >> "$1" 2>&1 &
-        # do nothing, just wait for the HTTP to come up
+    # do nothing, just wait for the HTTP to come up
     for i in $(seq 1 5); do
         sleep 1
         if curl --silent --output /dev/null http://localhost:$BINDPORT; then
@@ -1524,10 +1505,6 @@ function e2e::github_https() {
     assert_file_exists "$ROOT"/link/LICENSE
 }
 
-#
-# main
-#
-
 function list_tests() {
     (
         shopt -s extdebug
@@ -1541,9 +1518,10 @@ function list_tests() {
     )
 }
 
-# Iterate over all tests and run them.
+# Figure out which, if any, tests to run.
 tests=($(list_tests))
 
+# Use -? to just list tests.
 if [[ "$#" == 1 && "$1" == "-?" ]]; then
     echo "available tests:"
     for t in "${tests[@]}"; do
@@ -1552,10 +1530,20 @@ if [[ "$#" == 1 && "$1" == "-?" ]]; then
     exit 0
 fi
 
+# If no tests specified, run them all.
 if [[ "$#" == 0 ]]; then
     set -- "${tests[@]}"
 fi
 
+# Build it
+make container REGISTRY=e2e VERSION=$(make -s version)
+make test-tools REGISTRY=e2e
+
+echo
+echo "test root is $DIR"
+echo
+
+# Iterate over the chosen tests and run them.
 for t; do
     clean_root
     init_repo
