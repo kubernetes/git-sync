@@ -153,12 +153,15 @@ ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 function finish() {
-  if [[ $? -ne 0 ]]; then
+  r=$?
+  trap "" INT EXIT
+  if [[ $r != 0 ]]; then
     echo
     echo "the directory $DIR was not removed as it contains"\
          "log files useful for debugging"
   fi
   remove_containers
+  exit $r
 }
 trap finish INT EXIT
 
