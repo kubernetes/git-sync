@@ -38,7 +38,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/pflag"
 	"k8s.io/git-sync/pkg/cmd"
 	"k8s.io/git-sync/pkg/hook"
 	"k8s.io/git-sync/pkg/logging"
@@ -102,7 +101,7 @@ var flUsername = flag.String("username", envString("GIT_SYNC_USERNAME", ""),
 	"the username to use for git auth")
 var flPassword = flag.String("password", envString("GIT_SYNC_PASSWORD", ""),
 	"the password to use for git auth (prefer --password-file or this env var)")
-var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
+var flPasswordFile = flag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
 	"the file from which the password or personal access token for git auth will be sourced")
 
 var flSSH = flag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
