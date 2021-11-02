@@ -348,13 +348,13 @@ function e2e::head_once_root_exists_but_fails_sanity() {
 ## FIXME: test when repo is valid git, and is already correct
 
 ##############################################
-# Test default syncing (master)
+# Test default-branch syncing
 ##############################################
-function e2e::default_sync_master() {
+function e2e::default_branch_sync() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    git -C "$REPO" checkout -q -b master
+    git -C "$REPO" checkout -q -b weird-name
 
     GIT_SYNC \
         --period=100ms \
