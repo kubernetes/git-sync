@@ -55,8 +55,8 @@ var flVerbose = pflag.IntP("verbose", "v", 0,
 
 var flRepo = pflag.String("repo", envString("GIT_SYNC_REPO", ""),
 	"the git repository to clone")
-var flBranch = pflag.String("branch", envString("GIT_SYNC_BRANCH", "master"),
-	"the git branch to check out")
+var flBranch = pflag.String("branch", envString("GIT_SYNC_BRANCH", ""),
+	"the git branch to check out (defaults to repo's default branch)")
 var flRev = pflag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
 	"the git revision (tag or hash) to check out")
 var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
@@ -124,7 +124,7 @@ var flCookieFile = pflag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use a git cookiefile (/etc/git-secret/cookie_file) for authentication")
 
 var flAskPassURL = pflag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
-	"a URL to query for git credentials (username=<value> and password=<value>")
+	"a URL to query for git credentials (username=<value> and password=<value>)")
 
 var flGitCmd = pflag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
@@ -881,7 +881,11 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	if git.depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(git.depth))
 	}
-	args = append(args, "origin", git.branch)
+	fetch := "HEAD"
+	if git.branch != "" {
+		fetch = git.branch
+	}
+	args = append(args, "origin", fetch)
 
 	// Update from the remote.
 	if _, err := git.run.Run(ctx, git.root, git.cmd, args...); err != nil {
@@ -908,7 +912,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	_, err := git.run.Run(ctx, git.root, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
-	git.log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", git.branch))
+	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
 	if err != nil {
 		return err
 	}
@@ -1037,7 +1041,10 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 // CloneRepo does an initial clone of the git repo.
 func (git *repoSync) CloneRepo(ctx context.Context) error {
-	args := []string{"clone", "--no-checkout", "-b", git.branch}
+	args := []string{"clone", "--no-checkout"}
+	if git.branch != "" {
+		args = append(args, "-b", git.branch)
+	}
 	if git.depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(git.depth))
 	}
@@ -1211,12 +1218,13 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 
-	// Build a ref string, depending on whether the user asked to track HEAD or a tag.
-	ref := ""
-	if git.rev == "HEAD" {
-		ref = "refs/heads/" + git.branch
-	} else {
+	// Build a ref string, depending on whether the user asked to track HEAD or
+	// a tag.
+	ref := "HEAD"
+	if git.rev != "HEAD" {
 		ref = "refs/tags/" + git.rev
+	} else if git.branch != "" {
+		ref = "refs/heads/" + git.branch
 	}
 
 	// Figure out what hash the remote resolves ref to.
@@ -1560,7 +1568,7 @@ OPTIONS
             "username=<value>" and "password=<value>".
 
     --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out. (default: master)
+            The git branch to check out. (default: <repo's default branch>)
 
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Optionally change permissions on the checked-out files to the
@@ -1730,7 +1738,7 @@ EXAMPLE USAGE
 
     git-sync \
         --repo=https://github.com/kubernetes/git-sync \
-        --branch=master \
+        --branch=main \
         --rev=HEAD \
         --period=10s \
         --root=/mnt/git

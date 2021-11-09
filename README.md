@@ -54,7 +54,6 @@ docker run -d \
     -u$(id -u):$(id -g) \
     registry/git-sync:tag \
         --repo=https://github.com/kubernetes/git-sync \
-        --branch=master \
         --root=/tmp/git/root \
         --period=30s
 
@@ -113,7 +112,7 @@ OPTIONS
             "username=<value>" and "password=<value>".
 
     --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out. (default: master)
+            The git branch to check out. (default: <repo's default branch>)
 
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Optionally change permissions on the checked-out files to the
@@ -272,7 +271,7 @@ EXAMPLE USAGE
 
     git-sync \
         --repo=https://github.com/kubernetes/git-sync \
-        --branch=master \
+        --branch=main \
         --rev=HEAD \
         --period=10s \
         --root=/mnt/git
