@@ -87,7 +87,7 @@ var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SY
 	"the path to a sparse-checkout file.")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
-	"the URL for a webhook notification when syncs complete (default is no webook)")
+	"the URL for a webhook notification when syncs complete (default is no webhook)")
 var flWebhookMethod = flag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
 	"the HTTP method for the webhook")
 var flWebhookStatusSuccess = flag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
