@@ -1,8 +1,10 @@
 # A minimal logging API for Go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-logr/logr.svg)](https://pkg.go.dev/github.com/go-logr/logr)
+
 logr offers an(other) opinion on how Go programs and libraries can do logging
-without becoming coupled to a particular logging implementation,  This is not
-an implementation of logging - it is an API.  In fact it is two APIs with twop
+without becoming coupled to a particular logging implementation.  This is not
+an implementation of logging - it is an API.  In fact it is two APIs with two
 different sets of users.
 
 The `Logger` type is intended for application and library authors.  It provides
@@ -10,13 +12,13 @@ a relatively small API which can be used everywhere you want to emit logs.  It
 defers the actual act of writing logs (to files, to stdout, or whatever) to the
 `LogSink` interface.
 
-The `LogSink` interface is intended for logging library implementors.  It is a
-pure interface which can be implemented by to provide the actual logging
+The `LogSink` interface is intended for logging library implementers.  It is a
+pure interface which can be implemented by logging frameworks to provide the actual logging
 functionality.
 
 This decoupling allows application and library developers to write code in
 terms of `logr.Logger` (which has very low dependency fan-out) while the
-implementation of logging is managed "up stack" (e.g. in or near `main()`).
+implementation of logging is managed "up stack" (e.g. in or near `main()`.)
 Application developers can then switch out implementations as necessary.
 
 Many people assert that libraries should not be logging, and as such efforts
@@ -40,13 +42,13 @@ logging library (implementation) it actually wants to use.  Something like:
         // ... other setup code ...
 ```
 
-Most apps will call into other libraries, create stuctures to govern the flow,
+Most apps will call into other libraries, create structures to govern the flow,
 etc.  The `logr.Logger` object can be passed to these other libraries, stored
 in structs, or even used as a package-global variable, if needed.  For example:
 
 ```
-        app := createTheAppObject(logger)
-        app.Run()
+    app := createTheAppObject(logger)
+    app.Run()
 ```
 
 Outside of this early setup, no other packages need to know about the choice of
@@ -56,7 +58,7 @@ received:
 ```
     type appObject struct {
         // ... other fields ...
-        logger logr.Logr
+        logger logr.Logger
         // ... other fields ...
     }
 
@@ -81,7 +83,7 @@ he has to say, and it largely aligns with our own experiences.
 
 The main differences are:
 
-1) Dave basically proposes doing away with the notion of a logging API in favor
+1. Dave basically proposes doing away with the notion of a logging API in favor
 of `fmt.Printf()`.  We disagree, especially when you consider things like output
 locations, timestamps, file and line decorations, and structured logging.  This
 package restricts the logging API to just 2 types of logs: info and error.
@@ -91,9 +93,9 @@ logs are, well, errors.  If your code receives an `error` from a subordinate
 function call and is logging that `error` *and not returning it*, use error
 logs.
 
-2) Verbosity-levels on info logs.  This gives developers a chance to indicate
+2. Verbosity-levels on info logs.  This gives developers a chance to indicate
 arbitrary grades of importance for info logs, without assigning names with
-semantic meaning such as "warning", "trace", and "debug".  Superficially this
+semantic meaning such as "warning", "trace", and "debug."  Superficially this
 may feel very similar, but the primary difference is the lack of semantics.
 Because verbosity is a numerical value, it's safe to assume that an app running
 with higher verbosity means more (and less important) logs will be generated.
@@ -102,14 +104,15 @@ with higher verbosity means more (and less important) logs will be generated.
 
 There are implementations for the following logging libraries:
 
-- **a function**: [funcr](https://github.com/go-logr/logr/funcr)
+- **a function** (can bridge to non-structured libraries): [funcr](https://github.com/go-logr/logr/tree/master/funcr)
 - **github.com/google/glog**: [glogr](https://github.com/go-logr/glogr)
-- **k8s.io/klog**: [klogr](https://git.k8s.io/klog/klogr)
+- **k8s.io/klog** (for Kubernetes): [klogr](https://git.k8s.io/klog/klogr)
 - **go.uber.org/zap**: [zapr](https://github.com/go-logr/zapr)
 - **log** (the Go standard library logger): [stdr](https://github.com/go-logr/stdr)
 - **github.com/sirupsen/logrus**: [logrusr](https://github.com/bombsimon/logrusr)
 - **github.com/wojas/genericr**: [genericr](https://github.com/wojas/genericr) (makes it easy to implement your own backend)
 - **logfmt** (Heroku style [logging](https://www.brandur.org/logfmt)): [logfmtr](https://github.com/iand/logfmtr)
+- **github.com/rs/zerolog**: [zerologr](https://github.com/go-logr/zerologr)
 
 ## FAQ
 
@@ -117,13 +120,13 @@ There are implementations for the following logging libraries:
 
 #### Why structured logging?
 
-- **Structured logs are more easily queriable**: Since you've got
+- **Structured logs are more easily queryable**: Since you've got
   key-value pairs, it's much easier to query your structured logs for
   particular values by filtering on the contents of a particular key --
   think searching request logs for error codes, Kubernetes reconcilers for
-  the name and namespace of the reconciled object, etc
+  the name and namespace of the reconciled object, etc.
 
-- **Structured logging makes it easier to have cross-referencable logs**:
+- **Structured logging makes it easier to have cross-referenceable logs**:
   Similarly to searchability, if you maintain conventions around your
   keys, it becomes easy to gather all log lines related to a particular
   concept.
@@ -132,12 +135,12 @@ There are implementations for the following logging libraries:
   structure to your logs, you've got more precise control over how much
   information is logged -- you might choose in a particular configuration
   to log certain keys but not others, only log lines where a certain key
-  matches a certain value, etc, instead of just having v-levels and names
+  matches a certain value, etc., instead of just having v-levels and names
   to key off of.
 
 - **Structured logs better represent structured data**: sometimes, the
   data that you want to log is inherently structured (think tuple-link
-  objects).  Structured logs allow you to preserve that structure when
+  objects.)  Structured logs allow you to preserve that structure when
   outputting.
 
 #### Why V-levels?
@@ -158,18 +161,18 @@ from Dave's ideas](#differences-from-daves-ideas).
 **Format strings negate many of the benefits of structured logs**:
 
 - They're not easily searchable without resorting to fuzzy searching,
-  regular expressions, etc
+  regular expressions, etc.
 
 - They don't store structured data well, since contents are flattened into
-  a string
+  a string.
 
-- They're not cross-referenceable
+- They're not cross-referenceable.
 
-- They don't compress easily, since the message is not constant
+- They don't compress easily, since the message is not constant.
 
-(unless you turn positional parameters into key-value pairs with numerical
+(Unless you turn positional parameters into key-value pairs with numerical
 keys, at which point you've gotten key-value logging with meaningless
-keys)
+keys.)
 
 ### Practical
 
@@ -199,11 +202,11 @@ That's not actually a question.  Assuming your question is "how do
 I convert my mental model of logging with format strings to logging with
 constant messages":
 
-1. figure out what the error actually is, as you'd write in a TL;DR style,
-   and use that as a message
+1. Figure out what the error actually is, as you'd write in a TL;DR style,
+   and use that as a message.
 
 2. For every place you'd write a format specifier, look to the word before
-   it, and add that as a key value pair
+   it, and add that as a key value pair.
 
 For instance, consider the following examples (all taken from spots in the
 Kubernetes codebase):
@@ -230,18 +233,28 @@ more verbose or more debug-y logs.
 
 Otherwise, you can start out with `0` as "you always want to see this",
 `1` as "common logging that you might *possibly* want to turn off", and
-`10` as "I would like to performance-test your log collection stack".
+`10` as "I would like to performance-test your log collection stack."
 
 Then gradually choose levels in between as you need them, working your way
 down from 10 (for debug and trace style logs) and up from 1 (for chattier
-info-type logs).
+info-type logs.)
 
 #### How do I choose my keys?
 
-- make your keys human-readable
-- constant keys are generally a good idea
-- be consistent across your codebase
-- keys should naturally match parts of the message string
+Keys are fairly flexible, and can hold more or less any string
+value. For best compatibility with implementations and consistency
+with existing code in other projects, there are a few conventions you
+should consider.
+
+- Make your keys human-readable.
+- Constant keys are generally a good idea.
+- Be consistent across your codebase.
+- Keys should naturally match parts of the message string.
+- Use lower case for simple keys and
+  [lowerCamelCase](https://en.wiktionary.org/wiki/lowerCamelCase) for
+  more complex ones. Kubernetes is one example of a project that has
+  [adopted that
+  convention](https://github.com/kubernetes/community/blob/HEAD/contributors/devel/sig-instrumentation/migration-to-structured-logging.md#name-arguments).
 
 While key names are mostly unrestricted (and spaces are acceptable),
 it's generally a good idea to stick to printable ascii characters, or at
@@ -251,7 +264,7 @@ least match the general character set of your log lines.
 
 The point of structured logging is to make later log processing easier.  Your
 keys are, effectively, the schema of each log message.  If you use different
-keys across instances of the same log-line, you will make your structured logs
+keys across instances of the same log line, you will make your structured logs
 much harder to use.  `Sprintf()` is for values, not for keys!
 
 #### Why is this not a pure interface?

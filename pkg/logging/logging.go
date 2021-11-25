@@ -23,8 +23,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-logr/glogr"
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 )
 
 // Logger provides a logging interface.
@@ -34,9 +34,15 @@ type Logger struct {
 	errorFile string
 }
 
-// New returns a Logger, with the same API as logr.Logger.
-func New(root string, errorFile string) *Logger {
-	return &Logger{Logger: glogr.New(), root: root, errorFile: errorFile}
+// New returns a logr.Logger.
+func New(root string, errorFile string, verbosity int) *Logger {
+	opts := funcr.Options{
+		LogCaller:    funcr.All,
+		LogTimestamp: true,
+		Verbosity:    verbosity,
+	}
+	inner := funcr.NewJSON(func(obj string) { fmt.Fprintln(os.Stderr, obj) }, opts)
+	return &Logger{Logger: inner, root: root, errorFile: errorFile}
 }
 
 // Error implements logr.Logger.Error.

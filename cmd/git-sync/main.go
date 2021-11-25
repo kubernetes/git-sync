@@ -20,7 +20,6 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"context"
-	stdflag "flag" // renamed so we don't accidentally use it
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -249,23 +248,6 @@ func envDuration(key string, def time.Duration) time.Duration {
 	return def
 }
 
-func setGlogFlags(v int, log *logging.Logger) {
-	// Force logging to stderr.
-	stderrFlag := stdflag.Lookup("logtostderr")
-	if stderrFlag == nil {
-		handleError(log, false, "ERROR: can't find glog flag 'logtostderr'")
-	}
-	stderrFlag.Value.Set("true")
-
-	// Set verbosity from flag.
-	vFlag := stdflag.Lookup("v")
-	if vFlag == nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't find glog flag 'v'\n")
-		os.Exit(1)
-	}
-	vFlag.Value.Set(strconv.Itoa(v))
-}
-
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
 	cmd         string         // the git command to run
@@ -301,13 +283,10 @@ func main() {
 	//
 
 	pflag.Parse()
-	stdflag.CommandLine.Parse(nil) // Otherwise glog complains
 
 	// Needs to happen very early for errors to be written to a file.
-	log := logging.New(*flRoot, *flErrorFile)
+	log := logging.New(*flRoot, *flErrorFile, *flVerbose)
 	cmdRunner := cmd.NewRunner(log)
-
-	setGlogFlags(*flVerbose, log)
 
 	if *flVersion {
 		fmt.Println(version.VERSION)
