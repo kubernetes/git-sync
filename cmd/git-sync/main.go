@@ -164,6 +164,12 @@ const (
 // initTimeout is a timeout for initialization, like git credentials setup.
 const initTimeout = time.Second * 30
 
+// defaultUID is the default user ID as defined in the Dockerfile
+const defaultUID = 65533
+
+// defaultUID is the default group ID as defined in the Dockerfile
+const defaultGID = 65533
+
 const (
 	submodulesRecursive = "recursive"
 	submodulesShallow   = "shallow"
@@ -580,6 +586,10 @@ func handleError(printUsage bool, format string, a ...interface{}) {
 // Put the current UID/GID into /etc/passwd so SSH can look it up.  This
 // assumes that we have the permissions to write to it.
 func addUser() error {
+	// Don't write a duplicate entry; the Dockerfile already adds the default UID/GID.
+	if os.Getuid() == defaultUID && os.Getgid() == defaultGID {
+		return nil
+	}
 	home := os.Getenv("HOME")
 	if home == "" {
 		cwd, err := os.Getwd()
