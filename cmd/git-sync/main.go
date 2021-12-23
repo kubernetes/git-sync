@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -586,8 +587,8 @@ func handleError(printUsage bool, format string, a ...interface{}) {
 // Put the current UID/GID into /etc/passwd so SSH can look it up.  This
 // assumes that we have the permissions to write to it.
 func addUser() error {
-	// Don't write a duplicate entry; the Dockerfile already adds the default UID/GID.
-	if os.Getuid() == defaultUID && os.Getgid() == defaultGID {
+	// Skip if the UID already exists. The Dockerfile already adds the default UID/GID.
+	if _, err := user.LookupId(strconv.Itoa(os.Getuid())); err == nil {
 		return nil
 	}
 	home := os.Getenv("HOME")
