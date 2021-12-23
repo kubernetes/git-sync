@@ -165,12 +165,6 @@ const (
 // initTimeout is a timeout for initialization, like git credentials setup.
 const initTimeout = time.Second * 30
 
-// defaultUID is the default user ID as defined in the Dockerfile
-const defaultUID = 65533
-
-// defaultUID is the default group ID as defined in the Dockerfile
-const defaultGID = 65533
-
 const (
 	submodulesRecursive = "recursive"
 	submodulesShallow   = "shallow"
