@@ -174,8 +174,10 @@ var (
 	}, []string{"status"})
 )
 
-// Channels for ensuring hooks execute at least once before terminating due to GIT_SYNC_ONCE
-var execHookChannel, webHookChannel chan bool  // initialising as null to promptly catch logical errors and to avoid unneeded object creation
+// Channels for ensuring hooks execute at least once before terminating.
+// Should be nil if and only if corresponding hook is not defined and if initialised, will only every get written
+// to once.
+var exechookChannel, webhookChannel chan bool
 
 const (
 	metricKeySuccess = "success"
@@ -362,8 +364,7 @@ func main() {
 		if *flExechookBackoff < time.Second {
 			handleError(log, true, "ERROR: --exechook-backoff must be at least 1s")
 		}
-
-		execHookChannel = make(chan bool)
+		exechookChannel = make(chan bool, 1)
 	}
 
 	if *flWebhookURL != "" {
@@ -376,8 +377,7 @@ func main() {
 		if *flWebhookBackoff < time.Second {
 			handleError(log, true, "ERROR: --webhook-backoff must be at least 1s")
 		}
-
-		webHookChannel = make(chan bool)
+		webhookChannel = make(chan bool, 1)
 	}
 
 	if *flPassword != "" && *flPasswordFile != "" {
@@ -563,7 +563,7 @@ func main() {
 			*flWebhookBackoff,
 			hook.NewHookData(),
 			log,
-			webHookChannel,
+			webhookChannel,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -584,7 +584,7 @@ func main() {
 			*flExechookBackoff,
 			hook.NewHookData(),
 			log,
-			execHookChannel,
+			exechookChannel,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -630,17 +630,17 @@ func main() {
 		}
 
 		if initialSync {
-			// Wait for hooks to complete at least once before checking whether to stop
+			// Wait for hooks to complete at least once, if not nil, before checking whether to stop program
 			// Assumes that if hook channels are not nil, they will have at least one value before getting closed
-			if execHookChannel != nil {
-				execHookChannelFinishedSuccessfully:= <-execHookChannel
-				if !execHookChannelFinishedSuccessfully {
+			if exechookChannel != nil {
+				exechookChannelFinishedSuccessfully := <-exechookChannel
+				if !exechookChannelFinishedSuccessfully {
 					log.Error(nil, "exec hook completed with error")
 				}
 			}
-			if webHookChannel != nil {
-				webHookChannelFinishedSuccessfully:= <-webHookChannel
-				if !webHookChannelFinishedSuccessfully {
+			if webhookChannel != nil {
+				webhookChannelFinishedSuccessfully := <-webhookChannel
+				if !webhookChannelFinishedSuccessfully {
 					log.Error(nil, "web hook completed with error")
 				}
 			}
