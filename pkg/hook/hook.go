@@ -82,8 +82,8 @@ func (d *hookData) send(newHash string) {
 }
 
 // NewHookRunner returns a new HookRunner
-func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger) *HookRunner {
-	return &HookRunner{hook: hook, backoff: backoff, data: data, logger: log}
+func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger, hasSucceededOnce chan bool) *HookRunner {
+	return &HookRunner{hook: hook, backoff: backoff, data: data, logger: log, hasCompletedOnce: hasSucceededOnce}
 }
 
 // HookRunner struct
@@ -96,6 +96,8 @@ type HookRunner struct {
 	data *hookData
 	// Logger
 	logger *logging.Logger
+	// Has succeeded once Chanel, sends true if first run executed successfully and false if it failed
+	hasCompletedOnce chan bool
 }
 
 // Send sends hash to hookdata
@@ -123,13 +125,26 @@ func (r *HookRunner) Run(ctx context.Context) {
 			if err := r.hook.Do(ctx, hash); err != nil {
 				r.logger.Error(err, "hook failed")
 				updateHookRunCountMetric(r.hook.Name(), "error")
+				// don't want to sleep unnecessarily if we are going to terminate anyways
+				r.sendCompletedOnceMessage(false)
 				time.Sleep(r.backoff)
 			} else {
 				updateHookRunCountMetric(r.hook.Name(), "success")
 				lastHash = hash
+				r.sendCompletedOnceMessage(true)
 				break
 			}
 		}
+	}
+}
+
+// sendCompletedOnceMessage forwards the success status (as a boolean) of the first execution of HookRunner, the first time
+// to the r.hasCompletedOnce channel
+func (r *HookRunner) sendCompletedOnceMessage(completedSuccessfully bool) {
+	if r.hasCompletedOnce != nil {
+		r.hasCompletedOnce <- completedSuccessfully
+		close(r.hasCompletedOnce)
+		r.hasCompletedOnce = nil
 	}
 }
 

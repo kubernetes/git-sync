@@ -174,6 +174,9 @@ var (
 	}, []string{"status"})
 )
 
+// Channels for ensuring hooks execute at least once before terminating due to GIT_SYNC_ONCE
+var execHookChannel, webHookChannel chan bool  // initialising as null to promptly catch logical errors and to avoid unneeded object creation
+
 const (
 	metricKeySuccess = "success"
 	metricKeyError   = "error"
@@ -359,6 +362,8 @@ func main() {
 		if *flExechookBackoff < time.Second {
 			handleError(log, true, "ERROR: --exechook-backoff must be at least 1s")
 		}
+
+		execHookChannel = make(chan bool)
 	}
 
 	if *flWebhookURL != "" {
@@ -371,6 +376,8 @@ func main() {
 		if *flWebhookBackoff < time.Second {
 			handleError(log, true, "ERROR: --webhook-backoff must be at least 1s")
 		}
+
+		webHookChannel = make(chan bool)
 	}
 
 	if *flPassword != "" && *flPasswordFile != "" {
@@ -556,6 +563,7 @@ func main() {
 			*flWebhookBackoff,
 			hook.NewHookData(),
 			log,
+			webHookChannel,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -576,6 +584,7 @@ func main() {
 			*flExechookBackoff,
 			hook.NewHookData(),
 			log,
+			execHookChannel,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -621,6 +630,22 @@ func main() {
 		}
 
 		if initialSync {
+			// Wait for hooks to complete at least once before checking whether to stop
+			// Assumes that if hook channels are not nil, they will have at least one value before getting closed
+			if execHookChannel != nil {
+				execHookChannelFinishedSuccessfully:= <-execHookChannel
+				if !execHookChannelFinishedSuccessfully {
+					log.Error(nil, "exec hook completed with error")
+				}
+			}
+			if webHookChannel != nil {
+				webHookChannelFinishedSuccessfully:= <-webHookChannel
+				if !webHookChannelFinishedSuccessfully {
+					log.Error(nil, "web hook completed with error")
+				}
+			}
+
+			// Determine if git-sync should terminate
 			if *flOneTime {
 				log.DeleteErrorFile()
 				os.Exit(0)
