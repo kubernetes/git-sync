@@ -364,7 +364,10 @@ func main() {
 		if *flExechookBackoff < time.Second {
 			handleError(log, true, "ERROR: --exechook-backoff must be at least 1s")
 		}
-		exechookChannel = make(chan bool, 1)
+
+		if *flOneTime {
+			exechookChannel = make(chan bool, 1)
+		}
 	}
 
 	if *flWebhookURL != "" {
@@ -377,7 +380,10 @@ func main() {
 		if *flWebhookBackoff < time.Second {
 			handleError(log, true, "ERROR: --webhook-backoff must be at least 1s")
 		}
-		webhookChannel = make(chan bool, 1)
+
+		if *flOneTime {
+			webhookChannel = make(chan bool, 1)
+		}
 	}
 
 	if *flPassword != "" && *flPasswordFile != "" {
@@ -630,25 +636,27 @@ func main() {
 		}
 
 		if initialSync {
-			// Wait for hooks to complete at least once, if not nil, before checking whether to stop program
-			// Assumes that if hook channels are not nil, they will have at least one value before getting closed
-			if exechookChannel != nil {
-				exechookChannelFinishedSuccessfully := <-exechookChannel
-				if !exechookChannelFinishedSuccessfully {
-					log.Error(nil, "exec hook completed with error")
-				}
-			}
-			if webhookChannel != nil {
-				webhookChannelFinishedSuccessfully := <-webhookChannel
-				if !webhookChannelFinishedSuccessfully {
-					log.Error(nil, "web hook completed with error")
-				}
-			}
-
-			// Determine if git-sync should terminate
+			// Determine if git-sync should terminate for one of several reasons
 			if *flOneTime {
+				// Wait for hooks to complete at least once, if not nil, before checking whether to stop program
+				// Assumes that if hook channels are not nil, they will have at least one value before getting closed
+				exitCode := 0  // if all hooks succeeded, exit code is 0, else set to 1
+				if exechookChannel != nil {
+					exechookChannelFinishedSuccessfully := <-exechookChannel
+					if !exechookChannelFinishedSuccessfully {
+						log.Error(nil, "exechook completed with error")
+						exitCode = 1
+					}
+				}
+				if webhookChannel != nil {
+					webhookChannelFinishedSuccessfully := <-webhookChannel
+					if !webhookChannelFinishedSuccessfully {
+						log.Error(nil, "webhook completed with error")
+					}
+					exitCode = 1
+				}
 				log.DeleteErrorFile()
-				os.Exit(0)
+				os.Exit(exitCode)
 			}
 			if isHash, err := git.RevIsHash(ctx); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", git.rev)
