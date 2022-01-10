@@ -174,7 +174,7 @@ var (
 	}, []string{"status"})
 )
 
-// Channels for ensuring hooks execute at least once before terminating.
+// Channels for ensuring hooks execute at least once before terminating when --one-time flag is set.
 // Should be nil if and only if corresponding hook is not defined and if initialised, will only every get written
 // to once.
 var exechookChannel, webhookChannel chan bool
