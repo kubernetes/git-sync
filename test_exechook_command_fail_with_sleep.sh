@@ -17,6 +17,6 @@
 # Use for e2e test of --exechook-command.
 # This option takes no command arguments, so requires a wrapper script.
 
-sleep 4
+sleep 3
 date >> /var/log/runs
 exit 1
