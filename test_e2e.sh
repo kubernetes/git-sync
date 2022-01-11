@@ -1077,13 +1077,13 @@ function e2e::exechook_fail_retry() {
 ##############################################
 # Test exechook-success with GIT_SYNC_ONE_TIME
 ##############################################
-function exechook_success_once_helper() {
+function e2e::exechook_success_once() {
     # First sync
-    echo "$FUNCNAME 2" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --period=${2}ms \
+        --period=100ms \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
@@ -1091,37 +1091,27 @@ function exechook_success_once_helper() {
         --link="link" \
         --exechook-command="$EXECHOOK_COMMAND_SLEEPY" \
         >> "$1" 2>&1 &
-    sleep 7
+    sleep 4
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
     assert_file_exists "$ROOT"/link/link-exechook
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-    assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 2"
-    assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 2"
-}
-
-function e2e::exechook_success_once() {
-  for i in $(seq 0 50 200); do
-    for j in $(seq 2); do
-      clean_root
-      init_repo
-      exechook_success_once_helper "$1" "$i"
-    done
-  done
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
+    assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 1"
 }
 
 ##############################################
 # Test exechook-fail with GIT_SYNC_ONE_TIME
 ##############################################
-function exechook_fail_once_helper() {
+function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
         # First sync - return a failure to ensure that we try again
-        echo "$FUNCNAME 2" > "$REPO"/file
-        git -C "$REPO" commit -qam "$FUNCNAME 2"
+        echo "$FUNCNAME 1" > "$REPO"/file
+        git -C "$REPO" commit -qam "$FUNCNAME 1"
 
         GIT_SYNC \
-            --period="$2"ms \
+            --period=100ms \
             --one-time \
             --repo="file://$REPO" \
             --branch="$MAIN_BRANCH" \
@@ -1132,21 +1122,11 @@ function exechook_fail_once_helper() {
             >> "$1" 2>&1 &
 
         # Check that exechook was called
-        sleep 10
+        sleep 4
         RUNS=$(cat "$RUNLOG" | wc -l)
         if [[ "$RUNS" < 2 ]]; then
             fail "exechook called $RUNS times, it should be at least 2"
         fi
-}
-
-function e2e::exechook_fail_once() {
-  for i in $(seq 0 50 200); do
-    for j in $(seq 2); do
-      clean_root
-      init_repo
-      exechook_fail_once_helper "$1" "$i"
-    done
-  done
 }
 
 ##############################################
