@@ -174,9 +174,9 @@ var (
 	}, []string{"status"})
 )
 
-// Channels for ensuring hooks execute at least once before terminating when --one-time flag is set.
-// Should be nil if and only if corresponding hook is not defined and if initialised, will only every get written
-// to once.
+// Channels for ensuring hooks execute at least once before terminating when
+// --one-time flag is set.  Should be nil if and only if corresponding hook is
+// not defined and if initialised, will only ever get written to once.
 var exechookChannel, webhookChannel chan bool
 
 const (
@@ -475,8 +475,8 @@ func main() {
 		run:         cmdRunner,
 	}
 
-	// This context is used only for git credentials initialization. There are no long-running operations like
-	// `git clone`, so hopefully 30 seconds will be enough.
+	// This context is used only for git credentials initialization. There are
+	// no long-running operations like `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	if *flUsername != "" {
@@ -638,9 +638,11 @@ func main() {
 		if initialSync {
 			// Determine if git-sync should terminate for one of several reasons
 			if *flOneTime {
-				// Wait for hooks to complete at least once, if not nil, before checking whether to stop program
-				// Assumes that if hook channels are not nil, they will have at least one value before getting closed
-				exitCode := 0  // if all hooks succeeded, exit code is 0, else set to 1
+				// Wait for hooks to complete at least once, if not nil, before
+				// checking whether to stop program.
+				// Assumes that if hook channels are not nil, they will have at
+				// least one value before getting closed
+				exitCode := 0  // is 0 if all hooks succeed, else is 1
 				if exechookChannel != nil {
 					exechookChannelFinishedSuccessfully := <-exechookChannel
 					if !exechookChannelFinishedSuccessfully {

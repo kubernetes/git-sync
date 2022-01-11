@@ -96,8 +96,10 @@ type HookRunner struct {
 	data *hookData
 	// Logger
 	logger *logging.Logger
-	// hasCompletedOnce is used to send true if and only if first run executed successfully and false otherwise to some receiver.
-	// should be initialised to a buffered channel of size 1. Is only meant to be used within sendCompletedOnceMessageIfApplicable
+	// hasCompletedOnce is used to send true if and only if first run executed
+	// successfully and false otherwise to some receiver.  Should be
+	// initialised to a buffered channel of size 1.
+	// Is only meant for use within sendCompletedOnceMessageIfApplicable.
 	hasCompletedOnce chan bool
 }
 
@@ -126,7 +128,7 @@ func (r *HookRunner) Run(ctx context.Context) {
 			if err := r.hook.Do(ctx, hash); err != nil {
 				r.logger.Error(err, "hook failed")
 				updateHookRunCountMetric(r.hook.Name(), "error")
-				// don't want to sleep unnecessarily if we are going to terminate anyways
+				// don't want to sleep unnecessarily terminating anyways
 				r.sendCompletedOnceMessageIfApplicable(false)
 				time.Sleep(r.backoff)
 			} else {
@@ -139,9 +141,11 @@ func (r *HookRunner) Run(ctx context.Context) {
 	}
 }
 
-// If hasCompletedOnce is nil, does nothing. Otherwise, forwards the caller provided success status (as a boolean) of
-// HookRunner to receivers of hasCompletedOnce, closes said chanel, and sets hasCompletedOnce to nil.
-// Using this function to write to hasCompletedOnce ensures it is only every written to once.
+// If hasCompletedOnce is nil, does nothing. Otherwise, forwards the caller
+// provided success status (as a boolean) of HookRunner to receivers of
+// hasCompletedOnce, closes said chanel, and sets hasCompletedOnce to nil.
+// Using this function to write to hasCompletedOnce ensures it is only ever
+// written to once.
 func (r *HookRunner) sendCompletedOnceMessageIfApplicable(completedSuccessfully bool) {
 	if r.hasCompletedOnce != nil {
 		r.hasCompletedOnce <- completedSuccessfully
