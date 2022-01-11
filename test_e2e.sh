@@ -1091,7 +1091,10 @@ function e2e::exechook_success_once() {
         --link="link" \
         --exechook-command="$EXECHOOK_COMMAND_SLEEPY" \
         >> "$1" 2>&1 &
-    sleep 4
+
+    # Original test sleeps for 2 seconds, so sleep for 2 seconds more than
+    # hook's sleep time
+    sleep 5
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
@@ -1122,7 +1125,9 @@ function e2e::exechook_fail_once() {
             >> "$1" 2>&1 &
 
         # Check that exechook was called
-        sleep 4
+        # Original test sleeps for 2 seconds, so sleep for 2 seconds more than
+        # hook's sleep time
+        sleep 5
         RUNS=$(cat "$RUNLOG" | wc -l)
         if [[ "$RUNS" < 2 ]]; then
             fail "exechook called $RUNS times, it should be at least 2"
@@ -1221,6 +1226,79 @@ function e2e::webhook_fail_retry() {
     HITS=$(cat "$HITLOG" | wc -l)
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 2 called $HITS times"
+    fi
+    docker_kill "$CTR"
+}
+
+##############################################
+# Test webhook success with --one-time
+##############################################
+function e2e::webhook_success_once() {
+    HITLOG="$DIR/hitlog"
+
+    # First sync
+    cat /dev/null > "$HITLOG"
+    CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
+        e2e/test/test-ncsvr \
+        80 'sleep 3 && echo -e "HTTP/1.1 200 OK\r\n"')
+    IP=$(docker_ip "$CTR")
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --webhook-url="http://$IP" \
+        --webhook-success-status=200 \
+        --link="link" \
+        >> "$1" 2>&1 &
+
+    # check that basic call works
+    sleep 5  # preserve original diff between hook sleep and test sleep time
+    HITS=$(cat "$HITLOG" | wc -l)
+    if [[ "$HITS" < 1 ]]; then
+        fail "webhook 1 called $HITS times"
+    fi
+
+    docker_kill "$CTR"
+}
+
+##############################################
+# Test webhook fail with --one-time
+##############################################
+function e2e::webhook_fail_retry() {
+    HITLOG="$DIR/hitlog"
+
+    # First sync - return a failure to ensure that we try again
+    cat /dev/null > "$HITLOG"
+    CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
+        e2e/test/test-ncsvr \
+        80 'sleep 3 && echo -e "HTTP/1.1 500 Internal Server Error\r\n"')
+    IP=$(docker_ip "$CTR")
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --webhook-url="http://$IP" \
+        --webhook-success-status=200 \
+        --link="link" \
+        >> "$1" 2>&1 &
+
+    # Check that webhook was called
+    sleep 5 # preserve original diff between hook sleep and test sleep time
+    HITS=$(cat "$HITLOG" | wc -l)
+    if [[ "$HITS" < 1 ]]; then
+        fail "webhook 1 called $HITS times"
     fi
     docker_kill "$CTR"
 }
