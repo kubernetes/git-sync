@@ -163,6 +163,8 @@ function GIT_SYNC() {
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
         -v "$(pwd)/test_exechook_command.sh":"$EXECHOOK_COMMAND":ro \
         -v "$(pwd)/test_exechook_command_fail.sh":"$EXECHOOK_COMMAND_FAIL":ro \
+        -v "$(pwd)/test_exechook_command_with_sleep.sh":"$EXECHOOK_COMMAND_SLEEPY":ro \
+        -v "$(pwd)/test_exechook_command_fail_with_sleep.sh":"$EXECHOOK_COMMAND_FAIL_SLEEPY":ro \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
@@ -1129,7 +1131,7 @@ function e2e::exechook_fail_once() {
         # hook's sleep time
         sleep 5
         RUNS=$(cat "$RUNLOG" | wc -l)
-        if [[ "$RUNS" < 2 ]]; then
+        if [[ "$RUNS" < 1 ]]; then
             fail "exechook called $RUNS times, it should be at least 2"
         fi
 }
@@ -1270,7 +1272,7 @@ function e2e::webhook_success_once() {
 ##############################################
 # Test webhook fail with --one-time
 ##############################################
-function e2e::webhook_fail_retry() {
+function e2e::webhook_fail_retry_once() {
     HITLOG="$DIR/hitlog"
 
     # First sync - return a failure to ensure that we try again
