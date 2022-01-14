@@ -1092,11 +1092,9 @@ function e2e::exechook_success_once() {
         --root="$ROOT" \
         --link="link" \
         --exechook-command="$EXECHOOK_COMMAND_SLEEPY" \
-        >> "$1" 2>&1 &
+        >> "$1" 2>&1
 
-    # Original test sleeps for 2 seconds, so sleep for 2 seconds more than
-    # hook's sleep time
-    sleep 5
+    sleep 2
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
@@ -1124,15 +1122,13 @@ function e2e::exechook_fail_once() {
             --link="link" \
             --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
             --exechook-backoff=1s \
-            >> "$1" 2>&1 &
+            >> "$1" 2>&1
 
         # Check that exechook was called
-        # Original test sleeps for 2 seconds, so sleep for 2 seconds more than
-        # hook's sleep time
-        sleep 5
+        sleep 2
         RUNS=$(cat "$RUNLOG" | wc -l)
         if [[ "$RUNS" < 1 ]]; then
-            fail "exechook called $RUNS times, it should be at least 2"
+            fail "exechook called $RUNS times, it should be at least 1"
         fi
 }
 
@@ -1257,10 +1253,10 @@ function e2e::webhook_success_once() {
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
         --link="link" \
-        >> "$1" 2>&1 &
+        >> "$1" 2>&1
 
     # check that basic call works
-    sleep 5  # preserve original diff between hook sleep and test sleep time
+    sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 1 called $HITS times"
@@ -1294,10 +1290,10 @@ function e2e::webhook_fail_retry_once() {
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
         --link="link" \
-        >> "$1" 2>&1 &
+        >> "$1" 2>&1
 
     # Check that webhook was called
-    sleep 5 # preserve original diff between hook sleep and test sleep time
+    sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 1 called $HITS times"
