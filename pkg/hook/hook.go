@@ -18,6 +18,8 @@ package hook
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -143,15 +145,34 @@ func (r *HookRunner) Run(ctx context.Context) {
 
 // If hasCompletedOnce is nil, does nothing. Otherwise, forwards the caller
 // provided success status (as a boolean) of HookRunner to receivers of
-// hasCompletedOnce, closes said chanel, and sets hasCompletedOnce to nil.
+// hasCompletedOnce, closes said chanel, and terminates this goroutine.
 // Using this function to write to hasCompletedOnce ensures it is only ever
 // written to once.
 func (r *HookRunner) sendCompletedOnceMessageIfApplicable(completedSuccessfully bool) {
 	if r.hasCompletedOnce != nil {
 		r.hasCompletedOnce <- completedSuccessfully
 		close(r.hasCompletedOnce)
-		r.hasCompletedOnce = nil
+		runtime.Goexit()
 	}
+}
+
+// WaitForCompletion waits for HookRunner to send completion message to
+// calling thread and returns either true if HookRunner executed successfully
+// and some error otherwise.
+// Assumes that r.hasCompletedOnce is not nil, but if it is, returns an error
+func (r *HookRunner) WaitForCompletion() error {
+	// Make sure function should be called
+	if r.hasCompletedOnce == nil {
+		return fmt.Errorf("HookRunner.WaitForCompletion called on async runner")
+	}
+
+	// Perform wait on HookRunner
+	exechookChannelFinishedSuccessfully := <-r.hasCompletedOnce
+	if !exechookChannelFinishedSuccessfully {
+		return fmt.Errorf("exechook completed with error")
+	}
+
+	return nil
 }
 
 func updateHookRunCountMetric(name, status string) {

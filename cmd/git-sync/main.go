@@ -174,11 +174,6 @@ var (
 	}, []string{"status"})
 )
 
-// Channels for ensuring hooks execute at least once before terminating when
-// --one-time flag is set.  Should be nil if and only if corresponding hook is
-// not defined and if initialised, will only ever get written to once.
-var exechookChannel, webhookChannel chan bool
-
 const (
 	metricKeySuccess = "success"
 	metricKeyError   = "error"
@@ -364,10 +359,6 @@ func main() {
 		if *flExechookBackoff < time.Second {
 			handleError(log, true, "ERROR: --exechook-backoff must be at least 1s")
 		}
-
-		if *flOneTime {
-			exechookChannel = make(chan bool, 1)
-		}
 	}
 
 	if *flWebhookURL != "" {
@@ -379,10 +370,6 @@ func main() {
 		}
 		if *flWebhookBackoff < time.Second {
 			handleError(log, true, "ERROR: --webhook-backoff must be at least 1s")
-		}
-
-		if *flOneTime {
-			webhookChannel = make(chan bool, 1)
 		}
 	}
 
@@ -557,6 +544,10 @@ func main() {
 	// Startup webhooks goroutine
 	var webhookRunner *hook.HookRunner
 	if *flWebhookURL != "" {
+		var webhookChannel chan bool
+		if *flOneTime {
+			webhookChannel = make(chan bool, 1)
+		}
 		webhook := hook.NewWebhook(
 			*flWebhookURL,
 			*flWebhookMethod,
@@ -577,6 +568,10 @@ func main() {
 	// Startup exechooks goroutine
 	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
+		var exechookChannel chan bool
+		if *flOneTime {
+			exechookChannel = make(chan bool, 1)
+		}
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
@@ -642,19 +637,13 @@ func main() {
 				// checking whether to stop program.
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
-				exitCode := 0  // is 0 if all hooks succeed, else is 1
-				if exechookChannel != nil {
-					exechookChannelFinishedSuccessfully := <-exechookChannel
-					if !exechookChannelFinishedSuccessfully {
-						log.Error(nil, "exechook completed with error")
-						exitCode = 1
-					}
+				exitCode := 0 // is 0 if all hooks succeed, else is 1
+				if err = exechookRunner.WaitForCompletion(); err != nil {
+					log.Error(err, "exechook completed with error")
+					exitCode = 1
 				}
-				if webhookChannel != nil {
-					webhookChannelFinishedSuccessfully := <-webhookChannel
-					if !webhookChannelFinishedSuccessfully {
-						log.Error(nil, "webhook completed with error")
-					}
+				if err = webhookRunner.WaitForCompletion(); err != nil {
+					log.Error(err, "webhook completed with error")
 					exitCode = 1
 				}
 				log.DeleteErrorFile()
