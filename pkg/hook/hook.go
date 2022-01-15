@@ -167,9 +167,9 @@ func (r *HookRunner) WaitForCompletion() error {
 	}
 
 	// Perform wait on HookRunner
-	exechookChannelFinishedSuccessfully := <-r.hasCompletedOnce
-	if !exechookChannelFinishedSuccessfully {
-		return fmt.Errorf("exechook completed with error")
+	hookRunnerFinishedSuccessfully := <-r.hasCompletedOnce
+	if !hookRunnerFinishedSuccessfully {
+		return fmt.Errorf("hook completed with error")
 	}
 
 	return nil
