@@ -638,13 +638,17 @@ func main() {
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
-				if err = exechookRunner.WaitForCompletion(); err != nil {
-					log.Error(err, "exechook completed with error")
-					exitCode = 1
+				if exechookRunner != nil {
+					if err = exechookRunner.WaitForCompletion(); err != nil {
+						log.Error(err, "exechook completed with error")
+						exitCode = 1
+					}
 				}
-				if err = webhookRunner.WaitForCompletion(); err != nil {
-					log.Error(err, "webhook completed with error")
-					exitCode = 1
+				if webhookRunner != nil {
+					if err = webhookRunner.WaitForCompletion(); err != nil {
+						log.Error(err, "webhook completed with error")
+						exitCode = 1
+					}
 				}
 				log.DeleteErrorFile()
 				os.Exit(exitCode)
