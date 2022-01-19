@@ -125,19 +125,6 @@ mkdir -p "$DOT_SSH"
 ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
-function finish() {
-  r=$?
-  trap "" INT EXIT
-  if [[ $r != 0 ]]; then
-    echo
-    echo "the directory $DIR was not removed as it contains"\
-         "log files useful for debugging"
-  fi
-  remove_containers
-  exit $r
-}
-trap finish INT EXIT
-
 SLOW_GIT_CLONE=/slow_git_clone.sh
 SLOW_GIT_FETCH=/slow_git_fetch.sh
 ASKPASS_GIT=/askpass_git.sh
@@ -1109,27 +1096,28 @@ function e2e::exechook_success_once() {
 ##############################################
 function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
-        # First sync - return a failure to ensure that we try again
-        echo "$FUNCNAME 1" > "$REPO"/file
-        git -C "$REPO" commit -qam "$FUNCNAME 1"
 
-        GIT_SYNC \
-            --period=100ms \
-            --one-time \
-            --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
-            --root="$ROOT" \
-            --link="link" \
-            --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
-            --exechook-backoff=1s \
-            >> "$1" 2>&1
+    # First sync - return a failure to ensure that we try again
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
-        # Check that exechook was called
-        sleep 2
-        RUNS=$(cat "$RUNLOG" | wc -l)
-        if [[ "$RUNS" < 1 ]]; then
-            fail "exechook called $RUNS times, it should be at least 1"
-        fi
+    GIT_SYNC \
+        --period=100ms \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+        --exechook-backoff=1s \
+        >> "$1" 2>&1
+
+    # Check that exechook was called
+    sleep 2
+    RUNS=$(cat "$RUNLOG" | wc -l)
+    if [[ "$RUNS" != 1 ]]; then
+        fail "exechook called $RUNS times, it should be at exactly 1"
+    fi
 }
 
 ##############################################
@@ -1258,8 +1246,8 @@ function e2e::webhook_success_once() {
     # check that basic call works
     sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
-        fail "webhook 1 called $HITS times"
+    if [[ "$HITS" != 1 ]]; then
+        fail "webhook called $HITS times"
     fi
 
     docker_kill "$CTR"
@@ -1295,8 +1283,8 @@ function e2e::webhook_fail_retry_once() {
     # Check that webhook was called
     sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
-        fail "webhook 1 called $HITS times"
+    if [[ "$HITS" != 1 ]]; then
+        fail "webhook called $HITS times"
     fi
     docker_kill "$CTR"
 }
@@ -1807,14 +1795,29 @@ function list_tests() {
 # Figure out which, if any, tests to run.
 tests=($(list_tests))
 
-# Use -? to just list tests.
-if [[ "$#" == 1 && "$1" == "-?" ]]; then
+function print_tests() {
     echo "available tests:"
     for t in "${tests[@]}"; do
         echo "    $t"
     done
-    exit 0
-fi
+}
+
+for t; do
+    # Use -? to list known tests.
+    if [[ "${t}" == "-?" ]]; then
+        print_tests
+        exit 0
+    fi
+    # Make sure we know this test.
+    if [[ " ${tests[*]} " =~ " ${t} " ]]; then
+        continue
+    fi
+    # Not a known test or flag.
+    echo "ERROR: unknown test or flag: '${t}'"
+    echo
+    print_tests
+    exit 1
+done
 
 # If no tests specified, run them all.
 if [[ "$#" == 0 ]]; then
@@ -1824,6 +1827,19 @@ fi
 # Build it
 make container REGISTRY=e2e VERSION=$(make -s version)
 make test-tools REGISTRY=e2e
+
+function finish() {
+  r=$?
+  trap "" INT EXIT
+  if [[ $r != 0 ]]; then
+    echo
+    echo "the directory $DIR was not removed as it contains"\
+         "log files useful for debugging"
+  fi
+  remove_containers
+  exit $r
+}
+trap finish INT EXIT
 
 echo
 echo "test root is $DIR"
