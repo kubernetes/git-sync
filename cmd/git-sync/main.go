@@ -462,8 +462,8 @@ func main() {
 		run:         cmdRunner,
 	}
 
-	// This context is used only for git credentials initialization. There are no long-running operations like
-	// `git clone`, so hopefully 30 seconds will be enough.
+	// This context is used only for git credentials initialization. There are
+	// no long-running operations like `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	if *flUsername != "" {
@@ -544,6 +544,10 @@ func main() {
 	// Startup webhooks goroutine
 	var webhookRunner *hook.HookRunner
 	if *flWebhookURL != "" {
+		var webhookChannel chan bool
+		if *flOneTime {
+			webhookChannel = make(chan bool, 1)
+		}
 		webhook := hook.NewWebhook(
 			*flWebhookURL,
 			*flWebhookMethod,
@@ -556,6 +560,7 @@ func main() {
 			*flWebhookBackoff,
 			hook.NewHookData(),
 			log,
+			webhookChannel,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -563,6 +568,10 @@ func main() {
 	// Startup exechooks goroutine
 	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
+		var exechookChannel chan bool
+		if *flOneTime {
+			exechookChannel = make(chan bool, 1)
+		}
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
@@ -576,6 +585,7 @@ func main() {
 			*flExechookBackoff,
 			hook.NewHookData(),
 			log,
+			exechookChannel,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -621,9 +631,27 @@ func main() {
 		}
 
 		if initialSync {
+			// Determine if git-sync should terminate for one of several reasons
 			if *flOneTime {
+				// Wait for hooks to complete at least once, if not nil, before
+				// checking whether to stop program.
+				// Assumes that if hook channels are not nil, they will have at
+				// least one value before getting closed
+				exitCode := 0 // is 0 if all hooks succeed, else is 1
+				if exechookRunner != nil {
+					if err = exechookRunner.WaitForCompletion(); err != nil {
+						log.Error(err, "exechook completed with error")
+						exitCode = 1
+					}
+				}
+				if webhookRunner != nil {
+					if err = webhookRunner.WaitForCompletion(); err != nil {
+						log.Error(err, "webhook completed with error")
+						exitCode = 1
+					}
+				}
 				log.DeleteErrorFile()
-				os.Exit(0)
+				os.Exit(exitCode)
 			}
 			if isHash, err := git.RevIsHash(ctx); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", git.rev)
