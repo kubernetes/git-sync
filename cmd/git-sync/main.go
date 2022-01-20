@@ -544,10 +544,6 @@ func main() {
 	// Startup webhooks goroutine
 	var webhookRunner *hook.HookRunner
 	if *flWebhookURL != "" {
-		var webhookChannel chan bool
-		if *flOneTime {
-			webhookChannel = make(chan bool, 1)
-		}
 		webhook := hook.NewWebhook(
 			*flWebhookURL,
 			*flWebhookMethod,
@@ -560,7 +556,7 @@ func main() {
 			*flWebhookBackoff,
 			hook.NewHookData(),
 			log,
-			webhookChannel,
+			*flOneTime,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -568,10 +564,6 @@ func main() {
 	// Startup exechooks goroutine
 	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
-		var exechookChannel chan bool
-		if *flOneTime {
-			exechookChannel = make(chan bool, 1)
-		}
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
@@ -585,7 +577,7 @@ func main() {
 			*flExechookBackoff,
 			hook.NewHookData(),
 			log,
-			exechookChannel,
+			*flOneTime,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -639,14 +631,12 @@ func main() {
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
 				if exechookRunner != nil {
-					if err = exechookRunner.WaitForCompletion(); err != nil {
-						log.Error(err, "exechook completed with error")
+					if err := exechookRunner.WaitForCompletion(); err != nil {
 						exitCode = 1
 					}
 				}
 				if webhookRunner != nil {
-					if err = webhookRunner.WaitForCompletion(); err != nil {
-						log.Error(err, "webhook completed with error")
+					if err := webhookRunner.WaitForCompletion(); err != nil {
 						exitCode = 1
 					}
 				}

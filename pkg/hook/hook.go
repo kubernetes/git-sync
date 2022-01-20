@@ -84,8 +84,12 @@ func (d *hookData) send(newHash string) {
 }
 
 // NewHookRunner returns a new HookRunner
-func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger, hasSucceededOnce chan bool) *HookRunner {
-	return &HookRunner{hook: hook, backoff: backoff, data: data, logger: log, hasCompletedOnce: hasSucceededOnce}
+func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger, oneTime bool) *HookRunner {
+	hr := &HookRunner{hook: hook, backoff: backoff, data: data, logger: log}
+	if oneTime {
+		hr.oneTimeResult = make(chan bool, 1)
+	}
+	return hr
 }
 
 // HookRunner struct
@@ -98,11 +102,9 @@ type HookRunner struct {
 	data *hookData
 	// Logger
 	logger *logging.Logger
-	// hasCompletedOnce is used to send true if and only if first run executed
-	// successfully and false otherwise to some receiver.  Should be
-	// initialised to a buffered channel of size 1.
-	// Is only meant for use within sendCompletedOnceMessageIfApplicable.
-	hasCompletedOnce chan bool
+	// Used to send a status result when running in one-time mode.
+	// Should be initialised to a buffered channel of size 1.
+	oneTimeResult chan bool
 }
 
 // Send sends hash to hookdata
@@ -131,27 +133,27 @@ func (r *HookRunner) Run(ctx context.Context) {
 				r.logger.Error(err, "hook failed")
 				updateHookRunCountMetric(r.hook.Name(), "error")
 				// don't want to sleep unnecessarily terminating anyways
-				r.sendCompletedOnceMessageIfApplicable(false)
+				r.sendOneTimeResultAndTerminate(false)
 				time.Sleep(r.backoff)
 			} else {
 				updateHookRunCountMetric(r.hook.Name(), "success")
 				lastHash = hash
-				r.sendCompletedOnceMessageIfApplicable(true)
+				r.sendOneTimeResultAndTerminate(true)
 				break
 			}
 		}
 	}
 }
 
-// If hasCompletedOnce is nil, does nothing. Otherwise, forwards the caller
+// If oneTimeResult is nil, does nothing. Otherwise, forwards the caller
 // provided success status (as a boolean) of HookRunner to receivers of
-// hasCompletedOnce, closes said chanel, and terminates this goroutine.
-// Using this function to write to hasCompletedOnce ensures it is only ever
+// oneTimeResult, closes said chanel, and terminates this goroutine.
+// Using this function to write to oneTimeResult ensures it is only ever
 // written to once.
-func (r *HookRunner) sendCompletedOnceMessageIfApplicable(completedSuccessfully bool) {
-	if r.hasCompletedOnce != nil {
-		r.hasCompletedOnce <- completedSuccessfully
-		close(r.hasCompletedOnce)
+func (r *HookRunner) sendOneTimeResultAndTerminate(completedSuccessfully bool) {
+	if r.oneTimeResult != nil {
+		r.oneTimeResult <- completedSuccessfully
+		close(r.oneTimeResult)
 		runtime.Goexit()
 	}
 }
@@ -159,15 +161,15 @@ func (r *HookRunner) sendCompletedOnceMessageIfApplicable(completedSuccessfully 
 // WaitForCompletion waits for HookRunner to send completion message to
 // calling thread and returns either true if HookRunner executed successfully
 // and some error otherwise.
-// Assumes that r.hasCompletedOnce is not nil, but if it is, returns an error
+// Assumes that r.oneTimeResult is not nil, but if it is, returns an error
 func (r *HookRunner) WaitForCompletion() error {
 	// Make sure function should be called
-	if r.hasCompletedOnce == nil {
+	if r.oneTimeResult == nil {
 		return fmt.Errorf("HookRunner.WaitForCompletion called on async runner")
 	}
 
 	// Perform wait on HookRunner
-	hookRunnerFinishedSuccessfully := <-r.hasCompletedOnce
+	hookRunnerFinishedSuccessfully := <-r.oneTimeResult
 	if !hookRunnerFinishedSuccessfully {
 		return fmt.Errorf("hook completed with error")
 	}
