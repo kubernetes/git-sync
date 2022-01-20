@@ -469,6 +469,7 @@ func main() {
 			*flWebhookBackoff,
 			hook.NewHookData(),
 			log,
+			*flOneTime,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -489,6 +490,7 @@ func main() {
 			*flExechookBackoff,
 			hook.NewHookData(),
 			log,
+			*flOneTime,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -525,9 +527,25 @@ func main() {
 		}
 
 		if initialSync {
+			// Determine if git-sync should terminate for one of several reasons
 			if *flOneTime {
+				// Wait for hooks to complete at least once, if not nil, before
+				// checking whether to stop program.
+				// Assumes that if hook channels are not nil, they will have at
+				// least one value before getting closed
+				exitCode := 0 // is 0 if all hooks succeed, else is 1
+				if exechookRunner != nil {
+					if err := exechookRunner.WaitForCompletion(); err != nil {
+						exitCode = 1
+					}
+				}
+				if webhookRunner != nil {
+					if err := webhookRunner.WaitForCompletion(); err != nil {
+						exitCode = 1
+					}
+				}
 				log.DeleteErrorFile()
-				os.Exit(0)
+				os.Exit(exitCode)
 			}
 			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
