@@ -1675,6 +1675,19 @@ fi
 make container REGISTRY=e2e VERSION=$(make -s version)
 make test-tools REGISTRY=e2e
 
+function finish() {
+  r=$?
+  trap "" INT EXIT
+  if [[ $r != 0 ]]; then
+    echo
+    echo "the directory $DIR was not removed as it contains"\
+         "log files useful for debugging"
+  fi
+  remove_containers
+  exit $r
+}
+trap finish INT EXIT
+
 echo
 echo "test root is $DIR"
 echo
