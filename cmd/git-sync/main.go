@@ -566,6 +566,25 @@ func main() {
 	}
 }
 
+func removeDirContents(dir string, log *logging.Logger) error {
+	dirents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range dirents {
+		p := filepath.Join(dir, fi.Name())
+		if log != nil {
+			log.V(2).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
+		}
+		if err := os.RemoveAll(p); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func updateSyncMetrics(key string, start time.Time) {
 	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
 	syncCount.WithLabelValues(key).Inc()
@@ -849,7 +868,10 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
 			log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", gitRoot)
-			err := os.RemoveAll(gitRoot)
+			// We remove the contents rather than the dir itself, because a
+			// common use-case is to have a volume mounted at git.root, which
+			// makes removing it impossible.
+			err := removeDirContents(gitRoot, log)
 			if err != nil {
 				return err
 			}
