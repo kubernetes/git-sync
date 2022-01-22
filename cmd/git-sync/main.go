@@ -1068,7 +1068,10 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
 			git.log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", git.root)
-			err := os.RemoveAll(git.root)
+			// We remove the contents rather than the dir itself, because a
+			// common use-case is to have a volume mounted at git.root, which
+			// makes removing it impossible.
+			err := removeDirContents(git.root, git.log)
 			if err != nil {
 				return err
 			}
