@@ -34,6 +34,10 @@ var (
 	}, []string{"name", "status"})
 )
 
+func init() {
+	prometheus.MustRegister(hookRunCount)
+}
+
 // Describes what a Hook needs to implement, run by HookRunner
 type Hook interface {
 	// Describes hook
@@ -115,7 +119,6 @@ func (r *HookRunner) Send(hash string) {
 // Run waits for trigger events from the channel, and run hook when triggered
 func (r *HookRunner) Run(ctx context.Context) {
 	var lastHash string
-	prometheus.MustRegister(hookRunCount)
 
 	// Wait for trigger from hookData.Send
 	for range r.data.events() {
