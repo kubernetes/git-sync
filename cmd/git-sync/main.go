@@ -62,7 +62,7 @@ var flSubmodules = flag.String("submodules", envString("GIT_SYNC_SUBMODULES", "r
 var flRoot = flag.String("root", envString("GIT_SYNC_ROOT", envString("HOME", "")+"/git"),
 	"the root directory for git-sync operations, under which --dest will be created")
 var flDest = flag.String("dest", envString("GIT_SYNC_DEST", ""),
-	"the name of (a symlink to) a directory in which to check-out files under --root (defaults to the leaf dir of --repo)")
+	"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
 var flErrorFile = flag.String("error-file", envString("GIT_SYNC_ERROR_FILE", ""),
 	"the name of a file into which errors will be written under --root (defaults to \"\", disabling error reporting)")
 var flWait = flag.Float64("wait", envFloat("GIT_SYNC_WAIT", 1),
@@ -286,9 +286,8 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flDest = parts[len(parts)-1]
 	}
-
-	if strings.Contains(*flDest, "/") {
-		handleError(true, "ERROR: --dest must be a leaf name, not a path")
+	if !filepath.IsAbs(*flDest) {
+		*flDest = filepath.Join(*flRoot, *flDest)
 	}
 
 	if *flWait < 0 {
@@ -646,28 +645,36 @@ func addUser() error {
 // directory and cleans up the previous worktree.  If there was a previous
 // worktree, this returns the path to it.
 func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
+	linkDir, linkFile := filepath.Split(link)
+
+	// Make sure the link directory exists. We do this here, rather than at
+	// startup because it might be under --root and that gets wiped in some
+	// circumstances.
+	if err := os.MkdirAll(filepath.Dir(linkDir), os.FileMode(int(0755))); err != nil {
+		return "", fmt.Errorf("error making symlink dir: %v", err)
+	}
+
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	linkPath := filepath.Join(gitRoot, link)
-	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
+	oldWorktreePath, err := filepath.EvalSymlinks(link)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error accessing current worktree: %v", err)
 	}
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
-	newDirRelative, err := filepath.Rel(gitRoot, newDir)
+	newDirRelative, err := filepath.Rel(linkDir, newDir)
 	if err != nil {
 		return "", fmt.Errorf("error converting to relative path: %v", err)
 	}
 
 	const tmplink = "tmp-link"
-	log.V(1).Info("creating tmp symlink", "root", gitRoot, "dst", newDirRelative, "src", tmplink)
-	if _, err := cmdRunner.Run(ctx, gitRoot, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	log.V(1).Info("creating tmp symlink", "root", linkDir, "dst", newDirRelative, "src", tmplink)
+	if _, err := cmdRunner.Run(ctx, linkDir, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
-	log.V(1).Info("renaming symlink", "root", gitRoot, "old_name", tmplink, "new_name", link)
-	if _, err := cmdRunner.Run(ctx, gitRoot, "mv", "-T", tmplink, link); err != nil {
+	log.V(1).Info("renaming symlink", "root", linkDir, "old_name", tmplink, "new_name", linkFile)
+	if _, err := cmdRunner.Run(ctx, linkDir, "mv", "-T", tmplink, linkFile); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -980,8 +987,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := filepath.Join(gitRoot, dest)
-	gitRepoPath := filepath.Join(target, ".git")
+	gitRepoPath := filepath.Join(gitRoot, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
 	switch {
@@ -999,7 +1005,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
-		local, remote, err := getRevs(ctx, target, branch, rev)
+		local, remote, err := getRevs(ctx, dest, branch, rev)
 		if err != nil {
 			return false, "", err
 		}
