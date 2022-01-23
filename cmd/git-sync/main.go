@@ -67,7 +67,7 @@ var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "
 var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
 	"the root directory for git-sync operations, under which --link will be created")
 var flLink = pflag.String("link", envString("GIT_SYNC_LINK", ""),
-	"the name of a symlink, under --root, which points to a directory in which --repo is checked out (defaults to the leaf dir of --repo)")
+	"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
 var flErrorFile = pflag.String("error-file", envString("GIT_SYNC_ERROR_FILE", ""),
 	"the name of a file into which errors will be written under --root (defaults to \"\", disabling error reporting)")
 var flPeriod = pflag.Duration("period", envDuration("GIT_SYNC_PERIOD", 10*time.Second),
@@ -328,10 +328,10 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flLink = parts[len(parts)-1]
 	}
-	if strings.Contains(*flLink, "/") {
-		handleError(log, true, "ERROR: --link must not contain '/'")
+	if !filepath.IsAbs(*flLink) {
+		*flLink = filepath.Join(*flRoot, *flLink)
 	}
-	if strings.HasPrefix(*flLink, ".") {
+	if strings.HasPrefix(filepath.Base(*flLink), ".") {
 		handleError(log, true, "ERROR: --link must not start with '.'")
 	}
 
@@ -829,28 +829,36 @@ func addUser() error {
 // directory and cleans up the previous worktree.  If there was a previous
 // worktree, this returns the path to it.
 func (git *repoSync) UpdateSymlink(ctx context.Context, newDir string) (string, error) {
+	linkDir, linkFile := filepath.Split(git.link)
+
+	// Make sure the link directory exists. We do this here, rather than at
+	// startup because it might be under --root and that gets wiped in some
+	// circumstances.
+	if err := os.MkdirAll(filepath.Dir(linkDir), os.FileMode(int(0755))); err != nil {
+		return "", fmt.Errorf("error making symlink dir: %v", err)
+	}
+
 	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	linkPath := filepath.Join(git.root, git.link)
-	oldWorktreePath, err := filepath.EvalSymlinks(linkPath)
+	oldWorktreePath, err := filepath.EvalSymlinks(git.link)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error accessing current worktree: %v", err)
 	}
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
-	newDirRelative, err := filepath.Rel(git.root, newDir)
+	newDirRelative, err := filepath.Rel(linkDir, newDir)
 	if err != nil {
 		return "", fmt.Errorf("error converting to relative path: %v", err)
 	}
 
 	const tmplink = "tmp-link"
-	git.log.V(1).Info("creating tmp symlink", "root", git.root, "dst", newDirRelative, "src", tmplink)
-	if _, err := git.run.Run(ctx, git.root, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	git.log.V(1).Info("creating tmp symlink", "root", linkDir, "dst", newDirRelative, "src", tmplink)
+	if _, err := git.run.Run(ctx, linkDir, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
-	git.log.V(1).Info("renaming symlink", "root", git.root, "oldName", tmplink, "newName", git.link)
-	if _, err := git.run.Run(ctx, git.root, "mv", "-T", tmplink, git.link); err != nil {
+	git.log.V(1).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
+	if _, err := git.run.Run(ctx, linkDir, "mv", "-T", tmplink, linkFile); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -1188,8 +1196,7 @@ func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	target := filepath.Join(git.root, git.link)
-	gitRepoPath := filepath.Join(target, ".git")
+	gitRepoPath := filepath.Join(git.root, ".git")
 	var hash string
 	_, err := os.Stat(gitRepoPath)
 	switch {
@@ -1562,7 +1569,7 @@ DESCRIPTION
     git-sync can pull over HTTP(S) (with authentication or not) or SSH.
 
     git-sync can also be configured to make a webhook call upon successful git
-    repo synchronization. The call is made after the symlink is updated.
+    repo synchronization.  The call is made after the symlink is updated.
 
 OPTIONS
 
@@ -1575,12 +1582,12 @@ OPTIONS
             /etc/passwd is writable by the current UID.
 
     --askpass-url <string>, $GIT_ASKPASS_URL
-            A URL to query for git credentials. The query must return success
+            A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
     --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out. (default: <repo's default branch>)
+            The git branch to check out.  (default: <repo's default branch>)
 
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Optionally change permissions on the checked-out files to the
@@ -1596,8 +1603,8 @@ OPTIONS
 
     --error-file, $GIT_SYNC_ERROR_FILE
             The name of a file (under --root) into which errors will be
-            written. This must be a filename, not a path, and may not start
-            with a period. (default: "", which means error reporting will be
+            written.  This must be a filename, not a path, and may not start
+            with a period.  (default: "", which means error reporting will be
             disabled)
 
     --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
@@ -1614,7 +1621,7 @@ OPTIONS
             specified, it will take precedence.
 
     --exechook-timeout <duration>, $GIT_SYNC_EXECHOOK_TIMEOUT
-            The timeout for the --exechook-command. (default: 30s)
+            The timeout for the --exechook-command.  (default: 30s)
 
     --git <string>, $GIT_SYNC_GIT
             The git command to run (subject to PATH search, mostly for testing).
@@ -1628,7 +1635,7 @@ OPTIONS
             supported: '\n' => [newline], '\t' => [tab], '\"' => '"', '\,' =>
             ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
             Within quoted values, commas MAY be escaped, but are not required
-            to be.  Any other escape sequence is an error. (default: "")
+            to be.  Any other escape sequence is an error.  (default: "")
 
     -h, --help
             Print help text and exit.
@@ -1643,14 +1650,17 @@ OPTIONS
 
     --http-pprof, $GIT_SYNC_HTTP_PPROF
             Enable the pprof debug endpoints on git-sync's HTTP endpoint (see
-            --http-bind). (default: false)
+            --http-bind).  (default: false)
 
     --link <string>, $GIT_SYNC_LINK
-            The name of the final symlink (under --root) which will point to the
-            current git worktree. This must be a filename, not a path, and may
-            not start with a period. The destination of this link (i.e.
-            readlink()) is the currently checked out SHA. (default: the leaf
-            dir of --repo)
+            The path to at which to create a symlink which points to the
+            current git directory, at the currently synced SHA.  This may be an
+            absolute path or a relative path, in which case it is relative to
+            --root.  The last path element is the name of the link and must not
+            start with a period.  Consumers of the synced files should always
+            use this link.  It is updated atomically and should always be
+            valid.  The basename of the target of the link is the current SHA).
+            (default: the leaf dir of --repo)
 
     --man
             Print this manual and exit.
@@ -1658,7 +1668,7 @@ OPTIONS
     --max-sync-failures <int>, $GIT_SYNC_MAX_SYNC_FAILURES
             The number of consecutive failures allowed before aborting (the
             first sync must succeed), Setting this to -1 will retry forever
-            after the initial sync. (default: 0)
+            after the initial sync.  (default: 0)
 
     --one-time, $GIT_SYNC_ONE_TIME
             Exit after the first sync.
@@ -1677,17 +1687,17 @@ OPTIONS
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
-            will take precedence. (default: 10s)
+            will take precedence.  (default: 10s)
 
     --repo <string>, $GIT_SYNC_REPO
             The git repository to sync.
 
     --rev <string>, $GIT_SYNC_REV
-            The git revision (tag or hash) to check out. (default: HEAD)
+            The git revision (tag or hash) to check out.  (default: HEAD)
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
-            be created. This flag is required.
+            be created.  This flag is required.
 
     --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
@@ -1698,7 +1708,7 @@ OPTIONS
             Use SSH for git authentication and operations.
 
     --ssh-key-file <string>, $GIT_SSH_KEY_FILE
-            The SSH key to use when using --ssh. (default: /etc/git-secret/ssh)
+            The SSH key to use when using --ssh.  (default: /etc/git-secret/ssh)
 
     --ssh-known-hosts, $GIT_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.
@@ -1715,7 +1725,7 @@ OPTIONS
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
             10ms.  This flag obsoletes --timeout, but if --timeout is specified,
-            it will take precedence. (default: 120s)
+            it will take precedence.  (default: 120s)
 
     --username <string>, $GIT_SYNC_USERNAME
             The username to use for git authentication (see --password-file or
@@ -1723,7 +1733,7 @@ OPTIONS
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
-            printed. (default: 0)
+            printed.  (default: 0)
 
     --version
             Print the version and exit.
@@ -1741,7 +1751,7 @@ OPTIONS
             (default: 200)
 
     --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT
-            The timeout for the --webhook-url. (default: 1s)
+            The timeout for the --webhook-url.  (default: 1s)
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.
@@ -1785,9 +1795,9 @@ AUTHENTICATION
 
 WEBHOOKS
 
-    Webhooks are executed asynchronously from the main git-sync process. If a
+    Webhooks are executed asynchronously from the main git-sync process.  If a
     --webhook-url is configured, whenever a new hash is synced a call is sent
-    using the method defined in --webhook-method. Git-sync will retry this
+    using the method defined in --webhook-method.  Git-sync will retry this
     webhook call until it succeeds (based on --webhook-success-status).  If
     unsuccessful, git-sync will wait --webhook-backoff (default 3s) before
     re-attempting the webhook call.
