@@ -98,10 +98,19 @@ function docker_kill() {
     docker kill "$1" >/dev/null
 }
 
+# DIR is the directory in which all this test's state lives.
 RUNID="${RANDOM}${RANDOM}"
 DIR="/tmp/git-sync-e2e.$RUNID"
 mkdir "$DIR"
 
+# WORK is temp space and in reset for each testcase.
+WORK="$DIR/work"
+function clean_work() {
+    rm -rf "$WORK"
+    mkdir -p "$WORK"
+}
+
+# REPO is the source repo under test.
 REPO="$DIR/repo"
 MAIN_BRANCH="e2e-branch"
 function init_repo() {
@@ -113,6 +122,7 @@ function init_repo() {
     git -C "$REPO" commit -aqm "init file"
 }
 
+# ROOT is the volume (usually) used as --root.
 ROOT="$DIR/root"
 function clean_root() {
     rm -rf "$ROOT"
@@ -144,7 +154,9 @@ function GIT_SYNC() {
         --label git-sync-e2e="$RUNID" \
         --network="host" \
         -u $(id -u):$(id -g) \
-        -v "$DIR":"$DIR":rw \
+        -v "$ROOT":"$ROOT":rw \
+        -v "$REPO":"$REPO":ro \
+        -v "$WORK":"$WORK":ro \
         -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
         -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
@@ -180,19 +192,18 @@ function remove_containers() {
 function e2e::head_once_root_doesnt_exist() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
-    rm -rf "$ROOT" # remove the root to test
 
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
         --rev=HEAD \
-        --root="$ROOT" \
+        --root="$ROOT/subdir" \
         --link="link" \
         >> "$1" 2>&1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT"/subdir/link
+    assert_file_exists "$ROOT"/subdir/link/file
+    assert_file_eq "$ROOT"/subdir/link/file "$FUNCNAME"
 }
 
 ##############################################
@@ -241,14 +252,14 @@ function e2e::head_once_root_flag_is_weird() {
 function e2e::head_once_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
-    ln -s "$ROOT" "$DIR/rootlink" # symlink to test
+    ln -s "$ROOT" "$ROOT/rootlink" # symlink to test
 
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
         --rev=HEAD \
-        --root="$DIR/rootlink" \
+        --root="$ROOT/rootlink" \
         --link="link" \
         >> "$1" 2>&1
     assert_link_exists "$ROOT"/link
@@ -262,7 +273,6 @@ function e2e::head_once_root_flag_has_symlink() {
 function e2e::non_zero_exit() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
-    ln -s "$ROOT" "$DIR/rootlink" # symlink to test
 
     (
         set +o errexit
@@ -271,7 +281,7 @@ function e2e::non_zero_exit() {
             --repo="file://$REPO" \
             --branch="$MAIN_BRANCH" \
             --rev=does-not-exit \
-            --root="$DIR/rootlink" \
+            --root="$ROOT" \
             --link="link" \
             >> "$1" 2>&1
         RET=$?
@@ -317,7 +327,6 @@ function e2e::head_once_root_exists_but_fails_sanity() {
     SHA=$(git -C "$REPO" rev-parse HEAD)
 
     # Make an invalid git repo.
-    mkdir -p "$ROOT"
     git -C "$ROOT" init >/dev/null
     echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
 
@@ -1124,7 +1133,7 @@ function e2e::exechook_fail_once() {
 # Test webhook success
 ##############################################
 function e2e::webhook_success() {
-    HITLOG="$DIR/hitlog"
+    HITLOG="$WORK/hitlog"
 
     # First sync
     cat /dev/null > "$HITLOG"
@@ -1171,7 +1180,7 @@ function e2e::webhook_success() {
 # Test webhook fail-retry
 ##############################################
 function e2e::webhook_fail_retry() {
-    HITLOG="$DIR/hitlog"
+    HITLOG="$WORK/hitlog"
 
     # First sync - return a failure to ensure that we try again
     cat /dev/null > "$HITLOG"
@@ -1220,7 +1229,7 @@ function e2e::webhook_fail_retry() {
 # Test webhook success with --one-time
 ##############################################
 function e2e::webhook_success_once() {
-    HITLOG="$DIR/hitlog"
+    HITLOG="$WORK/hitlog"
 
     # First sync
     cat /dev/null > "$HITLOG"
@@ -1257,7 +1266,7 @@ function e2e::webhook_success_once() {
 # Test webhook fail with --one-time
 ##############################################
 function e2e::webhook_fail_retry_once() {
-    HITLOG="$DIR/hitlog"
+    HITLOG="$WORK/hitlog"
 
     # First sync - return a failure to ensure that we try again
     cat /dev/null > "$HITLOG"
@@ -1293,7 +1302,7 @@ function e2e::webhook_fail_retry_once() {
 # Test webhook fire-and-forget
 ##############################################
 function e2e::webhook_fire_and_forget() {
-    HITLOG="$DIR/hitlog"
+    HITLOG="$WORK/hitlog"
 
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
@@ -1386,7 +1395,7 @@ function e2e::http() {
 function e2e::submodule_sync() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
-    SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1396,7 +1405,7 @@ function e2e::submodule_sync() {
 
     # Init nested submodule repo
     NESTED_SUBMODULE_REPO_NAME="nested-sub"
-    NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
+    NESTED_SUBMODULE="$WORK/$NESTED_SUBMODULE_REPO_NAME"
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1487,7 +1496,7 @@ function e2e::submodule_sync() {
 function e2e::submodule_sync_depth() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
-    SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1565,7 +1574,7 @@ function e2e::submodule_sync_depth() {
 function e2e::submodule_sync_off() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
-    SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1596,7 +1605,7 @@ function e2e::submodule_sync_off() {
 function e2e::submodule_sync_shallow() {
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
-    SUBMODULE="$DIR/$SUBMODULE_REPO_NAME"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1606,7 +1615,7 @@ function e2e::submodule_sync_shallow() {
 
     # Init nested submodule repo
     NESTED_SUBMODULE_REPO_NAME="nested-sub"
-    NESTED_SUBMODULE="$DIR/$NESTED_SUBMODULE_REPO_NAME"
+    NESTED_SUBMODULE="$WORK/$NESTED_SUBMODULE_REPO_NAME"
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
@@ -1670,9 +1679,9 @@ function e2e::ssh() {
 # Test sparse-checkout files
 ##############################################
 function e2e::sparse_checkout() {
-    echo "!/*" > "$DIR"/sparseconfig
-    echo "!/*/" >> "$DIR"/sparseconfig
-    echo "file2" >> "$DIR"/sparseconfig
+    echo "!/*" > "$WORK"/sparseconfig
+    echo "!/*/" >> "$WORK"/sparseconfig
+    echo "file2" >> "$WORK"/sparseconfig
     echo "$FUNCNAME" > "$REPO"/file
     echo "$FUNCNAME" > "$REPO"/file2
     mkdir "$REPO"/dir
@@ -1688,7 +1697,7 @@ function e2e::sparse_checkout() {
         --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
-        --sparse-checkout-file="$DIR/sparseconfig" \
+        --sparse-checkout-file="$WORK/sparseconfig" \
         >> "$1" 2>&1
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file2
@@ -1848,6 +1857,7 @@ echo
 # Iterate over the chosen tests and run them.
 for t; do
     clean_root
+    clean_work
     init_repo
     echo -n "testcase $t: "
     if "e2e::${t}" "${DIR}/log.$t"; then
