@@ -221,6 +221,48 @@ function e2e::non_zero_exit() {
 }
 
 ##############################################
+# Test HEAD one-time with an absolute-path link
+##############################################
+function e2e::absolute_dest() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT/root" \
+        --dest="$ROOT/other/dir/link" \
+        >> "$1" 2>&1
+    assert_file_absent "$ROOT"/root/link
+    assert_link_exists "$ROOT"/other/dir/link
+    assert_file_exists "$ROOT"/other/dir/link/file
+    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test HEAD one-time with a subdir-path link
+##############################################
+function e2e::subdir_dest() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="other/dir/link" \
+        >> "$1" 2>&1
+    assert_file_absent "$ROOT"/link
+    assert_link_exists "$ROOT"/other/dir/link
+    assert_file_exists "$ROOT"/other/dir/link/file
+    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+}
+
+##############################################
 # Test default syncing (master)
 ##############################################
 function e2e::default_sync_master() {
