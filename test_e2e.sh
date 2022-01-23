@@ -348,6 +348,48 @@ function e2e::head_once_root_exists_but_fails_sanity() {
 ## FIXME: test when repo is valid git, and is already correct
 
 ##############################################
+# Test HEAD one-time with an absolute-path link
+##############################################
+function e2e::absolute_link() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="HEAD" \
+        --root="$ROOT/root" \
+        --link="$ROOT/other/dir/link" \
+        >> "$1" 2>&1
+    assert_file_absent "$ROOT"/root/link
+    assert_link_exists "$ROOT"/other/dir/link
+    assert_file_exists "$ROOT"/other/dir/link/file
+    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test HEAD one-time with a subdir-path link
+##############################################
+function e2e::subdir_link() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="HEAD" \
+        --root="$ROOT" \
+        --link="other/dir/link" \
+        >> "$1" 2>&1
+    assert_file_absent "$ROOT"/link
+    assert_link_exists "$ROOT"/other/dir/link
+    assert_file_exists "$ROOT"/other/dir/link/file
+    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+}
+
+##############################################
 # Test default-branch syncing
 ##############################################
 function e2e::default_branch_sync() {
