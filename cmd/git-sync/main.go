@@ -328,9 +328,6 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flLink = parts[len(parts)-1]
 	}
-	if !filepath.IsAbs(*flLink) {
-		*flLink = filepath.Join(*flRoot, *flLink)
-	}
 	if strings.HasPrefix(filepath.Base(*flLink), ".") {
 		handleError(log, true, "ERROR: --link must not start with '.'")
 	}
@@ -434,7 +431,15 @@ func main() {
 		os.Exit(1)
 	}
 	if absRoot != *flRoot {
-		log.V(0).Info("normalized root path", "path", *flRoot, "result", absRoot)
+		log.V(0).Info("normalized root path", "root", *flRoot, "result", absRoot)
+	}
+
+	// Convert the link into an aabsolute path.  We don't want to mkdir here,
+	// since it may be under --root, and that confuses `git clone`.
+	// TODO(thockin): put repo in a subdir and mkdir + nortmalizePath() here
+	absLink := *flLink
+	if !filepath.IsAbs(absLink) {
+		absLink = filepath.Join(absRoot, *flLink)
 	}
 
 	if *flAddUser {
@@ -454,7 +459,7 @@ func main() {
 		depth:       *flDepth,
 		submodules:  submodulesMode(*flSubmodules),
 		chmod:       *flChmod,
-		link:        *flLink,
+		link:        absLink,
 		authURL:     *flAskPassURL,
 		sparseFile:  *flSparseCheckoutFile,
 		syncHookCmd: *flSyncHookCommand,
@@ -1189,9 +1194,9 @@ func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	gitRepoPath := filepath.Join(git.root, ".git")
+	currentWorktreeGit := filepath.Join(git.link, ".git")
 	var hash string
-	_, err := os.Stat(gitRepoPath)
+	_, err := os.Stat(currentWorktreeGit)
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
@@ -1204,7 +1209,7 @@ func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 			return false, "", err
 		}
 	case err != nil:
-		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
+		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
 		local, remote, err := git.GetRevs(ctx)
