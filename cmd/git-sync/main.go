@@ -987,9 +987,9 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
 
-	gitRepoPath := filepath.Join(gitRoot, ".git")
+	currentWorktreeGit := filepath.Join(dest, ".git")
 	var hash string
-	_, err := os.Stat(gitRepoPath)
+	_, err := os.Stat(currentWorktreeGit)
 	switch {
 	case os.IsNotExist(err):
 		// First time. Just clone it and get the hash.
@@ -1002,7 +1002,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 			return false, "", err
 		}
 	case err != nil:
-		return false, "", fmt.Errorf("error checking if repo exists %q: %v", gitRepoPath, err)
+		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
 		local, remote, err := getRevs(ctx, dest, branch, rev)
