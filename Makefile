@@ -41,7 +41,7 @@ BASEIMAGE ?= k8s.gcr.io/build-image/debian-base:buster-v1.8.0
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.16-alpine
+BUILD_IMAGE ?= golang:1.17-alpine
 
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
