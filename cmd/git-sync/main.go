@@ -1656,8 +1656,8 @@ OPTIONS
             absolute path or a relative path, in which case it is relative to
             --root.  The last path element is the name of the link and must not
             start with a period.  Consumers of the synced files should always
-            use this link.  It is updated atomically and should always be
-            valid.  The basename of the target of the link is the current SHA).
+            use this link - it is updated atomically and should always be
+            valid.  The basename of the target of the link is the current SHA.
             (default: the leaf dir of --repo)
 
     --man
