@@ -36,7 +36,7 @@ func TestNotZeroReturnExechookDo(t *testing.T) {
 			time.Second,
 			l,
 		)
-		err := ch.Do(context.Background(), "")
+		err := ch.Do(context.Background(), "", "")
 		if err == nil {
 			t.Fatalf("expected error but got none")
 		}
@@ -54,7 +54,7 @@ func TestZeroReturnExechookDo(t *testing.T) {
 			time.Second,
 			l,
 		)
-		err := ch.Do(context.Background(), "")
+		err := ch.Do(context.Background(), "", "")
 		if err != nil {
 			t.Fatalf("expected nil but got err")
 		}
@@ -72,7 +72,7 @@ func TestTimeoutExechookDo(t *testing.T) {
 			time.Second,
 			l,
 		)
-		err := ch.Do(context.Background(), "")
+		err := ch.Do(context.Background(), "", "")
 		if err == nil {
 			t.Fatalf("expected err but got nil")
 		}

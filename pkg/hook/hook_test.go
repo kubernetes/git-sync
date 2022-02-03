@@ -30,13 +30,16 @@ func TestHookData(t *testing.T) {
 	t.Run("hook consumes first hash value", func(t *testing.T) {
 		hd := NewHookData()
 
-		hd.send(hash1)
+		hd.send(hash2,hash1)
 
 		<-hd.events()
 
-		hash := hd.get()
-		if hash1 != hash {
-			t.Fatalf("expected hash %s but got %s", hash1, hash)
+		hash, oldHash := hd.get()
+		if hash2 != hash {
+			t.Fatalf("expected hash %s but got %s", hash2, hash)
+		}
+		if hash1 != oldHash {
+			t.Fatalf("expected oldHash %s but got %s", hash1, hash)
 		}
 	})
 
@@ -45,15 +48,18 @@ func TestHookData(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			h := fmt.Sprintf("111111111111111111111111111111111111111%d", i)
-			hd.send(h)
+			hd.send(h, "")
 		}
-		hd.send(hash2)
+		hd.send(hash2, hash1)
 
 		<-hd.events()
 
-		hash := hd.get()
+		hash, oldHash := hd.get()
 		if hash2 != hash {
 			t.Fatalf("expected hash %s but got %s", hash2, hash)
+		}
+		if hash1 != oldHash {
+			t.Fatalf("expected oldHash %s but got %s", hash1, hash)
 		}
 	})
 
@@ -61,18 +67,18 @@ func TestHookData(t *testing.T) {
 		hd := NewHookData()
 		events := hd.events()
 
-		hd.send(hash1)
+		hd.send(hash1, "")
 		<-events
 
-		hash := hd.get()
+		hash, _ := hd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}
 
-		hd.send(hash1)
+		hd.send(hash1, "")
 		<-events
 
-		hash = hd.get()
+		hash, _ = hd.get()
 		if hash1 != hash {
 			t.Fatalf("expected hash %s but got %s", hash1, hash)
 		}

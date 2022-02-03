@@ -33,7 +33,7 @@ func TestWebhookDo(t *testing.T) {
 			time.Second,
 			logging.New("", "", 0),
 		)
-		err := wh.Do(context.Background(), "hash")
+		err := wh.Do(context.Background(), "hash", "oldHash")
 		if err == nil {
 			t.Fatalf("expected error for invalid url but got none")
 		}
