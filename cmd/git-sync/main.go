@@ -589,6 +589,7 @@ func main() {
 
 	initialSync := true
 	failCount := 0
+	oldHash := git.rev
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -616,11 +617,12 @@ func main() {
 			continue
 		} else if changed {
 			if webhookRunner != nil {
-				webhookRunner.Send(hash)
+				webhookRunner.Send(hash, oldHash)
 			}
 			if exechookRunner != nil {
-				exechookRunner.Send(hash)
+				exechookRunner.Send(hash, oldHash)
 			}
+			oldHash = hash
 
 			updateSyncMetrics(metricKeySuccess, start)
 		} else {

@@ -57,18 +57,19 @@ func (w *Webhook) Name() string {
 }
 
 // Do calls webhook.url, implements Hook.Do
-func (w *Webhook) Do(ctx context.Context, hash string) error {
+func (w *Webhook) Do(ctx context.Context, hash string, oldHash string) error {
 	req, err := http.NewRequest(w.method, w.url, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Gitsync-Hash", hash)
+	req.Header.Set("Gitsync-Hash-Previous", oldHash)
 
 	ctx, cancel := context.WithTimeout(ctx, w.timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	w.logger.V(0).Info("sending webhook", "hash", hash, "url", w.url, "method", w.method, "timeout", w.timeout)
+	w.logger.V(0).Info("sending webhook", "hash", hash, "oldHash", oldHash, "url", w.url, "method", w.method, "timeout", w.timeout)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

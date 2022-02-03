@@ -43,13 +43,14 @@ type Hook interface {
 	// Describes hook
 	Name() string
 	// Function that called by HookRunner
-	Do(ctx context.Context, hash string) error
+	Do(ctx context.Context, hash string, oldHash string) error
 }
 
 type hookData struct {
-	ch    chan struct{}
-	mutex sync.Mutex
-	hash  string
+	ch      chan struct{}
+	mutex   sync.Mutex
+	hash    string
+	oldHash string
 }
 
 // NewHookData returns a new HookData
@@ -63,20 +64,21 @@ func (d *hookData) events() chan struct{} {
 	return d.ch
 }
 
-func (d *hookData) get() string {
+func (d *hookData) get() (string, string) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
-	return d.hash
+	return d.hash, d.oldHash
 }
 
-func (d *hookData) set(newHash string) {
+func (d *hookData) set(newHash string, oldHash string) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	d.hash = newHash
+	d.oldHash = oldHash
 }
 
-func (d *hookData) send(newHash string) {
-	d.set(newHash)
+func (d *hookData) send(newHash string, oldHash string) {
+	d.set(newHash, oldHash)
 
 	// Non-blocking write.  If the channel is full, the consumer will see the
 	// newest value.  If the channel was not full, the consumer will get another
@@ -112,8 +114,8 @@ type HookRunner struct {
 }
 
 // Send sends hash to hookdata
-func (r *HookRunner) Send(hash string) {
-	r.data.send(hash)
+func (r *HookRunner) Send(hash string, oldHash string) {
+	r.data.send(hash, oldHash)
 }
 
 // Run waits for trigger events from the channel, and run hook when triggered
@@ -127,12 +129,12 @@ func (r *HookRunner) Run(ctx context.Context) {
 			// Always get the latest value, in case we fail-and-retry and the
 			// value changed in the meantime.  This means that we might not send
 			// every single hash.
-			hash := r.data.get()
+			hash, oldHash := r.data.get()
 			if hash == lastHash {
 				break
 			}
 
-			if err := r.hook.Do(ctx, hash); err != nil {
+			if err := r.hook.Do(ctx, hash, oldHash); err != nil {
 				r.logger.Error(err, "hook failed")
 				updateHookRunCountMetric(r.hook.Name(), "error")
 				// don't want to sleep unnecessarily terminating anyways

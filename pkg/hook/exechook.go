@@ -60,7 +60,7 @@ func (h *Exechook) Name() string {
 }
 
 // Do runs exechook.command, implements Hook.Do
-func (h *Exechook) Do(ctx context.Context, hash string) error {
+func (h *Exechook) Do(ctx context.Context, hash string, oldHash string) error {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
