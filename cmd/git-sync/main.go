@@ -720,7 +720,7 @@ func (git *repoSync) SanityCheck(ctx context.Context) bool {
 	}
 
 	// Check that this is actually the root of the repo.
-	if root, err := git.run.Run(ctx, git.root, git.cmd, "rev-parse", "--show-toplevel"); err != nil {
+	if root, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", "--show-toplevel"); err != nil {
 		git.log.Error(err, "can't get repo toplevel", "repo", git.root)
 		return false
 	} else {
@@ -732,7 +732,7 @@ func (git *repoSync) SanityCheck(ctx context.Context) bool {
 	}
 
 	// Consistency-check the repo.
-	if _, err := git.run.Run(ctx, git.root, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "repo sanity check failed", "repo", git.root)
 		return false
 	}
@@ -848,12 +848,12 @@ func (git *repoSync) UpdateSymlink(ctx context.Context, newDir string) (string, 
 
 	const tmplink = "tmp-link"
 	git.log.V(1).Info("creating tmp symlink", "root", linkDir, "dst", newDirRelative, "src", tmplink)
-	if _, err := git.run.Run(ctx, linkDir, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	if _, err := git.run.Run(ctx, linkDir, nil, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	git.log.V(1).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if _, err := git.run.Run(ctx, linkDir, "mv", "-T", tmplink, linkFile); err != nil {
+	if _, err := git.run.Run(ctx, linkDir, nil, "mv", "-T", tmplink, linkFile); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -882,7 +882,7 @@ func (git *repoSync) CleanupWorkTree(ctx context.Context, gitRoot, worktree stri
 	git.log.V(1).Info("removing worktree", "path", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
-	} else if _, err := git.run.Run(ctx, gitRoot, git.cmd, "worktree", "prune"); err != nil {
+	} else if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune"); err != nil {
 		return err
 	}
 	return nil
@@ -903,7 +903,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	args = append(args, "origin", fetch)
 
 	// Update from the remote.
-	if _, err := git.run.Run(ctx, git.root, git.cmd, args...); err != nil {
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
 		return err
 	}
 
@@ -926,14 +926,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 
-	_, err := git.run.Run(ctx, git.root, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
+	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
 	if err != nil {
 		return err
 	}
 
 	// GC clone
-	if _, err := git.run.Run(ctx, git.root, git.cmd, "gc", "--prune=all"); err != nil {
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
@@ -986,14 +986,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = git.run.Run(ctx, worktreePath, git.cmd, args...)
+		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, args...)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Reset the worktree's working copy to the specific rev.
-	_, err = git.run.Run(ctx, worktreePath, git.cmd, "reset", "--hard", hash, "--")
+	_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
 		return err
 	}
@@ -1010,7 +1010,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		if git.depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(git.depth))
 		}
-		_, err = git.run.Run(ctx, worktreePath, git.cmd, submodulesArgs...)
+		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, submodulesArgs...)
 		if err != nil {
 			return err
 		}
@@ -1020,14 +1020,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	if git.chmod != 0 {
 		mode := fmt.Sprintf("%#o", git.chmod)
 		git.log.V(0).Info("changing file permissions", "mode", mode)
-		_, err = git.run.Run(ctx, "", "chmod", "-R", mode, worktreePath)
+		_, err = git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Reset the root's rev (so we can prune and so we can rely on it later).
-	_, err = git.run.Run(ctx, git.root, git.cmd, "reset", "--hard", hash, "--")
+	_, err = git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
 		return err
 	}
@@ -1066,7 +1066,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 	args = append(args, git.repo, git.root)
 	git.log.V(0).Info("cloning repo", "origin", git.repo, "path", git.root)
 
-	_, err := git.run.Run(ctx, "", git.cmd, args...)
+	_, err := git.run.Run(ctx, "", nil, git.cmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
@@ -1078,7 +1078,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			_, err = git.run.Run(ctx, "", git.cmd, args...)
+			_, err = git.run.Run(ctx, "", nil, git.cmd, args...)
 			if err != nil {
 				return err
 			}
@@ -1123,7 +1123,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = git.run.Run(ctx, git.root, git.cmd, args...)
+		_, err = git.run.Run(ctx, git.root, nil, git.cmd, args...)
 		if err != nil {
 			return err
 		}
@@ -1134,7 +1134,7 @@ func (git *repoSync) CloneRepo(ctx context.Context) error {
 
 // LocalHashForRev returns the locally known hash for a given rev.
 func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, error) {
-	output, err := git.run.Run(ctx, git.root, git.cmd, "rev-parse", rev)
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -1143,7 +1143,7 @@ func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, e
 
 // RemoteHashForRef returns the upstream hash for a given ref.
 func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, error) {
-	output, err := git.run.Run(ctx, git.root, git.cmd, "ls-remote", "-q", "origin", ref)
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", "origin", ref)
 	if err != nil {
 		return "", err
 	}
@@ -1161,7 +1161,7 @@ func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 
 func (git *repoSync) ResolveRef(ctx context.Context, ref string) (string, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := git.run.Run(ctx, git.root, git.cmd, "cat-file", "-t", ref)
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "cat-file", "-t", ref)
 	if err != nil {
 		return "", err
 	}
@@ -1258,13 +1258,13 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 func (git *repoSync) SetupAuth(ctx context.Context, username, password string) error {
 	git.log.V(1).Info("setting up git credential store")
 
-	_, err := git.run.Run(ctx, "", git.cmd, "config", "--global", "credential.helper", "store")
+	_, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
 		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
-	_, err = git.run.RunWithStdin(ctx, "", creds, git.cmd, "credential", "approve")
+	_, err = git.run.RunWithStdin(ctx, "", nil, creds, git.cmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1308,7 +1308,7 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
-	if _, err = git.run.Run(ctx, "", git.cmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+	if _, err = git.run.Run(ctx, "", nil, git.cmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
@@ -1384,7 +1384,7 @@ func (git *repoSync) setupExtraGitConfigs(ctx context.Context, configsFlag strin
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
 	for _, kv := range configs {
-		if _, err := git.run.Run(ctx, "", git.cmd, "config", "--global", kv.key, kv.val); err != nil {
+		if _, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
 		}
 	}
@@ -1613,10 +1613,11 @@ OPTIONS
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
-            execution is subject to the overall --sync-timeout flag and will
-            extend the effective period between sync attempts.  This flag
-            obsoletes --sync-hook-command, but if sync-hook-command is
-            specified, it will take precedence.
+            environment variable $GITSYNC_HASH will be set to the git SHA that
+            was synced.  The execution is subject to the overall --sync-timeout
+            flag and will extend the effective period between sync attempts.
+            This flag obsoletes --sync-hook-command, but if sync-hook-command
+            is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GIT_SYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  (default: 30s)
@@ -1752,7 +1753,8 @@ OPTIONS
             The timeout for the --webhook-url.  (default: 1s)
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
-            A URL for optional webhook notifications when syncs complete.
+            A URL for optional webhook notifications when syncs complete.  The
+            header 'Gitsync-Hash' will be set to the git SHA that was synced.
 
 EXAMPLE USAGE
 
@@ -1791,14 +1793,21 @@ AUTHENTICATION
             When --cookie-file (GIT_COOKIE_FILE) is specified, the associated
             cookies can contain authentication information.
 
-WEBHOOKS
+HOOKS
 
-    Webhooks are executed asynchronously from the main git-sync process.  If a
-    --webhook-url is configured, whenever a new hash is synced a call is sent
-    using the method defined in --webhook-method.  Git-sync will retry this
-    webhook call until it succeeds (based on --webhook-success-status).  If
-    unsuccessful, git-sync will wait --webhook-backoff (default 3s) before
-    re-attempting the webhook call.
+    Webhooks and exechooks are executed asynchronously from the main git-sync
+    process.  If a --webhook-url or --exechook-command is configured, whenever
+    a new hash is synced the hook(s) will be invoked.  For exechook, that means
+    the command is exec()'ed, and for webhooks that means an HTTP request is
+    sent using the method defined in --webhook-method.  Git-sync will retry
+    both forms of hooks until they succeed (exit code 0 for exechooks, or
+    --webhook-success-status for webhooks).  If unsuccessful, git-sync will
+    wait --exechook-backoff or --webhook-backoff (as appropriate) before
+    re-trying the hook.
+
+    Hooks are not guaranteed to succeed on every single SHA change.  For example,
+    if a hook fails and a new SHA is synced during the backoff period, the
+    retried hook will fire for the newest SHA.
 `
 
 func printManPage() {

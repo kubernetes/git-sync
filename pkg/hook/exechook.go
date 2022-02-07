@@ -18,6 +18,7 @@ package hook
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -66,6 +67,10 @@ func (h *Exechook) Do(ctx context.Context, hash string) error {
 	worktreePath := filepath.Join(h.gitRoot, hash)
 
 	h.logger.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
-	_, err := h.cmdrunner.Run(ctx, worktreePath, h.command, h.args...)
+	_, err := h.cmdrunner.Run(ctx, worktreePath, []string{envKV("GITSYNC_HASH", hash)}, h.command, h.args...)
 	return err
+}
+
+func envKV(k, v string) string {
+	return fmt.Sprintf("%s=%s", k, v)
 }
