@@ -31,7 +31,7 @@ func TestWebhookDo(t *testing.T) {
 			"POST",
 			200,
 			time.Second,
-			logging.New("", ""),
+			logging.New("", "", 0),
 		)
 		err := wh.Do(context.Background(), "hash")
 		if err == nil {
