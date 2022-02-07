@@ -38,18 +38,21 @@ func NewRunner(logger *logging.Logger) *Runner {
 }
 
 // Run runs given command
-func (c *Runner) Run(ctx context.Context, cwd, command string, args ...string) (string, error) {
-	return c.RunWithStdin(ctx, cwd, "", command, args...)
+func (c *Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, error) {
+	return c.RunWithStdin(ctx, cwd, env, "", command, args...)
 }
 
 // RunWithStdin runs given command with stardart input
-func (c *Runner) RunWithStdin(ctx context.Context, cwd, stdin, command string, args ...string) (string, error) {
+func (c *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
 	cmdStr := cmdForLog(command, args...)
 	c.logger.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
+	}
+	if len(env) != 0 {
+		cmd.Env = env
 	}
 	outbuf := bytes.NewBuffer(nil)
 	errbuf := bytes.NewBuffer(nil)

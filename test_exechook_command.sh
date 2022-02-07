@@ -17,5 +17,9 @@
 # Use for e2e test of --exechook-command.
 # This option takes no command arguments, so requires a wrapper script.
 
+if [ -z "${GITSYNC_HASH}" ]; then
+    echo "GITSYNC_HASH is not set" > exechook
+    exit 1
+fi
 cat file > exechook
 cat ../link/file > link-exechook

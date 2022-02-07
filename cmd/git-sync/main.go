@@ -669,12 +669,12 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 
 	const tmplink = "tmp-link"
 	log.V(1).Info("creating tmp symlink", "root", linkDir, "dst", newDirRelative, "src", tmplink)
-	if _, err := cmdRunner.Run(ctx, linkDir, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	if _, err := cmdRunner.Run(ctx, linkDir, nil, "ln", "-snf", newDirRelative, tmplink); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	log.V(1).Info("renaming symlink", "root", linkDir, "old_name", tmplink, "new_name", linkFile)
-	if _, err := cmdRunner.Run(ctx, linkDir, "mv", "-T", tmplink, linkFile); err != nil {
+	if _, err := cmdRunner.Run(ctx, linkDir, nil, "mv", "-T", tmplink, linkFile); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -703,7 +703,7 @@ func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
 	log.V(1).Info("removing worktree", "path", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
-	} else if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "prune"); err != nil {
+	} else if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "worktree", "prune"); err != nil {
 		return err
 	}
 	return nil
@@ -720,7 +720,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	args = append(args, "origin", branch)
 
 	// Update from the remote.
-	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, args...); err != nil {
+	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
 		return err
 	}
 
@@ -745,14 +745,14 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
-	_, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
+	_, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
 	}
 
 	// GC clone
-	if _, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "gc", "--prune=all"); err != nil {
+	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "gc", "--prune=all"); err != nil {
 		return err
 	}
 
@@ -802,13 +802,13 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, args...)
+		_, err = cmdRunner.Run(ctx, worktreePath, nil, *flGitCmd, args...)
 		if err != nil {
 			return err
 		}
 	}
 
-	_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, "reset", "--hard", hash)
+	_, err = cmdRunner.Run(ctx, worktreePath, nil, *flGitCmd, "reset", "--hard", hash)
 	if err != nil {
 		return err
 	}
@@ -825,7 +825,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		if depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(depth))
 		}
-		_, err = cmdRunner.Run(ctx, worktreePath, *flGitCmd, submodulesArgs...)
+		_, err = cmdRunner.Run(ctx, worktreePath, nil, *flGitCmd, submodulesArgs...)
 		if err != nil {
 			return err
 		}
@@ -835,7 +835,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if *flChmod != 0 {
 		mode := fmt.Sprintf("%#o", *flChmod)
 		log.V(0).Info("changing file permissions", "mode", mode)
-		_, err = cmdRunner.Run(ctx, "", "chmod", "-R", mode, worktreePath)
+		_, err = cmdRunner.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath)
 		if err != nil {
 			return err
 		}
@@ -863,14 +863,14 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 }
 
 func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
-	args := []string{"clone", "--no-checkout", "-b", branch}
+	args := []string{"clone", "-v", "--no-checkout", "-b", branch}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
 	args = append(args, repo, gitRoot)
 	log.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
 
-	_, err := cmdRunner.Run(ctx, "", *flGitCmd, args...)
+	_, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
@@ -882,7 +882,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 			if err != nil {
 				return err
 			}
-			_, err = cmdRunner.Run(ctx, "", *flGitCmd, args...)
+			_, err = cmdRunner.Run(ctx, "", nil, *flGitCmd, args...)
 			if err != nil {
 				return err
 			}
@@ -924,7 +924,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = cmdRunner.Run(ctx, gitRoot, *flGitCmd, args...)
+		_, err = cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...)
 		if err != nil {
 			return err
 		}
@@ -935,7 +935,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 
 // localHashForRev returns the locally known hash for a given rev.
 func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "rev-parse", rev)
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
@@ -944,7 +944,7 @@ func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 
 // remoteHashForRef returns the upstream hash for a given ref.
 func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "ls-remote", "-q", "origin", ref)
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", "origin", ref)
 	if err != nil {
 		return "", err
 	}
@@ -954,7 +954,7 @@ func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) 
 
 func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := cmdRunner.Run(ctx, gitRoot, *flGitCmd, "cat-file", "-t", rev)
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "cat-file", "-t", rev)
 	if err != nil {
 		return false, err
 	}
@@ -1048,13 +1048,13 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
 	log.V(1).Info("setting up git credential store")
 
-	_, err := cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", "credential.helper", "store")
+	_, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
 		return fmt.Errorf("can't configure git credential helper: %w", err)
 	}
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
-	_, err = cmdRunner.RunWithStdin(ctx, "", creds, *flGitCmd, "credential", "approve")
+	_, err = cmdRunner.RunWithStdin(ctx, "", nil, creds, *flGitCmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1101,7 +1101,7 @@ func setupGitCookieFile(ctx context.Context) error {
 		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
-	if _, err = cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+	if _, err = cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
@@ -1174,7 +1174,7 @@ func setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
 	for _, kv := range configs {
-		if _, err := cmdRunner.Run(ctx, "", *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
+		if _, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
 		}
 	}
