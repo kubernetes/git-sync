@@ -1,3 +1,8 @@
+# Staffbase: How to release
+1. checkout release branch (should be default branch, e.g. "release-3.x")
+2. ```make push REGISTRY=registry.staffbase.com/private VERSION=v3.4.0 TAG=v3.4.0```
+3. adjust image at https://github.com/Staffbase/mops/blob/master/kubernetes/namespaces/pacman/base/git-sync-cr.yaml#L20
+
 # git-sync
 
 git-sync is a simple command that pulls a git repository into a local directory.
