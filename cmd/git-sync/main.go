@@ -513,16 +513,20 @@ func main() {
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
-		} else if changed {
-			if webhookRunner != nil {
-				webhookRunner.Send(hash)
-			}
-			if exechookRunner != nil {
-				exechookRunner.Send(hash)
-			}
-			updateSyncMetrics(metricKeySuccess, start)
 		} else {
-			updateSyncMetrics(metricKeyNoOp, start)
+			// this might have been called before, but also might not have
+			setRepoReady()
+			if changed {
+				if webhookRunner != nil {
+					webhookRunner.Send(hash)
+				}
+				if exechookRunner != nil {
+					exechookRunner.Send(hash)
+				}
+				updateSyncMetrics(metricKeySuccess, start)
+			} else {
+				updateSyncMetrics(metricKeyNoOp, start)
+			}
 		}
 
 		if initialSync {
