@@ -1432,6 +1432,56 @@ function e2e::http() {
 }
 
 ##############################################
+# Test http handler after restart
+##############################################
+function e2e::http_after_restart() {
+    BINDPORT=8888
+
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    # Sync once to set up the repo
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+
+    # Sync again and prove readiness.
+    GIT_SYNC \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --http-bind=":$BINDPORT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    # do nothing, just wait for the HTTP to come up
+    for i in $(seq 1 5); do
+        sleep 1
+        if curl --silent --output /dev/null http://localhost:$BINDPORT; then
+            break
+        fi
+        if [[ "$i" == 5 ]]; then
+            fail "HTTP server failed to start"
+        fi
+    done
+
+    sleep 2
+    # check that health endpoint is alive
+    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$BINDPORT) -ne 200 ]] ; then
+        fail "health endpoint failed"
+    fi
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
 # Test submodule sync
 ##############################################
 function e2e::submodule_sync() {
