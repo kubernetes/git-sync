@@ -126,6 +126,8 @@ var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
 var flGitConfig = flag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
 	"additional git config options in 'key1:val1,key2:val2' format")
+var flGitGC = flag.String("git-gc", envString("GIT_SYNC_GIT_GC", "auto"),
+	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
 
 var flHTTPBind = flag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address (including port) for git-sync's HTTP endpoint")
@@ -169,6 +171,11 @@ const (
 	submodulesRecursive = "recursive"
 	submodulesShallow   = "shallow"
 	submodulesOff       = "off"
+
+	gcAuto       = "auto"
+	gcAlways     = "always"
+	gcAggressive = "aggressive"
+	gcOff        = "off"
 )
 
 func init() {
@@ -276,6 +283,12 @@ func main() {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
 		handleError(true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+	}
+
+	switch *flGitGC {
+	case gcAuto, gcAlways, gcAggressive, gcOff:
+	default:
+		handleError(true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
 	if *flRoot == "" {
@@ -761,11 +774,6 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 		return err
 	}
 
-	// Run GC if needed.
-	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "gc", "--auto"); err != nil {
-		return err
-	}
-
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
@@ -859,17 +867,51 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	setRepoReady()
 
 	// From here on we have to save errors until the end.
+	var cleanupErrs multiError
 
 	// Clean up previous worktree(s).
-	var cleanupErr error
 	if oldWorktree != "" {
-		cleanupErr = cleanupWorkTree(ctx, gitRoot, oldWorktree)
+		if err := cleanupWorkTree(ctx, gitRoot, oldWorktree); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
 	}
 
-	if cleanupErr != nil {
-		return cleanupErr
+	// Run GC if needed.
+	if *flGitGC != gcOff {
+		args := []string{"gc"}
+		switch *flGitGC {
+		case gcAuto:
+			args = append(args, "--auto")
+		case gcAlways:
+			// no extra flags
+		case gcAggressive:
+			args = append(args, "--aggressive")
+		}
+		if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
+	}
+
+	if len(cleanupErrs) > 0 {
+		return cleanupErrs
 	}
 	return nil
+}
+
+type multiError []error
+
+func (m multiError) Error() string {
+	if len(m) == 0 {
+		return "<no error>"
+	}
+	if len(m) == 1 {
+		return m[0].Error()
+	}
+	strs := make([]string, 0, len(m))
+	for _, e := range m {
+		strs = append(strs, e.Error())
+	}
+	return strings.Join(strs, "; ")
 }
 
 func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
