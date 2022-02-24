@@ -475,7 +475,7 @@ function e2e::worktree_cleanup() {
         --branch="$MAIN_BRANCH" \
         --rev=HEAD \
         --root="$ROOT" \
-        --dest="link" \
+        --link="link" \
         >> "$1" 2>&1 &
 
     # wait for first sync
@@ -1871,9 +1871,93 @@ function e2e::github_https() {
         --branch=master \
         --rev=HEAD \
         --root="$ROOT" \
-        --dest="link" \
+        --link="link" \
         >> "$1" 2>&1
     assert_file_exists "$ROOT"/link/LICENSE
+}
+
+##############################################
+# Test git-gc=auto
+##############################################
+function e2e::gc_auto() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        --git-gc="auto" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=always
+##############################################
+function e2e::gc_always() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        --git-gc="always" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=aggressive
+##############################################
+function e2e::gc_aggressive() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        --git-gc="aggressive" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=off
+##############################################
+function e2e::gc_off() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        --git-gc="off" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
 #

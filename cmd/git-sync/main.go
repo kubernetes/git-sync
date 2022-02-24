@@ -130,6 +130,8 @@ var flGitCmd = pflag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
 var flGitConfig = pflag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
 	"additional git config options in 'key1:val1,key2:val2' format")
+var flGitGC = pflag.String("git-gc", envString("GIT_SYNC_GIT_GC", "auto"),
+	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
 
 var flHTTPBind = pflag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
 	"the bind address (including port) for git-sync's HTTP endpoint")
@@ -186,6 +188,15 @@ const (
 	submodulesRecursive submodulesMode = "recursive"
 	submodulesShallow   submodulesMode = "shallow"
 	submodulesOff       submodulesMode = "off"
+)
+
+type gcMode string
+
+const (
+	gcAuto       = "auto"
+	gcAlways     = "always"
+	gcAggressive = "aggressive"
+	gcOff        = "off"
 )
 
 func init() {
@@ -258,6 +269,7 @@ type repoSync struct {
 	rev         string         // the rev or SHA to sync
 	depth       int            // for shallow sync
 	submodules  submodulesMode // how to handle submodules
+	gc          gcMode         // garbage collection
 	chmod       int            // mode to change repo to, or 0
 	link        string         // the name of the symlink to publish under `root`
 	authURL     string         // a URL to re-fetch credentials, or ""
@@ -315,6 +327,12 @@ func main() {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
 		handleError(log, true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+	}
+
+	switch *flGitGC {
+	case gcAuto, gcAlways, gcAggressive, gcOff:
+	default:
+		handleError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
 	if *flRoot == "" {
@@ -458,6 +476,7 @@ func main() {
 		rev:         *flRev,
 		depth:       *flDepth,
 		submodules:  submodulesMode(*flSubmodules),
+		gc:          gcMode(*flGitGC),
 		chmod:       *flChmod,
 		link:        absLink,
 		authURL:     *flAskPassURL,
@@ -941,11 +960,6 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 
-	// GC clone
-	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "gc", "--prune=all"); err != nil {
-		return err
-	}
-
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
@@ -1050,17 +1064,51 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	setRepoReady()
 
 	// From here on we have to save errors until the end.
+	var cleanupErrs multiError
 
-	// Clean up previous worktrees.
-	var cleanupErr error
+	// Clean up previous worktree(s).
 	if oldWorktree != "" {
-		cleanupErr = git.CleanupWorkTree(ctx, git.root, oldWorktree)
+		if err := git.CleanupWorkTree(ctx, git.root, oldWorktree); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
 	}
 
-	if cleanupErr != nil {
-		return cleanupErr
+	// Run GC if needed.
+	if git.gc != gcOff {
+		args := []string{"gc"}
+		switch git.gc {
+		case gcAuto:
+			args = append(args, "--auto")
+		case gcAlways:
+			// no extra flags
+		case gcAggressive:
+			args = append(args, "--aggressive")
+		}
+		if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
+	}
+
+	if len(cleanupErrs) > 0 {
+		return cleanupErrs
 	}
 	return nil
+}
+
+type multiError []error
+
+func (m multiError) Error() string {
+	if len(m) == 0 {
+		return "<no error>"
+	}
+	if len(m) == 1 {
+		return m[0].Error()
+	}
+	strs := make([]string, 0, len(m))
+	for _, e := range m {
+		strs = append(strs, e.Error())
+	}
+	return strings.Join(strs, "; ")
 }
 
 // CloneRepo does an initial clone of the git repo.
@@ -1662,6 +1710,18 @@ OPTIONS
             ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
             Within quoted values, commas MAY be escaped, but are not required
             to be.  Any other escape sequence is an error.  (default: "")
+
+    --git-gc <string>, $GIT_SYNC_GIT_GC
+            The git garbage collection behavior: one of 'auto', 'always',
+            'aggressive', or 'off'.  (default: auto)
+
+            - auto: Run "git gc --auto" once per successful sync.  This mode
+              respects git's gc.* config params.
+            - always: Run "git gc" once per successful sync.
+            - aggressive: Run "git gc --aggressive" once per successful sync.
+              This mode can be slow and may require a longer --sync-timeout value.
+            - off: Disable explicit git garbage collection, which may be a good
+              fit when also using --one-time.
 
     -h, --help
             Print help text and exit.
