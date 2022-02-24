@@ -500,6 +500,12 @@ func main() {
 		}
 	}
 
+	// Set additional configs we want, but users might override.
+	if err := git.setupDefaultGitConfigs(ctx); err != nil {
+		log.Error(err, "ERROR: can't set default git configs")
+		os.Exit(1)
+	}
+
 	// This needs to be after all other git-related config flags.
 	if *flGitConfig != "" {
 		if err := git.setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
@@ -1376,6 +1382,24 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 		return err
 	}
 
+	return nil
+}
+
+func (git *repoSync) setupDefaultGitConfigs(ctx context.Context) error {
+	configs := []keyVal{{
+		// Never auto-detach GC runs.
+		key: "gc.autoDetach",
+		val: "false",
+	}, {
+		// Fairly aggressive GC.
+		key: "gc.pruneExpire",
+		val: "now",
+	}}
+	for _, kv := range configs {
+		if _, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", kv.key, kv.val); err != nil {
+			return fmt.Errorf("error configuring git %q %q: %v", kv.key, kv.val, err)
+		}
+	}
 	return nil
 }
 
