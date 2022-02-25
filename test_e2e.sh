@@ -412,6 +412,45 @@ function e2e::readlink() {
 }
 
 ##############################################
+# Test repo syncing
+##############################################
+function e2e::repo_sync() {
+    # Prepare first repo
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    # First sync
+    GIT_SYNC \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --dest="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Prepare other repo
+    OTHER_REPO="${REPO}2"
+    cp -r "$REPO" "$OTHER_REPO"
+    echo "$FUNCNAME 2" > "$OTHER_REPO"/file
+    git -C "$OTHER_REPO" commit -qam "$FUNCNAME 2"
+
+    # Now sync the other repo
+    GIT_SYNC \
+        --repo="file://$OTHER_REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --dest="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+
+##############################################
 # Test branch syncing
 ##############################################
 function e2e::branch_sync() {
