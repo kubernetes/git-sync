@@ -721,7 +721,7 @@ func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, 
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	args = append(args, "origin", branch)
+	args = append(args, *flRepo, branch)
 
 	// Update from the remote.
 	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
@@ -948,7 +948,7 @@ func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 
 // remoteHashForRef returns the upstream hash for a given ref.
 func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", "origin", ref)
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", *flRepo, ref)
 	if err != nil {
 		return "", err
 	}
