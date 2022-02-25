@@ -714,14 +714,14 @@ func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
+func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	args = append(args, *flRepo, branch)
+	args = append(args, repo, branch)
 
 	// Update from the remote.
 	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
@@ -947,8 +947,8 @@ func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 }
 
 // remoteHashForRef returns the upstream hash for a given ref.
-func remoteHashForRef(ctx context.Context, ref, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", *flRepo, ref)
+func remoteHashForRef(ctx context.Context, repo, ref, gitRoot string) (string, error) {
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", repo, ref)
 	if err != nil {
 		return "", err
 	}
@@ -1009,7 +1009,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, err)
 	default:
 		// Not the first time. Figure out if the ref has changed.
-		local, remote, err := getRevs(ctx, dest, branch, rev)
+		local, remote, err := getRevs(ctx, repo, dest, branch, rev)
 		if err != nil {
 			return false, "", err
 		}
@@ -1021,11 +1021,11 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
+	return true, hash, addWorktreeAndSwap(ctx, repo, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
 }
 
 // getRevs returns the local and upstream hashes for rev.
-func getRevs(ctx context.Context, localDir, branch, rev string) (string, string, error) {
+func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, string, error) {
 	// Ask git what the exact hash is for rev.
 	local, err := localHashForRev(ctx, rev, localDir)
 	if err != nil {
@@ -1041,7 +1041,7 @@ func getRevs(ctx context.Context, localDir, branch, rev string) (string, string,
 	}
 
 	// Figure out what hash the remote resolves ref to.
-	remote, err := remoteHashForRef(ctx, ref, localDir)
+	remote, err := remoteHashForRef(ctx, repo, ref, localDir)
 	if err != nil {
 		return "", "", err
 	}
