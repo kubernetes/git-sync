@@ -1729,6 +1729,90 @@ function e2e::github_https() {
     assert_file_exists "$ROOT"/link/LICENSE
 }
 
+##############################################
+# Test git-gc=auto
+##############################################
+function e2e::gc_auto() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        --git-gc="auto" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=always
+##############################################
+function e2e::gc_always() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        --git-gc="always" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=aggressive
+##############################################
+function e2e::gc_aggressive() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        --git-gc="aggressive" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test git-gc=off
+##############################################
+function e2e::gc_off() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        --git-gc="off" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+}
+
 function list_tests() {
     (
         shopt -s extdebug
@@ -1743,35 +1827,53 @@ function list_tests() {
 }
 
 # Figure out which, if any, tests to run.
-tests=($(list_tests))
+all_tests=($(list_tests))
+tests_to_run=()
 
 function print_tests() {
     echo "available tests:"
-    for t in "${tests[@]}"; do
+    for t in "${all_tests[@]}"; do
         echo "    $t"
     done
 }
 
-for t; do
+# Validate and accumulate tests to run if args are specified.
+for arg; do
     # Use -? to list known tests.
-    if [[ "${t}" == "-?" ]]; then
+    if [[ "${arg}" == "-?" ]]; then
         print_tests
         exit 0
     fi
-    # Make sure we know this test.
-    if [[ " ${tests[*]} " =~ " ${t} " ]]; then
-        continue
+    if [[ "${arg}" =~ ^- ]]; then
+        echo "ERROR: unknown flag '${arg}'"
+        exit 1
     fi
-    # Not a known test or flag.
-    echo "ERROR: unknown test or flag: '${t}'"
-    echo
-    print_tests
-    exit 1
+    # Make sure each non-flag arg matches at least one test.
+    nmatches=0
+    for t in "${all_tests[@]}"; do
+        if [[ "${t}" =~ ${arg} ]]; then
+            nmatches=$((nmatches+1))
+            # Don't run tests twice, just keep the first match.
+            if [[ " ${tests_to_run[*]} " =~ " ${t} " ]]; then
+                continue
+            fi
+            tests_to_run+=("${t}")
+            continue
+        fi
+    done
+    if [[ ${nmatches} == 0 ]]; then
+        echo "ERROR: no tests match pattern '${arg}'"
+        echo
+        print_tests
+        exit 1
+    fi
+    tests_to_run+=("${matches[@]}")
 done
+set -- "${tests_to_run[@]}"
 
-# If no tests specified, run them all.
+# If no tests were specified, run them all.
 if [[ "$#" == 0 ]]; then
-    set -- "${tests[@]}"
+    set -- "${all_tests[@]}"
 fi
 
 # Build it
