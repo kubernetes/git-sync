@@ -127,5 +127,3 @@ docker run -d \
 | GIT_SYNC_GIT_GC                 | `--git-gc`                 | git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'                                                                                                                                                              | "auto"                        |
 | GIT_SYNC_ERROR_FILE             | `--error-file`             | the name of a file into which errors will be written under --root                                                                                                                                                                             | ""                            |
 | (none)                          | `-v`                       | log level for V logs                                                                                                                                                                                                                          | ""                            |
-
-[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/git-sync/README.md?pixel)]()
