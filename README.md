@@ -94,7 +94,7 @@ DESCRIPTION
     git-sync can pull over HTTP(S) (with authentication or not) or SSH.
 
     git-sync can also be configured to make a webhook call upon successful git
-    repo synchronization. The call is made after the symlink is updated.
+    repo synchronization.  The call is made after the symlink is updated.
 
 OPTIONS
 
@@ -107,12 +107,12 @@ OPTIONS
             /etc/passwd is writable by the current UID.
 
     --askpass-url <string>, $GIT_ASKPASS_URL
-            A URL to query for git credentials. The query must return success
+            A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
     --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out. (default: <repo's default branch>)
+            The git branch to check out.  (default: <repo's default branch>)
 
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Optionally change permissions on the checked-out files to the
@@ -122,15 +122,32 @@ OPTIONS
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
-    --error-file, $GIT_SYNC_ERROR_FILE
-            The name of a file (under --root) into which errors will be
-            written. This must be a filename, not a path, and may not start
-            with a period. (default: "", which means error reporting will be
-            disabled)
-
     --depth <int>, $GIT_SYNC_DEPTH
             Create a shallow clone with history truncated to the specified
             number of commits.
+
+    --error-file, $GIT_SYNC_ERROR_FILE
+            The name of a file (under --root) into which errors will be
+            written.  This must be a filename, not a path, and may not start
+            with a period.  (default: "", which means error reporting will be
+            disabled)
+
+    --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed --exechook-command.
+            (default: 3s)
+
+    --exechook-command <string>, $GIT_SYNC_EXECHOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the
+            remote repository.  This command does not take any arguments and
+            executes with the synced repo as its working directory.  The
+            environment variable $GITSYNC_HASH will be set to the git SHA that
+            was synced.  The execution is subject to the overall --sync-timeout
+            flag and will extend the effective period between sync attempts.
+            This flag obsoletes --sync-hook-command, but if sync-hook-command
+            is specified, it will take precedence.
+
+    --exechook-timeout <duration>, $GIT_SYNC_EXECHOOK_TIMEOUT
+            The timeout for the --exechook-command.  (default: 30s)
 
     --git <string>, $GIT_SYNC_GIT
             The git command to run (subject to PATH search, mostly for testing).
@@ -144,7 +161,19 @@ OPTIONS
             supported: '\n' => [newline], '\t' => [tab], '\"' => '"', '\,' =>
             ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
             Within quoted values, commas MAY be escaped, but are not required
-            to be.  Any other escape sequence is an error. (default: "")
+            to be.  Any other escape sequence is an error.  (default: "")
+
+    --git-gc <string>, $GIT_SYNC_GIT_GC
+            The git garbage collection behavior: one of 'auto', 'always',
+            'aggressive', or 'off'.  (default: auto)
+
+            - auto: Run "git gc --auto" once per successful sync.  This mode
+              respects git's gc.* config params.
+            - always: Run "git gc" once per successful sync.
+            - aggressive: Run "git gc --aggressive" once per successful sync.
+              This mode can be slow and may require a longer --sync-timeout value.
+            - off: Disable explicit git garbage collection, which may be a good
+              fit when also using --one-time.
 
     -h, --help
             Print help text and exit.
@@ -159,14 +188,17 @@ OPTIONS
 
     --http-pprof, $GIT_SYNC_HTTP_PPROF
             Enable the pprof debug endpoints on git-sync's HTTP endpoint (see
-            --http-bind). (default: false)
+            --http-bind).  (default: false)
 
     --link <string>, $GIT_SYNC_LINK
-            The name of the final symlink (under --root) which will point to the
-            current git worktree. This must be a filename, not a path, and may
-            not start with a period. The destination of this link (i.e.
-            readlink()) is the currently checked out SHA. (default: the leaf
-            dir of --repo)
+            The path to at which to create a symlink which points to the
+            current git directory, at the currently synced SHA.  This may be an
+            absolute path or a relative path, in which case it is relative to
+            --root.  The last path element is the name of the link and must not
+            start with a period.  Consumers of the synced files should always
+            use this link - it is updated atomically and should always be
+            valid.  The basename of the target of the link is the current SHA.
+            (default: the leaf dir of --repo)
 
     --man
             Print this manual and exit.
@@ -174,7 +206,7 @@ OPTIONS
     --max-sync-failures <int>, $GIT_SYNC_MAX_SYNC_FAILURES
             The number of consecutive failures allowed before aborting (the
             first sync must succeed), Setting this to -1 will retry forever
-            after the initial sync. (default: 0)
+            after the initial sync.  (default: 0)
 
     --one-time, $GIT_SYNC_ONE_TIME
             Exit after the first sync.
@@ -182,27 +214,28 @@ OPTIONS
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer using a file for specifying the password (see
-            --password-file).
+            users should prefer --password-file or $GIT_SYNC_PASSWORD for
+            specifying the password.
 
-    --password-file <string>, $GIT_SYNC_PASSWORD_FILE
-            The path to password file which contains password or personal access
-            token (see --password).
+    --password-file <string>, $GIT_SYNC_PASSWORD
+            The file from which the password or personal access token (see
+            github docs) to use for git authentication (see --username) will be
+            sourced.
 
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
-            will take precedence. (default: 10s)
+            will take precedence.  (default: 10s)
 
     --repo <string>, $GIT_SYNC_REPO
             The git repository to sync.
 
     --rev <string>, $GIT_SYNC_REV
-            The git revision (tag or hash) to check out. (default: HEAD)
+            The git revision (tag or hash) to check out.  (default: HEAD)
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
-            be created. This flag is required.
+            be created.  This flag is required.
 
     --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
@@ -213,7 +246,7 @@ OPTIONS
             Use SSH for git authentication and operations.
 
     --ssh-key-file <string>, $GIT_SSH_KEY_FILE
-            The SSH key to use when using --ssh. (default: /etc/git-secret/ssh)
+            The SSH key to use when using --ssh.  (default: /etc/git-secret/ssh)
 
     --ssh-known-hosts, $GIT_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.
@@ -227,30 +260,24 @@ OPTIONS
             The git submodule behavior: one of 'recursive', 'shallow', or 'off'.
             (default: recursive)
 
-    --sync-hook-command <string>, $GIT_SYNC_HOOK_COMMAND
-            An optional command to be executed after syncing a new hash of the
-            remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory.  The
-            execution is subject to the overall --sync-timeout flag and will
-            extend the effective period between sync attempts.
-
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
             10ms.  This flag obsoletes --timeout, but if --timeout is specified,
-            it will take precedence. (default: 120s)
+            it will take precedence.  (default: 120s)
 
     --username <string>, $GIT_SYNC_USERNAME
-            The username to use for git authentication (see --password).
+            The username to use for git authentication (see --password-file or
+            --password).
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
-            printed. (default: 0)
+            printed.  (default: 0)
 
     --version
             Print the version and exit.
 
     --webhook-backoff <duration>, $GIT_SYNC_WEBHOOK_BACKOFF
-            The time to wait before retrying a failed --webhook-url).
+            The time to wait before retrying a failed --webhook-url.
             (default: 3s)
 
     --webhook-method <string>, $GIT_SYNC_WEBHOOK_METHOD
@@ -262,10 +289,11 @@ OPTIONS
             (default: 200)
 
     --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT
-            The timeout for the --webhook-url. (default: 1s)
+            The timeout for the --webhook-url.  (default: 1s)
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
-            A URL for optional webhook notifications when syncs complete.
+            A URL for optional webhook notifications when syncs complete.  The
+            header 'Gitsync-Hash' will be set to the git SHA that was synced.
 
 EXAMPLE USAGE
 
@@ -284,10 +312,11 @@ AUTHENTICATION
     and "git@example.com:repo" will try to use SSH.
 
     username/password
-            The --username (GIT_SYNC_USERNAME) and --password
-            (GIT_SYNC_PASSWORD) flags will be used.  To prevent password
-            leaks, the GIT_SYNC_PASSWORD environment variable is almost always
-            preferred to the flag.
+            The --username (GIT_SYNC_USERNAME) and --password-file
+            (GIT_SYNC_PASSWORD_FILE) or --password (GIT_SYNC_PASSWORD) flags
+            will be used.  To prevent password leaks, the --password-file flag
+            or GIT_SYNC_PASSWORD environment variable is almost always
+            preferred to the --password flag.
 
             A variant of this is --askpass-url (GIT_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
@@ -303,12 +332,19 @@ AUTHENTICATION
             When --cookie-file (GIT_COOKIE_FILE) is specified, the associated
             cookies can contain authentication information.
 
-WEBHOOKS
+HOOKS
 
-    Webhooks are executed asynchronously from the main git-sync process. If a
-    --webhook-url is configured, whenever a new hash is synced a call is sent
-    using the method defined in --webhook-method. Git-sync will retry this
-    webhook call until it succeeds (based on --webhook-success-status).  If
-    unsuccessful, git-sync will wait --webhook-backoff (default 3s) before
-    re-attempting the webhook call.
+    Webhooks and exechooks are executed asynchronously from the main git-sync
+    process.  If a --webhook-url or --exechook-command is configured, whenever
+    a new hash is synced the hook(s) will be invoked.  For exechook, that means
+    the command is exec()'ed, and for webhooks that means an HTTP request is
+    sent using the method defined in --webhook-method.  Git-sync will retry
+    both forms of hooks until they succeed (exit code 0 for exechooks, or
+    --webhook-success-status for webhooks).  If unsuccessful, git-sync will
+    wait --exechook-backoff or --webhook-backoff (as appropriate) before
+    re-trying the hook.
+
+    Hooks are not guaranteed to succeed on every single SHA change.  For example,
+    if a hook fails and a new SHA is synced during the backoff period, the
+    retried hook will fire for the newest SHA.
 ```
