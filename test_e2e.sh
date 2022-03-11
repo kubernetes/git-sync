@@ -417,9 +417,9 @@ function e2e::readlink() {
 }
 
 ##############################################
-# Test repo syncing
+# Test changing repos with storage intact
 ##############################################
-function e2e::repo_sync() {
+function e2e::change_repos_after_sync() {
     # Prepare first repo
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
