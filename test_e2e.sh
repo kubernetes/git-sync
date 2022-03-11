@@ -110,8 +110,9 @@ function clean_work() {
     mkdir -p "$WORK"
 }
 
-# REPO is the source repo under test.
+# REPO and REPO2 are the source repos under test.
 REPO="$DIR/repo"
+REPO2="${REPO}2"
 MAIN_BRANCH="e2e-branch"
 function init_repo() {
     rm -rf "$REPO"
@@ -120,6 +121,9 @@ function init_repo() {
     touch "$REPO"/file
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
+
+    rm -rf "$REPO2"
+    cp -r "$REPO" "$REPO2"
 }
 
 # ROOT is the volume (usually) used as --root.
@@ -156,6 +160,7 @@ function GIT_SYNC() {
         -u $(id -u):$(id -g) \
         -v "$ROOT":"$ROOT":rw \
         -v "$REPO":"$REPO":ro \
+        -v "$REPO2":"$REPO2":ro \
         -v "$WORK":"$WORK":ro \
         -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
         -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
@@ -819,6 +824,43 @@ function e2e::crash_cleanup_retry() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+}
+
+##############################################
+# Test changing repos with storage intact
+##############################################
+function e2e::change_repos_after_sync() {
+    # Prepare first repo
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    # First sync
+    GIT_SYNC \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Prepare other repo
+    echo "$FUNCNAME 2" > "$REPO2"/file
+    git -C "$REPO2" commit -qam "$FUNCNAME 2"
+
+    # Now sync the other repo
+    GIT_SYNC \
+        --repo="file://$REPO2" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
 }
 
 ##############################################

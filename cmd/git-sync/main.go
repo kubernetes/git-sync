@@ -928,7 +928,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	if git.branch != "" {
 		fetch = git.branch
 	}
-	args = append(args, "origin", fetch)
+	args = append(args, git.repo, fetch)
 
 	// Update from the remote.
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
@@ -1200,7 +1200,7 @@ func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, e
 
 // RemoteHashForRef returns the upstream hash for a given ref.
 func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, error) {
-	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", "origin", ref)
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", git.repo, ref)
 	if err != nil {
 		return "", err
 	}
