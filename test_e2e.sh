@@ -417,43 +417,6 @@ function e2e::readlink() {
 }
 
 ##############################################
-# Test changing repos with storage intact
-##############################################
-function e2e::change_repos_after_sync() {
-    # Prepare first repo
-    echo "$FUNCNAME 1" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
-    # First sync
-    GIT_SYNC \
-        --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --root="$ROOT" \
-        --dest="link" \
-        --one-time \
-        >> "$1" 2>&1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-
-    # Prepare other repo
-    echo "$FUNCNAME 2" > "$REPO2"/file
-    git -C "$REPO2" commit -qam "$FUNCNAME 2"
-
-    # Now sync the other repo
-    GIT_SYNC \
-        --repo="file://$REPO2" \
-        --branch="$MAIN_BRANCH" \
-        --root="$ROOT" \
-        --dest="link" \
-        --one-time \
-        >> "$1" 2>&1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-}
-
-##############################################
 # Test branch syncing
 ##############################################
 function e2e::branch_sync() {
@@ -726,6 +689,43 @@ function e2e::crash_cleanup_retry() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+}
+
+##############################################
+# Test changing repos with storage intact
+##############################################
+function e2e::change_repos_after_sync() {
+    # Prepare first repo
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    # First sync
+    GIT_SYNC \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --dest="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Prepare other repo
+    echo "$FUNCNAME 2" > "$REPO2"/file
+    git -C "$REPO2" commit -qam "$FUNCNAME 2"
+
+    # Now sync the other repo
+    GIT_SYNC \
+        --repo="file://$REPO2" \
+        --branch="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --dest="link" \
+        --one-time \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
 }
 
 ##############################################
