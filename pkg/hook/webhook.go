@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"k8s.io/git-sync/pkg/logging"
 )
 
 // WebHook structure, implements Hook
@@ -37,17 +35,17 @@ type Webhook struct {
 	// Timeout for the http/s request
 	timeout time.Duration
 	// Logger
-	logger *logging.Logger
+	log logintf
 }
 
 // NewWebhook returns a new WebHook
-func NewWebhook(url, method string, success int, timeout time.Duration, logger *logging.Logger) *Webhook {
+func NewWebhook(url, method string, success int, timeout time.Duration, log logintf) *Webhook {
 	return &Webhook{
 		url:     url,
 		method:  method,
 		success: success,
 		timeout: timeout,
-		logger:  logger,
+		log:     log,
 	}
 }
 
@@ -68,7 +66,7 @@ func (w *Webhook) Do(ctx context.Context, hash string) error {
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	w.logger.V(0).Info("sending webhook", "hash", hash, "url", w.url, "method", w.method, "timeout", w.timeout)
+	w.log.V(0).Info("sending webhook", "hash", hash, "url", w.url, "method", w.method, "timeout", w.timeout)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

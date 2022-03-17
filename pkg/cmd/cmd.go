@@ -23,18 +23,24 @@ import (
 	"os/exec"
 	"strings"
 
-	"k8s.io/git-sync/pkg/logging"
+	"github.com/go-logr/logr"
 )
 
 // Runner is an API to run commands and log them in a consistent way.
 type Runner struct {
-	// Logger
-	logger *logging.Logger
+	log logintf
+}
+
+// Just the logr methods we need in this package.
+type logintf interface {
+	Info(msg string, keysAndValues ...interface{})
+	Error(err error, msg string, keysAndValues ...interface{})
+	V(level int) logr.Logger
 }
 
 // NewRunner returns a new CommandRunner
-func NewRunner(logger *logging.Logger) *Runner {
-	return &Runner{logger: logger}
+func NewRunner(log logintf) *Runner {
+	return &Runner{log: log}
 }
 
 // Run runs given command
@@ -45,7 +51,7 @@ func (r *Runner) Run(ctx context.Context, cwd string, env []string, command stri
 // RunWithStdin runs given command with stardart input
 func (r *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
 	cmdStr := cmdForLog(command, args...)
-	r.logger.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
+	r.log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
@@ -61,15 +67,15 @@ func (r *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, std
 	cmd.Stdin = bytes.NewBufferString(stdin)
 
 	err := cmd.Run()
-	stdout := outbuf.String()
-	stderr := errbuf.String()
+	stdout := strings.TrimSpace(outbuf.String())
+	stderr := strings.TrimSpace(errbuf.String())
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
 	}
 	if err != nil {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
-	r.logger.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
+	r.log.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
 
 	return stdout, nil
 }
