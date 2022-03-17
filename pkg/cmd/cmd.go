@@ -61,8 +61,8 @@ func (c *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, std
 	cmd.Stdin = bytes.NewBufferString(stdin)
 
 	err := cmd.Run()
-	stdout := outbuf.String()
-	stderr := errbuf.String()
+	stdout := strings.TrimSpace(outbuf.String())
+	stderr := strings.TrimSpace(errbuf.String())
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
 	}
