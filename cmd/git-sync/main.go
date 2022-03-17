@@ -75,6 +75,9 @@ var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
+var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
+	"the path to a sparse-checkout file.")
+
 var flSyncHookCommand = flag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"DEPRECATED: use --exechook-command instead")
 var flExechookCommand = flag.String("exechook-command", envString("GIT_SYNC_EXECHOOK_COMMAND", ""),
@@ -84,8 +87,6 @@ var flExechookTimeout = flag.Duration("exechook-timeout", envDuration("GIT_SYNC_
 	"the timeout for the command")
 var flExechookBackoff = flag.Duration("exechook-backoff", envDuration("GIT_SYNC_EXECHOOK_BACKOFF", time.Second*3),
 	"the time to wait before retrying a failed command")
-var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
-	"the path to a sparse-checkout file.")
 
 var flWebhookURL = flag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
 	"the URL for a webhook notification when syncs complete (default is no webhook)")

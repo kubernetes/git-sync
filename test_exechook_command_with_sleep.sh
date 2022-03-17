@@ -20,3 +20,4 @@
 sleep 3
 cat file > exechook
 cat ../link/file > link-exechook
+echo "ENVKEY=$ENVKEY" > exechook-env
