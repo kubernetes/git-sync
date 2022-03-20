@@ -192,9 +192,12 @@ test: $(BUILD_DIRS)
 	    "
 	@./test_e2e.sh
 
-test-tools:
-	@docker build -t $(REGISTRY)/test/test-sshd _test_tools/sshd
-	@docker build -t $(REGISTRY)/test/test-ncsvr _test_tools/ncsvr
+TEST_TOOLS := $(shell ls _test_tools)
+test-tools: $(foreach tool, $(TEST_TOOLS), .container.test_tool.$(tool))
+
+.container.test_tool.%: _test_tools/% _test_tools/%/*
+	@docker build -t $(REGISTRY)/test/$$(basename $<) $<
+	@docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
 # Help set up multi-arch build tools.  This assumes you have the tools
 # installed.  If you already have a buildx builder available, you don't need
