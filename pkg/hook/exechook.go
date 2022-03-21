@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"k8s.io/git-sync/pkg/cmd"
-	"k8s.io/git-sync/pkg/logging"
 )
 
 // Exechook structure, implements Hook
@@ -39,18 +38,18 @@ type Exechook struct {
 	// Timeout for the command
 	timeout time.Duration
 	// Logger
-	logger *logging.Logger
+	log logintf
 }
 
 // NewExechook returns a new Exechook
-func NewExechook(cmdrunner *cmd.Runner, command, gitroot string, args []string, timeout time.Duration, logger *logging.Logger) *Exechook {
+func NewExechook(cmdrunner *cmd.Runner, command, gitroot string, args []string, timeout time.Duration, log logintf) *Exechook {
 	return &Exechook{
 		cmdrunner: cmdrunner,
 		command:   command,
 		gitRoot:   gitroot,
 		args:      args,
 		timeout:   timeout,
-		logger:    logger,
+		log:       log,
 	}
 }
 
@@ -66,7 +65,7 @@ func (h *Exechook) Do(ctx context.Context, hash string) error {
 
 	worktreePath := filepath.Join(h.gitRoot, hash)
 
-	h.logger.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
+	h.log.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
 	_, err := h.cmdrunner.Run(ctx, worktreePath, []string{envKV("GITSYNC_HASH", hash)}, h.command, h.args...)
 	return err
 }

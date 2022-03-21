@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/git-sync/pkg/logging"
 )
 
 var (
@@ -88,8 +88,8 @@ func (d *hookData) send(newHash string) {
 }
 
 // NewHookRunner returns a new HookRunner
-func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log *logging.Logger, oneTime bool) *HookRunner {
-	hr := &HookRunner{hook: hook, backoff: backoff, data: data, logger: log}
+func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log logintf, oneTime bool) *HookRunner {
+	hr := &HookRunner{hook: hook, backoff: backoff, data: data, log: log}
 	if oneTime {
 		hr.oneTimeResult = make(chan bool, 1)
 	}
@@ -105,10 +105,17 @@ type HookRunner struct {
 	// Holds the data as it crosses from producer to consumer.
 	data *hookData
 	// Logger
-	logger *logging.Logger
+	log logintf
 	// Used to send a status result when running in one-time mode.
 	// Should be initialised to a buffered channel of size 1.
 	oneTimeResult chan bool
+}
+
+// Just the logr methods we need in this package.
+type logintf interface {
+	Info(msg string, keysAndValues ...interface{})
+	Error(err error, msg string, keysAndValues ...interface{})
+	V(level int) logr.Logger
 }
 
 // Send sends hash to hookdata
@@ -133,7 +140,7 @@ func (r *HookRunner) Run(ctx context.Context) {
 			}
 
 			if err := r.hook.Do(ctx, hash); err != nil {
-				r.logger.Error(err, "hook failed")
+				r.log.Error(err, "hook failed")
 				updateHookRunCountMetric(r.hook.Name(), "error")
 				// don't want to sleep unnecessarily terminating anyways
 				r.sendOneTimeResultAndTerminate(false)

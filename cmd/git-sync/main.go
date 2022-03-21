@@ -574,6 +574,7 @@ func main() {
 	// Startup webhooks goroutine
 	var webhookRunner *hook.HookRunner
 	if *flWebhookURL != "" {
+		log := log.WithName("webhook")
 		webhook := hook.NewWebhook(
 			*flWebhookURL,
 			*flWebhookMethod,
@@ -594,6 +595,7 @@ func main() {
 	// Startup exechooks goroutine
 	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
+		log := log.WithName("exechook")
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
