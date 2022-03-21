@@ -5,18 +5,13 @@
 First, see what has been tagged:
 
 ```
-$ git tag
-v3.2.0
-v3.2.1
-v3.2.2
-v3.3.0
-v3.3.1
+git tag
 ```
 
 Pick the next release number and tag it.
 
 ```
-$ git tag -am v3.3.2 v3.3.2
+git tag -am v3.3.2 v3.3.2
 ```
 
 ## Build and push to staging
@@ -24,41 +19,37 @@ $ git tag -am v3.3.2 v3.3.2
 To build git-sync you need [docker buildx](https://github.com/docker/buildx)
 and to cut a release you need
 [manifest-tool](https://github.com/estesp/manifest-tool).  At the time of this
-writing, manifest-tool is broken at head and doesn't support go modules yet:
+writing Go is functionally broken (see below) wrt modules and `go install`, so you have to
+build it manually:
 
 ```
-$ GO111MODULE=off go get github.com/estesp/manifest-tool/cmd/manifest-tool
+(
+  set -o errexit
+  WD=$(pwd)
+  DIR=/tmp/manifest-tool-$RANDOM
+  mkdir $DIR
+  git clone https://github.com/estesp/manifest-tool -b v2.0.3 $DIR
+  cd $DIR/v2
+  go build -o $WD ./cmd/manifest-tool
+)
+```
 
-$ cd "$(go env GOPATH)/src/github.com/estesp/manifest-tool"
+Make sure you are logged into Google Cloud (to push to GCR).
 
-$ git checkout v1.0.3
-Note: switching to 'v1.0.3'.
-
-You are in 'detached HEAD' state. You can look around, make experimental
-changes and commit them, and you can discard any commits you make in this
-state without impacting any branches by switching back to a branch.
-
-If you want to create a new branch to retain commits you create, you may
-do so (now or later) by using -c with the switch command. Example:
-
-  git switch -c <new-branch-name>
-
-Or undo this operation with:
-
-  git switch -
-
-Turn off this advice by setting config variable advice.detachedHead to false
-
-HEAD is now at 505479b Merge pull request #101 from estesp/prep-1.0.3
-
-$ GO111MODULE=off go install .
+```
+gcloud auth login
 ```
 
 The following step will build for all platforms and push the container images
 to our staging repo (gcr.io/k8s-staging-git-sync).
 
 ```
-$ make manifest-list
+# Set PATH to find the `manifest-list` binary.
+PATH=".:$PATH" make manifest-list
+```
+
+This will produce output like:
+```
 <...lots of output...>
 Successfully tagged gcr.io/k8s-staging-git-sync/git-sync:v3.3.2__linux_amd64
 <...lots of output...>
@@ -73,8 +64,9 @@ Take note of this final sha256.
 ## Promote the images
 
 Make a PR against
-https://github.com/kubernetes/k8s.io/blob/main/k8s.gcr.io/images/k8s-staging-git-sync/images.yaml
-and add the sha256 and tag name from above.  For example:
+https://github.com/kubernetes/k8s.io to edit the file
+k8s.gcr.io/images/k8s-staging-git-sync/images.yaml and add the sha256 and tag
+name from above.  For example:
 
 ```
  - name: git-sync
@@ -86,10 +78,33 @@ and add the sha256 and tag name from above.  For example:
 ```
 
 When that PR is merged, the promoter bot will copy the images from staging to
-the final prod location (e.g. k8s.gcr.io/git-sync/git-sync:v3.3.2).
+the final prod location (e.g. `k8s.gcr.io/git-sync/git-sync:v3.3.2`).
 
 ## Make a GitHub release
 
 Lastly, make a release through the [github UI](https://github.com/kubernetes/git-sync/releases).
 Include all the notable changes since the last release and the final container
-image location.
+image location.  The "Auto-generate release notes" button is a great starting
+place.
+
+# Appendix: `go install` vs modules
+
+This section is added for future reference.
+
+As of Go 1.17, it does not seem possible to `go install` or `go get` a repo
+which uses `replace directives`.  https://github.com/golang/go/issues/44840 is
+not getting traction.
+
+```
+$ go get github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0
+go get: installing executables with 'go get' in module mode is deprecated.
+	Use 'go install pkg@version' instead.
+	For more information, see https://golang.org/doc/go-get-install-deprecation
+	or run 'go help get' or 'go help install'.
+
+$ go install github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0
+go install: github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0 (in github.com/estesp/manifest-tool/v2@v2.0.0):
+	The go.mod file for the module providing named packages contains one or
+	more replace directives. It must not contain directives that would cause
+	it to be interpreted differently than if it were the main module.
+```
