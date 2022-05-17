@@ -23,3 +23,4 @@ if [ -z "${GITSYNC_HASH}" ]; then
 fi
 cat file > exechook
 cat ../link/file > link-exechook
+echo "ENVKEY=$ENVKEY" > exechook-env
