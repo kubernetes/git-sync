@@ -146,6 +146,8 @@ EXECHOOK_COMMAND=/test_exechook_command.sh
 EXECHOOK_COMMAND_FAIL=/test_exechook_command_fail.sh
 EXECHOOK_COMMAND_SLEEPY=/test_exechook_command_with_sleep.sh
 EXECHOOK_COMMAND_FAIL_SLEEPY=/test_exechook_command_fail_with_sleep.sh
+EXECHOOK_ENVKEY=ENVKEY
+EXECHOOK_ENVVAL=envval
 RUNLOG="$DIR/runlog.exechook-fail-retry"
 rm -f $RUNLOG
 touch $RUNLOG
@@ -169,6 +171,7 @@ function GIT_SYNC() {
         -v "$(pwd)/test_exechook_command_fail.sh":"$EXECHOOK_COMMAND_FAIL":ro \
         -v "$(pwd)/test_exechook_command_with_sleep.sh":"$EXECHOOK_COMMAND_SLEEPY":ro \
         -v "$(pwd)/test_exechook_command_fail_with_sleep.sh":"$EXECHOOK_COMMAND_FAIL_SLEEPY":ro \
+        --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
@@ -1114,6 +1117,7 @@ function e2e::exechook_success() {
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 1"
+    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 
     # Move forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -1126,6 +1130,7 @@ function e2e::exechook_success() {
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 2"
     assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 2"
+    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
 ##############################################
@@ -1182,6 +1187,7 @@ function e2e::exechook_success_once() {
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 1"
+    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
 ##############################################
