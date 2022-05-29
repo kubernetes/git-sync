@@ -19,6 +19,7 @@ package hook
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -66,8 +67,11 @@ func (h *Exechook) Do(ctx context.Context, hash string) error {
 
 	worktreePath := filepath.Join(h.gitRoot, hash)
 
+	env := os.Environ()
+	env = append(env, envKV("GITSYNC_HASH", hash))
+
 	h.logger.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
-	_, err := h.cmdrunner.Run(ctx, worktreePath, []string{envKV("GITSYNC_HASH", hash)}, h.command, h.args...)
+	_, err := h.cmdrunner.Run(ctx, worktreePath, env, h.command, h.args...)
 	return err
 }
 
