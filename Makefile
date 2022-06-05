@@ -122,7 +122,7 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
 LICENSES = .licenses
 
-$(LICENSES): bin/$(shell go env GOOS)_$(shell go env GOARCH)/$(BIN)
+$(LICENSES): bin/$(OS)_$(ARCH)/$(BIN)
 	@go build -o ./bin/tools github.com/google/go-licenses
 	@rm -rf $(LICENSES)
 	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
