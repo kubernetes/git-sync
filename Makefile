@@ -94,23 +94,23 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 .PHONY: .go/$(OUTBIN).stamp
 .go/$(OUTBIN).stamp: $(BUILD_DIRS)
 	@echo "making $(OUTBIN)"
-	@docker run                                                                  \
-	    -i                                                                       \
-	    --rm                                                                     \
-	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd):/src                                                          \
-	    -w /src                                                                  \
-	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
-	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
-	    -v $$(pwd)/.go/cache:/.cache                                             \
-	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
-	    --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
-	    $(BUILD_IMAGE)                                                           \
-	    /bin/sh -c "                                                             \
-	        ARCH=$(ARCH)                                                         \
-	        OS=$(OS)                                                             \
-	        VERSION=$(VERSION)                                                   \
-	        ./build/build.sh                                                     \
+	@docker run                                                \
+	    -i                                                     \
+	    --rm                                                   \
+	    -u $$(id -u):$$(id -g)                                 \
+	    -v $$(pwd):/src                                        \
+	    -w /src                                                \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin               \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH) \
+	    -v $$(pwd)/.go/cache:/.cache                           \
+	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
+	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    $(BUILD_IMAGE)                                         \
+	    /bin/sh -c "                                           \
+	        ARCH=$(ARCH)                                       \
+	        OS=$(OS)                                           \
+	        VERSION=$(VERSION)                                 \
+	        ./build/build.sh                                   \
 	    "
 	@if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then \
 	    mv .go/$(OUTBIN) $(OUTBIN);            \
@@ -122,8 +122,10 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 
 LICENSES = .licenses
 
-$(LICENSES): bin/$(shell go env GOOS)_$(shell go env GOARCH)/$(BIN)
-	@go build -o ./bin/tools github.com/google/go-licenses
+$(LICENSES):
+	@GOOS=$(shell go env GOHOSTOS)     \
+	 GOARCH=$(shell go env GOHOSTARCH) \
+	 go build -o ./bin/tools github.com/google/go-licenses
 	@rm -rf $(LICENSES)
 	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
 	@chmod -R a+rx $(LICENSES)
@@ -131,20 +133,20 @@ $(LICENSES): bin/$(shell go env GOOS)_$(shell go env GOARCH)/$(BIN)
 container: .container-$(DOTFILE_IMAGE) container-name
 .container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in
 	@sed \
-	    -e 's|{ARG_BIN}|$(BIN)|g' \
-	    -e 's|{ARG_ARCH}|$(ARCH)|g' \
-	    -e 's|{ARG_OS}|$(OS)|g' \
+	    -e 's|{ARG_BIN}|$(BIN)|g'        \
+	    -e 's|{ARG_ARCH}|$(ARCH)|g'      \
+	    -e 's|{ARG_OS}|$(OS)|g'          \
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
-	@docker buildx build \
-	    --no-cache \
-	    --progress=plain \
-	    --load \
-	    --platform "$(OS)/$(ARCH)" \
-	    --build-arg HTTP_PROXY=$(HTTP_PROXY) \
+	@docker buildx build                       \
+	    --no-cache                             \
+	    --progress=plain                       \
+	    --load                                 \
+	    --platform "$(OS)/$(ARCH)"             \
+	    --build-arg HTTP_PROXY=$(HTTP_PROXY)   \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY) \
-	    -t $(IMAGE):$(TAG) \
-	    -f .dockerfile-$(OS)_$(ARCH) \
+	    -t $(IMAGE):$(TAG)                     \
+	    -f .dockerfile-$(OS)_$(ARCH)           \
 	    .
 	@docker images -q $(IMAGE):$(TAG) > $@
 
@@ -176,19 +178,19 @@ version:
 	@echo $(VERSION)
 
 test: $(BUILD_DIRS)
-	@docker run                                                                  \
-	    -i                                                                       \
-	    -u $$(id -u):$$(id -g)                                                   \
-	    -v $$(pwd):/src                                                          \
-	    -w /src                                                                  \
-	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin                                 \
-	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH)                   \
-	    -v $$(pwd)/.go/cache:/.cache                                             \
-	    --env HTTP_PROXY=$(HTTP_PROXY)                                           \
-	    --env HTTPS_PROXY=$(HTTPS_PROXY)                                         \
-	    $(BUILD_IMAGE)                                                           \
-	    /bin/sh -c "                                                             \
-	        ./build/test.sh $(SRC_DIRS)                                          \
+	@docker run                                                \
+	    -i                                                     \
+	    -u $$(id -u):$$(id -g)                                 \
+	    -v $$(pwd):/src                                        \
+	    -w /src                                                \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin               \
+	    -v $$(pwd)/.go/bin/$(OS)_$(ARCH):/go/bin/$(OS)_$(ARCH) \
+	    -v $$(pwd)/.go/cache:/.cache                           \
+	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
+	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    $(BUILD_IMAGE)                                         \
+	    /bin/sh -c "                                           \
+	        ./build/test.sh $(SRC_DIRS)                        \
 	    "
 	@./test_e2e.sh
 
