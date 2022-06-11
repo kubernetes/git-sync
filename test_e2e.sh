@@ -1958,5 +1958,9 @@ done
 
 # Finally...
 echo
-echo "cleaning up $DIR"
-rm -rf "$DIR"
+if [[ "${CLEANUP:-}" == 0 ]]; then
+    echo "leaving logs in $DIR"
+else
+    echo "cleaning up $DIR"
+    rm -rf "$DIR"
+fi
