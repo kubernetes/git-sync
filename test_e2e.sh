@@ -1654,8 +1654,12 @@ function e2e::ssh() {
     IP=$(docker_ip "$CTR")
     git -C "$REPO" commit -qam "$FUNCNAME"
 
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
-        --one-time \
+        --wait=0.1 \
         --ssh \
         --ssh-known-hosts=false \
         --repo="test@$IP:/src" \
@@ -1663,10 +1667,26 @@ function e2e::ssh() {
         --rev=HEAD \
         --root="$ROOT" \
         --dest="link" \
-        >> "$1" 2>&1
+        >> "$1" 2>&1 &
+    sleep 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
 }
 
 ##############################################
