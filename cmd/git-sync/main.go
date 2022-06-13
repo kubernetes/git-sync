@@ -414,14 +414,6 @@ func main() {
 		}
 	}
 
-	if *flAskPassURL != "" {
-		if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
-			askpassCount.WithLabelValues(metricKeyError).Inc()
-			handleError(false, "ERROR: failed to call ASKPASS callback URL: %v", err)
-		}
-		askpassCount.WithLabelValues(metricKeySuccess).Inc()
-	}
-
 	// Set additional configs we want, but users might override.
 	if err := setupDefaultGitConfigs(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: can't set default git configs: %v\n", err)
