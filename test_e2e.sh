@@ -928,11 +928,11 @@ function e2e::askpass_url() {
         --root="$ROOT" \
         --dest="link" \
         >> "$1" 2>&1 || true
-    docker_kill "$CTR"
     # check for failure
     assert_file_absent "$ROOT"/link/file
 
     # run with askpass_url service with correct password
+    docker_kill "$CTR"
     CTR=$(docker_run \
         e2e/test/test-ncsvr \
         80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password"')
@@ -948,7 +948,6 @@ function e2e::askpass_url() {
         --root="$ROOT" \
         --dest="link" \
         >> "$1" 2>&1
-    docker_kill "$CTR"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -1122,7 +1121,6 @@ function e2e::webhook_success() {
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 2 called $HITS times"
     fi
-    docker_kill "$CTR"
 }
 
 ##############################################
@@ -1157,9 +1155,9 @@ function e2e::webhook_fail_retry() {
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 1 called $HITS times"
     fi
-    docker_kill "$CTR"
 
     # Now return 200, ensure that it gets called
+    docker_kill "$CTR"
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         --ip="$IP" \
@@ -1171,7 +1169,6 @@ function e2e::webhook_fail_retry() {
     if [[ "$HITS" < 1 ]]; then
         fail "webhook 2 called $HITS times"
     fi
-    docker_kill "$CTR"
 }
 
 ##############################################
@@ -1207,8 +1204,6 @@ function e2e::webhook_success_once() {
     if [[ "$HITS" != 1 ]]; then
         fail "webhook called $HITS times"
     fi
-
-    docker_kill "$CTR"
 }
 
 ##############################################
@@ -1244,7 +1239,6 @@ function e2e::webhook_fail_retry_once() {
     if [[ "$HITS" != 1 ]]; then
         fail "webhook called $HITS times"
     fi
-    docker_kill "$CTR"
 }
 
 ##############################################
@@ -1281,7 +1275,6 @@ function e2e::webhook_fire_and_forget() {
     if [[ "$HITS" < 1 ]]; then
         fail "webhook called $HITS times"
     fi
-    docker_kill "$CTR"
 }
 
 ##############################################
