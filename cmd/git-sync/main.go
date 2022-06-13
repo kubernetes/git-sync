@@ -520,16 +520,15 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
+			failCount++
 			updateSyncMetrics(metricKeyError, start)
-			if *flMaxSyncFailures != -1 && failCount >= *flMaxSyncFailures {
+			if *flMaxSyncFailures != -1 && failCount > *flMaxSyncFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
 			}
 
-			failCount++
-			log.Error(err, "unexpected error syncing repo, will retry")
-			log.V(0).Info("waiting before retrying", "waitTime", waitTime(*flWait))
+			log.Error(err, "unexpected error syncing repo, will retry", "failCount", failCount, "waitTime", waitTime(*flWait))
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
@@ -581,6 +580,9 @@ func main() {
 			initialSync = false
 		}
 
+		if failCount > 0 {
+			log.V(5).Info("resetting failure count", "failCount", failCount)
+		}
 		failCount = 0
 		log.DeleteErrorFile()
 		log.V(1).Info("next sync", "wait_time", waitTime(*flWait))
