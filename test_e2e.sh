@@ -1052,14 +1052,14 @@ function e2e::password_correct_password() {
 }
 
 ##############################################
-# Test askpass-url
+# Test askpass-url with bad password
 ##############################################
-function e2e::askpass_url() {
-    echo "$FUNCNAME 1" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
+function e2e::askpass_url_wrong_password() {
     # run the askpass_url service with wrong password
+    HITLOG="$WORK/hitlog"
+    cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
         80 '
             echo "HTTP/1.1 200 OK"
@@ -1082,10 +1082,17 @@ function e2e::askpass_url() {
 
     # check for failure
     assert_file_absent "$ROOT"/link/file
+}
 
+##############################################
+# Test askpass-url
+##############################################
+function e2e::askpass_url() {
     # run with askpass_url service with correct password
-    docker_kill "$CTR"
+    HITLOG="$WORK/hitlog"
+    cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
         80 '
             echo "HTTP/1.1 200 OK"
@@ -1095,16 +1102,98 @@ function e2e::askpass_url() {
             ')
     IP=$(docker_ip "$CTR")
 
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
     GIT_SYNC \
         --git="$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
-        --one-time \
+        --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
         --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1
+        >> "$1" 2>&1 &
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+}
+
+##############################################
+# Test askpass-url where the URL is flaky
+##############################################
+function e2e::askpass_url_flaky() {
+    # run with askpass_url service which alternates good/bad replies.
+    HITLOG="$WORK/hitlog"
+    cat /dev/null > "$HITLOG"
+    CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
+        e2e/test/test-ncsvr \
+        80 '
+            echo "HTTP/1.1 200 OK"
+            echo
+            if [ -f /tmp/flag ]; then
+                echo "username=my-username"
+               echo "password=my-password"
+                rm /tmp/flag
+            else
+                echo "username=my-username"
+                echo "password=wrong"
+                touch /tmp/flag
+            fi
+            ')
+    IP=$(docker_ip "$CTR")
+
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --git="$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-sync-failures=2 \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    sleep 3
+
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
