@@ -195,9 +195,9 @@ test: $(BUILD_DIRS)
 	@./test_e2e.sh
 
 TEST_TOOLS := $(shell ls _test_tools)
-test-tools: $(foreach tool, $(TEST_TOOLS), .container.test_tool.$(tool))
+test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
-.container.test_tool.%: _test_tools/% _test_tools/%/*
+.container-test_tool.%: _test_tools/% _test_tools/%/*
 	@docker build -t $(REGISTRY)/test/$$(basename $<) $<
 	@docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
