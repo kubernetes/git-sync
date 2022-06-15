@@ -95,7 +95,7 @@ FROM scratch
 COPY --from=prep / /
 
 # Run as non-root by default.  There's simply no reason to run as root.
-USER 65533:65533
+USER 101:65533
 
 # Setting HOME ensures that whatever UID this ultimately runs as can write to
 # files like ~/.gitconfig.
