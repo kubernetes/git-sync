@@ -49,8 +49,6 @@
 #############################################################################
 FROM {ARG_FROM} as prep
 
-RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
-        /etc/apt/sources.list.d/backports.list
 RUN apt-get update
 RUN apt-get -y upgrade
 RUN apt-get -y install --no-install-recommends \
@@ -60,8 +58,6 @@ RUN apt-get -y install --no-install-recommends \
         openssh-client \
         git
 # We want a newer git than the norm.
-RUN apt-get -y -t buster-backports install --no-install-recommends \
-        git
 RUN apt-get -y autoremove
 RUN rm -rf /var/lib/apt/lists/*
 
