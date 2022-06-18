@@ -49,16 +49,15 @@
 #############################################################################
 FROM {ARG_FROM} as prep
 
-RUN apt-get update
-RUN apt-get -y upgrade
-RUN apt-get -y install --no-install-recommends \
+RUN apt-get -q -y update
+RUN apt-get -q -y upgrade
+RUN apt-get -q -y install --no-install-recommends \
         ca-certificates \
         coreutils \
         socat \
         openssh-client \
         git
-# We want a newer git than the norm.
-RUN apt-get -y autoremove
+RUN apt-get -q -y autoremove
 RUN rm -rf /var/lib/apt/lists/*
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
