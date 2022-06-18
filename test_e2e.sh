@@ -868,9 +868,9 @@ function e2e::fetch_skip_depth_1() {
 }
 
 ##############################################
-# Test password
+# Test password auth with the wrong password
 ##############################################
-function e2e::password() {
+function e2e::password_wrong_password() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
@@ -888,6 +888,14 @@ function e2e::password() {
         >> "$1" 2>&1 || true
     # check for failure
     assert_file_absent "$ROOT"/link/file
+}
+
+##############################################
+# Test password auth with the correct password
+##############################################
+function e2e::password_correct_password() {
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # run with askpass_git with correct password
     GIT_SYNC \
