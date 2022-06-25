@@ -123,7 +123,7 @@ docker run -d \
 | `--ssh-known-hosts-file`   | GIT_SSH_KNOWN_HOSTS_FILE        | "/etc/git-secret/known_hosts" | the known_hosts file to use |
 | `--add-user`               | GIT_SYNC_ADD_USER               | false                         | add a record to /etc/passwd for the current UID/GID (needed to use SSH with a different UID) |
 | `--cookie-file`            | GIT_COOKIE_FILE                 | false                         | use git cookiefile |
-| `--askpass-url`            | GIT_ASKPASS_URL                 | ""                            | the URL for GIT_ASKPASS callback |
+| `--askpass-url`            | GIT_ASKPASS_URL                 | ""                            | the URL to query for a username and password for git auth |
 
 ## Flags which configure hooks
 
