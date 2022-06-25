@@ -384,22 +384,23 @@ func main() {
 		}
 	}
 
+	// From here on, non-fatal output goes through logging.
+	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
+
 	// This context is used only for git credentials initialization. There are no long-running operations like
 	// `git clone`, so initTimeout set to 30 seconds should be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 
 	// Set various configs we want, but users might override.
 	if err := setupDefaultGitConfigs(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't set default git configs: %v\n", err)
-		os.Exit(1)
+		handleError(false, "ERROR: can't set default git configs: %v\n", err)
 	}
 
 	if *flUsername != "" {
 		if *flPasswordFile != "" {
 			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
 			if err != nil {
-				log.Error(err, "ERROR: can't read password file")
-				os.Exit(1)
+				handleError(false, "ERROR: can't read password file")
 			}
 			*flPassword = string(passwordFileBytes)
 		}
@@ -423,8 +424,7 @@ func main() {
 	// This needs to be after all other git-related config flags.
 	if *flGitConfig != "" {
 		if err := setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: can't set additional git configs: %v\n", err)
-			os.Exit(1)
+			handleError(false, "ERROR: can't set additional git configs: %v\n", err)
 		}
 	}
 
@@ -461,9 +461,6 @@ func main() {
 			http.Serve(ln, mux)
 		}()
 	}
-
-	// From here on, output goes through logging.
-	log.V(0).Info("starting up", "pid", os.Getpid(), "args", os.Args)
 
 	// Startup webhooks goroutine
 	var webhookRunner *hook.HookRunner
