@@ -2050,7 +2050,7 @@ if [[ "$#" == 0 ]]; then
 fi
 
 # Build it
-make container REGISTRY=e2e VERSION="${E2E_TAG}"
+make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
 make test-tools REGISTRY=e2e
 
 function finish() {
