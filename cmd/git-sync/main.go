@@ -316,27 +316,27 @@ func main() {
 	}
 
 	if *flRepo == "" {
-		handleError(log, true, "ERROR: --repo must be specified")
+		handleConfigError(log, true, "ERROR: --repo must be specified")
 	}
 
 	if *flDepth < 0 { // 0 means "no limit"
-		handleError(log, true, "ERROR: --depth must be greater than or equal to 0")
+		handleConfigError(log, true, "ERROR: --depth must be greater than or equal to 0")
 	}
 
 	switch submodulesMode(*flSubmodules) {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
-		handleError(log, true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+		handleConfigError(log, true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
 	}
 
 	switch *flGitGC {
 	case gcAuto, gcAlways, gcAggressive, gcOff:
 	default:
-		handleError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
+		handleConfigError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
 	if *flRoot == "" {
-		handleError(log, true, "ERROR: --root must be specified")
+		handleConfigError(log, true, "ERROR: --root must be specified")
 	}
 
 	if *flDest != "" {
@@ -347,21 +347,21 @@ func main() {
 		*flLink = parts[len(parts)-1]
 	}
 	if strings.HasPrefix(filepath.Base(*flLink), ".") {
-		handleError(log, true, "ERROR: --link must not start with '.'")
+		handleConfigError(log, true, "ERROR: --link must not start with '.'")
 	}
 
 	if *flWait != 0 {
 		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
-		handleError(log, true, "ERROR: --period must be at least 10ms")
+		handleConfigError(log, true, "ERROR: --period must be at least 10ms")
 	}
 
 	if *flTimeout != 0 {
 		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
-		handleError(log, true, "ERROR: --sync-timeout must be at least 10ms")
+		handleConfigError(log, true, "ERROR: --sync-timeout must be at least 10ms")
 	}
 
 	if *flSyncHookCommand != "" {
@@ -369,56 +369,56 @@ func main() {
 	}
 	if *flExechookCommand != "" {
 		if *flExechookTimeout < time.Second {
-			handleError(log, true, "ERROR: --exechook-timeout must be at least 1s")
+			handleConfigError(log, true, "ERROR: --exechook-timeout must be at least 1s")
 		}
 		if *flExechookBackoff < time.Second {
-			handleError(log, true, "ERROR: --exechook-backoff must be at least 1s")
+			handleConfigError(log, true, "ERROR: --exechook-backoff must be at least 1s")
 		}
 	}
 
 	if *flWebhookURL != "" {
 		if *flWebhookStatusSuccess < -1 {
-			handleError(log, true, "ERROR: --webhook-success-status must be a valid HTTP code or -1")
+			handleConfigError(log, true, "ERROR: --webhook-success-status must be a valid HTTP code or -1")
 		}
 		if *flWebhookTimeout < time.Second {
-			handleError(log, true, "ERROR: --webhook-timeout must be at least 1s")
+			handleConfigError(log, true, "ERROR: --webhook-timeout must be at least 1s")
 		}
 		if *flWebhookBackoff < time.Second {
-			handleError(log, true, "ERROR: --webhook-backoff must be at least 1s")
+			handleConfigError(log, true, "ERROR: --webhook-backoff must be at least 1s")
 		}
 	}
 
 	if *flPassword != "" && *flPasswordFile != "" {
-		handleError(log, false, "ERROR: only one of --password and --password-file may be specified")
+		handleConfigError(log, true, "ERROR: only one of --password and --password-file may be specified")
 	}
 	if *flUsername != "" {
 		if *flPassword == "" && *flPasswordFile == "" {
-			handleError(log, true, "ERROR: --password or --password-file must be set when --username is specified")
+			handleConfigError(log, true, "ERROR: --password or --password-file must be set when --username is specified")
 		}
 	}
 
 	if *flSSH {
 		if *flUsername != "" {
-			handleError(log, false, "ERROR: only one of --ssh and --username may be specified")
+			handleConfigError(log, true, "ERROR: only one of --ssh and --username may be specified")
 		}
 		if *flPassword != "" {
-			handleError(log, false, "ERROR: only one of --ssh and --password may be specified")
+			handleConfigError(log, true, "ERROR: only one of --ssh and --password may be specified")
 		}
 		if *flPasswordFile != "" {
-			handleError(log, false, "ERROR: only one of --ssh and --password-file may be specified")
+			handleConfigError(log, true, "ERROR: only one of --ssh and --password-file may be specified")
 		}
 		if *flAskPassURL != "" {
-			handleError(log, false, "ERROR: only one of --ssh and --askpass-url may be specified")
+			handleConfigError(log, true, "ERROR: only one of --ssh and --askpass-url may be specified")
 		}
 		if *flCookieFile {
-			handleError(log, false, "ERROR: only one of --ssh and --cookie-file may be specified")
+			handleConfigError(log, true, "ERROR: only one of --ssh and --cookie-file may be specified")
 		}
 		if *flSSHKeyFile == "" {
-			handleError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is specified")
+			handleConfigError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is specified")
 		}
 		if *flSSHKnownHosts {
 			if *flSSHKnownHostsFile == "" {
-				handleError(log, true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
+				handleConfigError(log, true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
 			}
 		}
 	}
@@ -490,9 +490,9 @@ func main() {
 	// no long-running operations like `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-	// Set additional configs we want, but users might override.
+	// Set various configs we want, but users might override.
 	if err := git.setupDefaultGitConfigs(ctx); err != nil {
-		log.Error(err, "ERROR: can't set default git configs")
+		log.Error(err, "can't set default git configs")
 		os.Exit(1)
 	}
 
@@ -500,27 +500,27 @@ func main() {
 		if *flPasswordFile != "" {
 			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
 			if err != nil {
-				log.Error(err, "ERROR: can't read password file")
+				log.Error(err, "can't read password file", "file", *flPasswordFile)
 				os.Exit(1)
 			}
 			*flPassword = string(passwordFileBytes)
 		}
 		if err := git.StoreCredentials(ctx, *flUsername, *flPassword); err != nil {
-			log.Error(err, "ERROR: can't store git credentials")
+			log.Error(err, "can't store git credentials")
 			os.Exit(1)
 		}
 	}
 
 	if *flSSH {
 		if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFile, *flSSHKnownHostsFile); err != nil {
-			log.Error(err, "ERROR: can't set up git SSH")
+			log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFile, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
 			os.Exit(1)
 		}
 	}
 
 	if *flCookieFile {
 		if err := git.SetupCookieFile(ctx); err != nil {
-			log.Error(err, "ERROR: can't set up git cookie file")
+			log.Error(err, "can't set up git cookie file")
 			os.Exit(1)
 		}
 	}
@@ -528,7 +528,7 @@ func main() {
 	// This needs to be after all other git-related config flags.
 	if *flGitConfig != "" {
 		if err := git.setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
-			log.Error(err, "ERROR: can't set additional git configs")
+			log.Error(err, "can't set additional git configs", "configs", *flGitConfig)
 			os.Exit(1)
 		}
 	}
@@ -539,7 +539,7 @@ func main() {
 	if *flHTTPBind != "" {
 		ln, err := net.Listen("tcp", *flHTTPBind)
 		if err != nil {
-			log.Error(err, "ERROR: failed to bind HTTP endpoint", "endpoint", *flHTTPBind)
+			log.Error(err, "can't bind HTTP endpoint", "endpoint", *flHTTPBind)
 			os.Exit(1)
 		}
 		mux := http.NewServeMux()
@@ -814,9 +814,10 @@ func sleepForever() {
 	os.Exit(0)
 }
 
-// handleError prints the error to the standard error, prints the usage if the `printUsage` flag is true,
-// exports the error to the error file and exits the process with the exit code.
-func handleError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
+// handleConfigError prints the error to the standard error, prints the usage
+// if the `printUsage` flag is true, exports the error to the error file and
+// exits the process with the exit code.
+func handleConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
 	s := fmt.Sprintf(format, a...)
 	fmt.Fprintln(os.Stderr, s)
 	if printUsage {
