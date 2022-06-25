@@ -19,10 +19,10 @@ BIN := git-sync
 REGISTRY ?= gcr.io/k8s-staging-git-sync
 
 # This version-strategy uses git tags to set the version string
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION ?= $(shell git describe --tags --always --dirty)
 #
 # This version-strategy uses a manual value to set the version string
-#VERSION := 1.2.3
+#VERSION ?= 1.2.3
 
 ###
 ### These variables should not need tweaking.
