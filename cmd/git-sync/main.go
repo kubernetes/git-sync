@@ -20,6 +20,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -1316,9 +1317,16 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	return local, remote, nil
 }
 
+func md5sum(s string) string {
+	h := md5.New()
+	io.WriteString(h, s)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 // StoreCredentials stores the username and password for later use.
 func (git *repoSync) StoreCredentials(ctx context.Context, username, password string) error {
 	git.log.V(3).Info("storing git credentials")
+	git.log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
 	_, err := git.run.RunWithStdin(ctx, "", nil, creds, git.cmd, "credential", "approve")
