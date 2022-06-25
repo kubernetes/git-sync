@@ -1039,13 +1039,29 @@ function e2e::password_correct_password() {
         --git="$ASKPASS_GIT" \
         --username="my-username" \
         --password="my-password" \
-        --one-time \
+        --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
         --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1
+        >> "$1" 2>&1 &
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    sleep 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
