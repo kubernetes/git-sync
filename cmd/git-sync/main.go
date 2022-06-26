@@ -405,9 +405,6 @@ func main() {
 			}
 			*flPassword = string(passwordFileBytes)
 		}
-		if err := storeGitCredentials(ctx, *flUsername, *flPassword, *flRepo); err != nil {
-			handleError(false, "ERROR: can't create .netrc file: %v", err)
-		}
 	}
 
 	if *flSSH {
@@ -504,13 +501,33 @@ func main() {
 		go exechookRunner.Run(context.Background())
 	}
 
+	// Craft a function that can be called to refresh credentials when needed.
+	refreshCreds := func(ctx context.Context) error {
+		// These should all be mutually-exclusive configs.
+		if *flUsername != "" {
+			if err := storeGitCredentials(ctx, *flUsername, *flPassword, *flRepo); err != nil {
+				return err
+			}
+		}
+		if *flAskPassURL != "" {
+			// When using an auth URL, the credentials can be dynamic, it needs to be
+			// re-fetched each time.
+			if err := callGitAskPassURL(ctx, *flAskPassURL); err != nil {
+				askpassCount.WithLabelValues(metricKeyError).Inc()
+				return err
+			}
+			askpassCount.WithLabelValues(metricKeySuccess).Inc()
+		}
+		return nil
+	}
+
 	initialSync := true
 	failCount := 0
 	for {
 		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, refreshCreds, *flSubmodules); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount > *flMaxSyncFailures {
@@ -1022,16 +1039,8 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authURL string, submoduleMode string) (bool, string, error) {
-	if authURL != "" {
-		// When using an auth URL, the credentials can be dynamic, it needs to be
-		// re-fetched each time.
-		if err := callGitAskPassURL(ctx, authURL); err != nil {
-			askpassCount.WithLabelValues(metricKeyError).Inc()
-			return false, "", fmt.Errorf("failed to get credentials from auth URL: %v", err)
-		}
-		askpassCount.WithLabelValues(metricKeySuccess).Inc()
-	}
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, refreshCreds func(context.Context) error, submoduleMode string) (bool, string, error) {
+	refreshCreds(ctx)
 
 	currentWorktreeGit := filepath.Join(dest, ".git")
 	var hash string
@@ -1226,7 +1235,7 @@ func setupDefaultGitConfigs(ctx context.Context) error {
 	}, {
 		// How to manage credentials (for those modes that need it).
 		key: "credential.helper",
-		val: "store",
+		val: "cache --timeout 3600",
 	}}
 	for _, kv := range configs {
 		if _, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
