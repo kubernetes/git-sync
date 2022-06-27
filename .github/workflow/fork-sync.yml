@@ -1,0 +1,18 @@
+name: Fork Sync
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # every 30 minutes
+  workflow_dispatch: # on button click
+
+jobs:
+  sync:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: tgymnich/fork-sync@v1.4
+        with:
+          token: ${{ secrets.DEV_PUSH_TOKEN }}
+          base: release-3.x
+          head: release-3.x
