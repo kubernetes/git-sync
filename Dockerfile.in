@@ -51,18 +51,18 @@ FROM {ARG_FROM} as prep
 
 RUN echo "deb http://deb.debian.org/debian/ buster-backports main contrib" > \
         /etc/apt/sources.list.d/backports.list
-RUN apt-get update
-RUN apt-get -y upgrade
-RUN apt-get -y install --no-install-recommends \
+RUN apt-get -q -y update
+RUN apt-get -q -y upgrade
+RUN apt-get -q -y install --no-install-recommends \
         ca-certificates \
         coreutils \
         socat \
         openssh-client \
         git
 # We want a newer git than the norm.
-RUN apt-get -y -t buster-backports install --no-install-recommends \
+RUN apt-get -q -y -t buster-backports install --no-install-recommends \
         git
-RUN apt-get -y autoremove
+RUN apt-get -q -y autoremove
 RUN rm -rf /var/lib/apt/lists/*
 
 # By default we will run as this user...
