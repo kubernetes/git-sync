@@ -41,7 +41,7 @@ BASEIMAGE ?= k8s.gcr.io/build-image/debian-base:bullseye-v1.3.0
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.17-alpine
+BUILD_IMAGE ?= golang:1.18-alpine
 
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
