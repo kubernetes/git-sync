@@ -177,7 +177,7 @@ function GIT_SYNC() {
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
             --add-user \
-            --v=5 \
+            --v=6 \
             "$@"
 }
 
