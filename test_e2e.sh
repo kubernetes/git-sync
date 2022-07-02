@@ -176,7 +176,7 @@ function GIT_SYNC() {
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
-            -v=5 \
+            -v=6 \
             --add-user \
             "$@"
 }
