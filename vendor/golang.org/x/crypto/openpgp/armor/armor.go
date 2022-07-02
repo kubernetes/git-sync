@@ -4,6 +4,12 @@
 
 // Package armor implements OpenPGP ASCII Armor, see RFC 4880. OpenPGP Armor is
 // very similar to PEM except that it has an additional CRC checksum.
+//
+// Deprecated: this package is unmaintained except for security fixes. New
+// applications should consider a more focused, modern alternative to OpenPGP
+// for their specific task. If you are required to interoperate with OpenPGP
+// systems and need a maintained package, consider a community fork.
+// See https://golang.org/issue/44226.
 package armor // import "golang.org/x/crypto/openpgp/armor"
 
 import (
@@ -62,10 +68,11 @@ var armorEndOfLine = []byte("-----")
 // lineReader wraps a line based reader. It watches for the end of an armor
 // block and records the expected CRC value.
 type lineReader struct {
-	in  *bufio.Reader
-	buf []byte
-	eof bool
-	crc uint32
+	in     *bufio.Reader
+	buf    []byte
+	eof    bool
+	crc    uint32
+	crcSet bool
 }
 
 func (l *lineReader) Read(p []byte) (n int, err error) {
@@ -85,6 +92,11 @@ func (l *lineReader) Read(p []byte) (n int, err error) {
 	}
 	if isPrefix {
 		return 0, ArmorCorrupt
+	}
+
+	if bytes.HasPrefix(line, armorEnd) {
+		l.eof = true
+		return 0, io.EOF
 	}
 
 	if len(line) == 5 && line[0] == '=' {
@@ -108,6 +120,7 @@ func (l *lineReader) Read(p []byte) (n int, err error) {
 		}
 
 		l.eof = true
+		l.crcSet = true
 		return 0, io.EOF
 	}
 
@@ -141,10 +154,8 @@ func (r *openpgpReader) Read(p []byte) (n int, err error) {
 	n, err = r.b64Reader.Read(p)
 	r.currentCRC = crc24(r.currentCRC, p[:n])
 
-	if err == io.EOF {
-		if r.lReader.crc != uint32(r.currentCRC&crc24Mask) {
-			return 0, ArmorCorrupt
-		}
+	if err == io.EOF && r.lReader.crcSet && r.lReader.crc != uint32(r.currentCRC&crc24Mask) {
+		return 0, ArmorCorrupt
 	}
 
 	return

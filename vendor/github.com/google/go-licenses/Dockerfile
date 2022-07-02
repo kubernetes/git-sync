@@ -1,4 +1,4 @@
-FROM golang:1.13 as build
+FROM golang:1.18 as build
 
 WORKDIR /go-licenses
 

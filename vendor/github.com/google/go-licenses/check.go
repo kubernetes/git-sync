@@ -24,9 +24,11 @@ import (
 )
 
 var (
-	checkCmd = &cobra.Command{
-		Use:   "check <package>",
-		Short: "Checks whether licenses for a package are not Forbidden.",
+	checkHelp = "Checks whether licenses for a package are not Forbidden."
+	checkCmd  = &cobra.Command{
+		Use:   "check <package> [package...]",
+		Short: checkHelp,
+		Long:  checkHelp + packageHelp,
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  checkMain,
 	}
@@ -42,7 +44,7 @@ func checkMain(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	libs, err := licenses.Libraries(context.Background(), classifier, args...)
+	libs, err := licenses.Libraries(context.Background(), classifier, ignore, args...)
 	if err != nil {
 		return err
 	}
