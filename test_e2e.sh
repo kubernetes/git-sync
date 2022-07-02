@@ -915,7 +915,12 @@ function e2e::askpass_url() {
     # run the askpass-url service with wrong password
     CTR=$(docker_run \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=wrong"')
+        80 '
+            echo "HTTP/1.1 200 OK"
+            echo
+            echo "username=my-username"
+            echo "password=wrong"
+            ')
     IP=$(docker_ip "$CTR")
 
     GIT_SYNC \
@@ -935,7 +940,12 @@ function e2e::askpass_url() {
     # run with askpass_url service with correct password
     CTR=$(docker_run \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 200 OK\r\n\r\nusername=my-username\npassword=my-password"')
+        80 '
+            echo "HTTP/1.1 200 OK"
+            echo
+            echo "username=my-username"
+            echo "password=my-password"
+            ')
     IP=$(docker_ip "$CTR")
 
     GIT_SYNC \
@@ -1089,7 +1099,7 @@ function e2e::webhook_success() {
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 200 OK\r\n"')
+        80 'echo "HTTP/1.1 200 OK"')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1136,7 +1146,7 @@ function e2e::webhook_fail_retry() {
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 500 Internal Server Error\r\n"')
+        80 'echo "HTTP/1.1 500 Internal Server Error"')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1165,7 +1175,7 @@ function e2e::webhook_fail_retry() {
         --ip="$IP" \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 200 OK\r\n"')
+        80 'echo "HTTP/1.1 200 OK"')
     sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
     if [[ "$HITS" < 1 ]]; then
@@ -1185,7 +1195,7 @@ function e2e::webhook_success_once() {
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'sleep 3 && echo -e "HTTP/1.1 200 OK\r\n"')
+        80 'sleep 3 && echo "HTTP/1.1 200 OK"')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1222,7 +1232,7 @@ function e2e::webhook_fail_retry_once() {
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'sleep 3 && echo -e "HTTP/1.1 500 Internal Server Error\r\n"')
+        80 'sleep 3 && echo "HTTP/1.1 500 Internal Server Error"')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1258,7 +1268,7 @@ function e2e::webhook_fire_and_forget() {
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
-        80 'echo -e "HTTP/1.1 404 Not Found\r\n"')
+        80 'echo "HTTP/1.1 404 Not Found"')
     IP=$(docker_ip "$CTR")
 
     # First sync
