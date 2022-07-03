@@ -19,10 +19,10 @@ BIN := git-sync
 REGISTRY ?= gcr.io/k8s-staging-git-sync
 
 # This version-strategy uses git tags to set the version string
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION ?= $(shell git describe --tags --always --dirty)
 #
 # This version-strategy uses a manual value to set the version string
-#VERSION := 1.2.3
+#VERSION ?= 1.2.3
 
 ###
 ### These variables should not need tweaking.
@@ -130,6 +130,9 @@ $(LICENSES):
 	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
 	@chmod -R a+rx $(LICENSES)
 
+# Set this to any value to skip repeating the apt-get steps.  Caution.
+ALLOW_STALE_APT ?=
+
 container: .container-$(DOTFILE_IMAGE) container-name
 .container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in
 	@sed \
@@ -138,15 +141,23 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    -e 's|{ARG_OS}|$(OS)|g'          \
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
-	@docker buildx build                       \
-	    --no-cache                             \
-	    --progress=plain                       \
-	    --load                                 \
-	    --platform "$(OS)/$(ARCH)"             \
-	    --build-arg HTTP_PROXY=$(HTTP_PROXY)   \
-	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY) \
-	    -t $(IMAGE):$(TAG)                     \
-	    -f .dockerfile-$(OS)_$(ARCH)           \
+	@HASH_LICENSES=$$(find $(LICENSES) -type f                    \
+	    | xargs md5sum | md5sum | cut -f1 -d' ');                 \
+	 HASH_BINARY=$$(md5sum bin/$(OS)_$(ARCH)/$(BIN)               \
+	    | cut -f1 -d' ');                                         \
+	 FORCE=0;                                                     \
+	 if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
+	 docker buildx build                                          \
+	    --build-arg FORCE_REBUILD="$$FORCE"                       \
+	    --build-arg HASH_LICENSES="$$HASH_LICENSES"               \
+	    --build-arg HASH_BINARY="$$HASH_BINARY"                   \
+	    --progress=plain                                          \
+	    --load                                                    \
+	    --platform "$(OS)/$(ARCH)"                                \
+	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                      \
+	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                    \
+	    -t $(IMAGE):$(TAG)                                        \
+	    -f .dockerfile-$(OS)_$(ARCH)                              \
 	    .
 	@docker images -q $(IMAGE):$(TAG) > $@
 
