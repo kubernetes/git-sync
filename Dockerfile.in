@@ -49,6 +49,10 @@
 #############################################################################
 FROM {ARG_FROM} as prep
 
+# When building, we can pass a unique value (e.g. `date +%s`) for this arg,
+# which will force a rebuild from here (by invalidating docker's cache).
+ARG FORCE_REBUILD=0
+
 RUN apt-get -q -y update
 RUN apt-get -q -y upgrade
 RUN apt-get -q -y install --no-install-recommends \
@@ -78,11 +82,19 @@ RUN echo "git-sync:x:65533:git-sync" >> /etc/group
 # are handling permissions themselves.
 RUN mkdir -m 02775 /git && chown 65533:65533 /git
 
-# Add the platform-specific binary.
-COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
+# When building, we can pass a hash of the licenses tree, which docker checks
+# against its cache and can force a rebuild from here.
+ARG HASH_LICENSES=0
 
 # Add third-party licenses.
 COPY .licenses/ /LICENSES/
+
+# When building, we can pass a hash of the binary, which docker checks against
+# its cache and can force a rebuild from here.
+ARG HASH_BINARY=0
+
+# Add the platform-specific binary.
+COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 
 #############################################################################
 # Now we make a "clean" final image.

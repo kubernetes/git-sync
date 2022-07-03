@@ -98,6 +98,10 @@ function docker_kill() {
     docker kill "$1" >/dev/null
 }
 
+# E2E_TAG is the tag used for docker builds.  This is needed because docker
+# tags are system-global, but one might have multiple repos checked out.
+E2E_TAG=$(git rev-parse --show-toplevel | sed 's|/|_|g')
+
 # DIR is the directory in which all this test's state lives.
 RUNID="${RANDOM}${RANDOM}"
 DIR="/tmp/git-sync-e2e.$RUNID"
@@ -175,7 +179,7 @@ function GIT_SYNC() {
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         --env XDG_CONFIG_HOME=$DIR \
-        e2e/git-sync:$(make -s version)__$(go env GOOS)_$(go env GOARCH) \
+        e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
             -v=6 \
             --add-user \
             "$@"
@@ -2205,7 +2209,7 @@ if [[ "$#" == 0 ]]; then
 fi
 
 # Build it
-make container REGISTRY=e2e VERSION=$(make -s version)
+make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
 make test-tools REGISTRY=e2e
 
 function finish() {
