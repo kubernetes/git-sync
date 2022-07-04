@@ -24,6 +24,10 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 # This version-strategy uses a manual value to set the version string
 #VERSION ?= 1.2.3
 
+# These are passed to docker when building and testing.
+HTTP_PROXY ?=
+HTTPS_PROXY ?=
+
 ###
 ### These variables should not need tweaking.
 ###
@@ -43,6 +47,21 @@ TAG := $(VERSION)__$(OS)_$(ARCH)
 
 BUILD_IMAGE ?= golang:1.18-alpine
 
+DBG_MAKEFILE ?=
+ifneq ($(DBG_MAKEFILE),1)
+    # If we're not debugging the Makefile, don't echo recipes.
+    MAKEFLAGS += -s
+endif
+
+# It's necessary to set this because some environments don't link sh -> bash.
+SHELL := /usr/bin/env bash -o errexit -o pipefail -o nounset
+
+# We don't need make's built-in rules.
+MAKEFLAGS += --no-builtin-rules
+# Be pedantic about undefined variables.
+MAKEFLAGS += --warn-undefined-variables
+.SUFFIXES:
+
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
 # If you want to build AND push all containers, see the 'all-push' rule.
@@ -52,19 +71,19 @@ all: build
 # because make pattern rules don't match with embedded '/' characters.
 
 build-%:
-	@$(MAKE) build                        \
+	$(MAKE) build                         \
 	    --no-print-directory              \
 	    GOOS=$(firstword $(subst _, ,$*)) \
 	    GOARCH=$(lastword $(subst _, ,$*))
 
 container-%:
-	@$(MAKE) container                    \
+	$(MAKE) container                     \
 	    --no-print-directory              \
 	    GOOS=$(firstword $(subst _, ,$*)) \
 	    GOARCH=$(lastword $(subst _, ,$*))
 
 push-%:
-	@$(MAKE) push                         \
+	$(MAKE) push                          \
 	    --no-print-directory              \
 	    GOOS=$(firstword $(subst _, ,$*)) \
 	    GOARCH=$(lastword $(subst _, ,$*))
@@ -88,13 +107,13 @@ BUILD_DIRS :=             \
 # will not trigger further work if nothing has actually changed.
 OUTBIN = bin/$(OS)_$(ARCH)/$(BIN)
 $(OUTBIN): .go/$(OUTBIN).stamp
-	@true
+	true
 
 # This will build the binary under ./.go and update the real binary iff needed.
 .PHONY: .go/$(OUTBIN).stamp
 .go/$(OUTBIN).stamp: $(BUILD_DIRS)
-	@echo "making $(OUTBIN)"
-	@docker run                                                \
+	echo "making $(OUTBIN)"
+	docker run                                                 \
 	    -i                                                     \
 	    --rm                                                   \
 	    -u $$(id -u):$$(id -g)                                 \
@@ -112,7 +131,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	        VERSION=$(VERSION)                                 \
 	        ./build/build.sh                                   \
 	    "
-	@if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then \
+	if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then  \
 	    mv .go/$(OUTBIN) $(OUTBIN);            \
 	    date >$@;                              \
 	fi
@@ -123,56 +142,56 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 LICENSES = .licenses
 
 $(LICENSES):
-	@GOOS=$(shell go env GOHOSTOS)     \
-	 GOARCH=$(shell go env GOHOSTARCH) \
-	 go build -o ./bin/tools github.com/google/go-licenses
-	@rm -rf $(LICENSES)
-	@./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
-	@chmod -R a+rx $(LICENSES)
+	GOOS=$(shell go env GOHOSTOS)     \
+	GOARCH=$(shell go env GOHOSTARCH) \
+	go build -o ./bin/tools github.com/google/go-licenses
+	rm -rf $(LICENSES)
+	./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
+	chmod -R a+rx $(LICENSES)
 
 # Set this to any value to skip repeating the apt-get steps.  Caution.
 ALLOW_STALE_APT ?=
 
 container: .container-$(DOTFILE_IMAGE) container-name
 .container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in
-	@sed \
+	sed                                  \
 	    -e 's|{ARG_BIN}|$(BIN)|g'        \
 	    -e 's|{ARG_ARCH}|$(ARCH)|g'      \
 	    -e 's|{ARG_OS}|$(OS)|g'          \
 	    -e 's|{ARG_FROM}|$(BASEIMAGE)|g' \
 	    Dockerfile.in > .dockerfile-$(OS)_$(ARCH)
-	@HASH_LICENSES=$$(find $(LICENSES) -type f                    \
-	    | xargs md5sum | md5sum | cut -f1 -d' ');                 \
-	 HASH_BINARY=$$(md5sum bin/$(OS)_$(ARCH)/$(BIN)               \
-	    | cut -f1 -d' ');                                         \
-	 FORCE=0;                                                     \
-	 if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
-	 docker buildx build                                          \
-	    --build-arg FORCE_REBUILD="$$FORCE"                       \
-	    --build-arg HASH_LICENSES="$$HASH_LICENSES"               \
-	    --build-arg HASH_BINARY="$$HASH_BINARY"                   \
-	    --progress=plain                                          \
-	    --load                                                    \
-	    --platform "$(OS)/$(ARCH)"                                \
-	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                      \
-	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                    \
-	    -t $(IMAGE):$(TAG)                                        \
-	    -f .dockerfile-$(OS)_$(ARCH)                              \
+	HASH_LICENSES=$$(find $(LICENSES) -type f                    \
+	    | xargs md5sum | md5sum | cut -f1 -d' ');                \
+	HASH_BINARY=$$(md5sum bin/$(OS)_$(ARCH)/$(BIN)               \
+	    | cut -f1 -d' ');                                        \
+	FORCE=0;                                                     \
+	if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
+	docker buildx build                                          \
+	    --build-arg FORCE_REBUILD="$$FORCE"                      \
+	    --build-arg HASH_LICENSES="$$HASH_LICENSES"              \
+	    --build-arg HASH_BINARY="$$HASH_BINARY"                  \
+	    --progress=plain                                         \
+	    --load                                                   \
+	    --platform "$(OS)/$(ARCH)"                               \
+	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                     \
+	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                   \
+	    -t $(IMAGE):$(TAG)                                       \
+	    -f .dockerfile-$(OS)_$(ARCH)                             \
 	    .
-	@docker images -q $(IMAGE):$(TAG) > $@
+	docker images -q $(IMAGE):$(TAG) > $@
 
 container-name:
-	@echo "container: $(IMAGE):$(TAG)"
-	@echo
+	echo "container: $(IMAGE):$(TAG)"
+	echo
 
 push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
-	@docker push $(IMAGE):$(TAG)
-	@docker images -q $(IMAGE):$(TAG) > $@
+	docker push $(IMAGE):$(TAG)
+	docker images -q $(IMAGE):$(TAG) > $@
 
 push-name:
-	@echo "pushed: $(IMAGE):$(TAG)"
-	@echo
+	echo "pushed: $(IMAGE):$(TAG)"
+	echo
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
@@ -186,10 +205,10 @@ manifest-list: all-push
 	    --target $(REGISTRY)/$(BIN):$(VERSION)
 
 version:
-	@echo $(VERSION)
+	echo $(VERSION)
 
 test: $(BUILD_DIRS)
-	@docker run                                                \
+	docker run                                                 \
 	    -i                                                     \
 	    -u $$(id -u):$$(id -g)                                 \
 	    -v $$(pwd):/src                                        \
@@ -203,14 +222,14 @@ test: $(BUILD_DIRS)
 	    /bin/sh -c "                                           \
 	        ./build/test.sh $(SRC_DIRS)                        \
 	    "
-	@./test_e2e.sh
+	./test_e2e.sh
 
 TEST_TOOLS := $(shell ls _test_tools)
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
 .container-test_tool.%: _test_tools/% _test_tools/%/*
-	@docker build -t $(REGISTRY)/test/$$(basename $<) $<
-	@docker images -q $(REGISTRY)/test/$$(basename $<) > $@
+	docker build -t $(REGISTRY)/test/$$(basename $<) $<
+	docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
 
 # Help set up multi-arch build tools.  This assumes you have the tools
@@ -218,16 +237,16 @@ test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 # this.  See https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
 # for great context.
 multiarch-build-tools: .qemu-initialized
-	@docker buildx create --name git-sync --node git-sync-0
-	@docker buildx use git-sync
-	@docker buildx inspect --bootstrap
+	docker buildx create --name git-sync --node git-sync-0
+	docker buildx use git-sync
+	docker buildx inspect --bootstrap
 
 .qemu-initialized:
-	@docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-	@date > $@
+	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	date > $@
 
 $(BUILD_DIRS):
-	@mkdir -p $@
+	mkdir -p $@
 
 clean: container-clean bin-clean
 
