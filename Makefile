@@ -195,6 +195,7 @@ push-name:
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
+	echo "manifest-list: $(REGISTRY)/$(BIN):$(VERSION)"
 	platforms=$$(echo $(ALL_PLATFORMS) | sed 's/ /,/g');  \
 	manifest-tool                                         \
 	    --username=oauth2accesstoken                      \
