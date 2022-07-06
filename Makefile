@@ -39,7 +39,8 @@ ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 BASEIMAGE ?= k8s.gcr.io/build-image/debian-base:buster-v1.10.0
 
 IMAGE := $(REGISTRY)/$(BIN)
-TAG := $(VERSION)__$(OS)_$(ARCH)
+#TAG := $(VERSION)__$(OS)_$(ARCH)
+TAG := $(VERSION)
 
 BUILD_IMAGE ?= golang:1.17-alpine
 
