@@ -20,7 +20,11 @@ if [ -z "$1" -o -z "$2" ]; then
     exit 1
 fi
 
+F="/tmp/fifo.$RANDOM"
+
 while true; do
-    sh -c "$2" | nc -l -p "$1" -N -w0 >/dev/null
+    rm -f "$F"
+    mkfifo "$F"
+    cat "$F" | sh -c "$2" 2>&1 | nc -l -p "$1" -N -w1 > "$F"
     date >> /var/log/hits
 done
