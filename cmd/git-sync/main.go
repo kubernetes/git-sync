@@ -1246,11 +1246,11 @@ func (git *repoSync) ResolveRef(ctx context.Context, ref string) (string, error)
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
 func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
 	if git.authURL != "" {
-		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
+		// When using an auth URL, the credentials can be dynamic, it needs to be
 		// re-fetched each time.
 		if err := git.CallAskPassURL(ctx); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
-			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
+			return false, "", fmt.Errorf("failed to get credentials from auth URL: %v", err)
 		}
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
@@ -1317,7 +1317,7 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 // SetupAuth configures the local git repo to use a username and password when
 // accessing the repo.
 func (git *repoSync) SetupAuth(ctx context.Context, username, password string) error {
-	git.log.V(1).Info("setting up git credential store")
+	git.log.V(3).Info("storing git credentials")
 
 	_, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
@@ -1379,12 +1379,12 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 // CallAskPassURL consults the specified URL looking for git credentials in the
 // response.
 //
-// The expected ASKPASS callback output are below,
+// The expected URL callback output is below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
 //   username=xxx@example.com
 //   password=xxxyyyzzz
 func (git *repoSync) CallAskPassURL(ctx context.Context) error {
-	git.log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
+	git.log.V(2).Info("calling auth URL to get credentials")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
