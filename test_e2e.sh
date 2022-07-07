@@ -186,7 +186,6 @@ function GIT_SYNC() {
         --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
-        --env XDG_CONFIG_HOME=$DIR \
         e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
             --add-user \
             --v=6 \
