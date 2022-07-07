@@ -121,7 +121,7 @@ var flCookieFile = flag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
 	"use git cookiefile")
 
 var flAskPassURL = flag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
-	"the URL for GIT_ASKPASS callback")
+	"the URL to query for a username and password for git auth")
 
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
@@ -1025,11 +1025,11 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
 func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, authURL string, submoduleMode string) (bool, string, error) {
 	if authURL != "" {
-		// For ASKPASS Callback URL, the credentials behind is dynamic, it needs to be
+		// When using an auth URL, the credentials can be dynamic, it needs to be
 		// re-fetched each time.
 		if err := callGitAskPassURL(ctx, authURL); err != nil {
 			askpassCount.WithLabelValues(metricKeyError).Inc()
-			return false, "", fmt.Errorf("failed to call GIT_ASKPASS_URL: %v", err)
+			return false, "", fmt.Errorf("failed to get credentials from auth URL: %v", err)
 		}
 		askpassCount.WithLabelValues(metricKeySuccess).Inc()
 	}
@@ -1093,7 +1093,7 @@ func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, s
 }
 
 func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
-	log.V(1).Info("setting up git credential store")
+	log.V(3).Info("storing git credentials")
 
 	_, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", "credential.helper", "store")
 	if err != nil {
@@ -1155,12 +1155,12 @@ func setupGitCookieFile(ctx context.Context) error {
 	return nil
 }
 
-// The expected ASKPASS callback output are below,
+// The expected URL callback output is below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
 // username=xxx@example.com
 // password=xxxyyyzzz
 func callGitAskPassURL(ctx context.Context, url string) error {
-	log.V(1).Info("calling GIT_ASKPASS URL to get credentials")
+	log.V(2).Info("calling auth URL to get credentials")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
