@@ -73,9 +73,13 @@ function assert_file_contains() {
 
 # Helper: run a docker container.
 function docker_run() {
+    RM="--rm"
+    if [[ "${CLEANUP:-}" == 0 ]]; then
+        RM=""
+    fi
     docker run \
         -d \
-        --rm \
+        ${RM} \
         --label git-sync-e2e="$RUNID" \
         "$@"
     sleep 2 # wait for it to come up
@@ -158,9 +162,13 @@ touch $RUNLOG
 
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
+    RM="--rm"
+    if [[ "${CLEANUP:-}" == 0 ]]; then
+        RM=""
+    fi
     docker run \
         -i \
-        --rm \
+        ${RM} \
         --label git-sync-e2e="$RUNID" \
         --network="host" \
         -u $(id -u):$(id -g) \
