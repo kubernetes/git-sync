@@ -18,7 +18,7 @@ import (
 	"io/ioutil"
 
 	"golang.org/x/crypto/chacha20"
-	"golang.org/x/crypto/poly1305"
+	"golang.org/x/crypto/internal/poly1305"
 )
 
 const (
@@ -119,7 +119,7 @@ var cipherModes = map[string]*cipherMode{
 	chacha20Poly1305ID: {64, 0, newChaCha20Cipher},
 
 	// CBC mode is insecure and so is not included in the default config.
-	// (See http://www.isg.rhul.ac.uk/~kp/SandPfinal.pdf). If absolutely
+	// (See https://www.ieee-security.org/TC/SP2013/papers/4977a526.pdf). If absolutely
 	// needed, it's possible to specify a custom Config to enable it.
 	// You should expect that an active attacker can recover plaintext if
 	// you do.
@@ -393,6 +393,10 @@ func (c *gcmCipher) readCipherPacket(seqNum uint32, r io.Reader) ([]byte, error)
 		return nil, err
 	}
 	c.incIV()
+
+	if len(plain) == 0 {
+		return nil, errors.New("ssh: empty packet")
+	}
 
 	padding := plain[0]
 	if padding < 4 {
@@ -709,6 +713,10 @@ func (c *chacha20Poly1305Cipher) readCipherPacket(seqNum uint32, r io.Reader) ([
 
 	plain := c.buf[4:contentEnd]
 	s.XORKeyStream(plain, plain)
+
+	if len(plain) == 0 {
+		return nil, errors.New("ssh: empty packet")
+	}
 
 	padding := plain[0]
 	if padding < 4 {
