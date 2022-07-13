@@ -1782,10 +1782,10 @@ OPTIONS
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer --password-file or $GIT_SYNC_PASSWORD for
+            users should prefer --password-file or $GIT_SYNC_PASSWORD_FILE for
             specifying the password.
 
-    --password-file <string>, $GIT_SYNC_PASSWORD
+    --password-file <string>, $GIT_SYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
             sourced.
