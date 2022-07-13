@@ -430,7 +430,7 @@ func main() {
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
 		"home", os.Getenv("HOME"),
-		"args", os.Args)
+		"args", logSafeArgs(os.Args))
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
@@ -715,6 +715,30 @@ func main() {
 		cancel()
 		time.Sleep(*flPeriod)
 	}
+}
+
+// logSafeArgs makes sure any sensitive args (e.g. passwords) are redacted
+// before logging.
+func logSafeArgs(args []string) []string {
+	const redacted = "<REDACTED>"
+
+	ret := make([]string, len(args))
+	redact := false
+	for i, arg := range args {
+		if redact {
+			ret[i] = redacted
+			redact = false
+			continue
+		}
+		if arg == "--password" {
+			redact = true
+		}
+		if strings.HasPrefix(arg, "--password=") {
+			arg = "--password=" + redacted
+		}
+		ret[i] = arg
+	}
+	return ret
 }
 
 func normalizePath(path string) (string, error) {
