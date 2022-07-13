@@ -2251,7 +2251,7 @@ make test-tools REGISTRY=e2e
 
 function finish() {
   r=$?
-  trap "" INT EXIT
+  trap "" INT EXIT ERR
   if [[ $r != 0 ]]; then
     echo
     echo "the directory $DIR was not removed as it contains"\
@@ -2260,7 +2260,7 @@ function finish() {
   remove_containers
   exit $r
 }
-trap finish INT EXIT
+trap finish INT EXIT ERR
 
 echo
 echo "test root is $DIR"
