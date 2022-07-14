@@ -20,6 +20,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 
 import (
 	"context"
+	"crypto/md5"
 	"flag"
 	"fmt"
 	"io"
@@ -1090,8 +1091,15 @@ func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, s
 	return local, remote, nil
 }
 
+func md5sum(s string) string {
+	h := md5.New()
+	io.WriteString(h, s)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func storeGitCredentials(ctx context.Context, username, password, gitURL string) error {
 	log.V(3).Info("storing git credentials")
+	log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
 	_, err := cmdRunner.RunWithStdin(ctx, "", nil, creds, *flGitCmd, "credential", "approve")
