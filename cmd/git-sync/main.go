@@ -388,6 +388,12 @@ func main() {
 	// `git clone`, so initTimeout set to 30 seconds should be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 
+	// Set various configs we want, but users might override.
+	if err := setupDefaultGitConfigs(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: can't set default git configs: %v\n", err)
+		os.Exit(1)
+	}
+
 	if *flUsername != "" {
 		if *flPasswordFile != "" {
 			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
@@ -397,7 +403,7 @@ func main() {
 			}
 			*flPassword = string(passwordFileBytes)
 		}
-		if err := setupGitAuth(ctx, *flUsername, *flPassword, *flRepo); err != nil {
+		if err := storeGitCredentials(ctx, *flUsername, *flPassword, *flRepo); err != nil {
 			handleError(false, "ERROR: can't create .netrc file: %v", err)
 		}
 	}
@@ -412,12 +418,6 @@ func main() {
 		if err := setupGitCookieFile(ctx); err != nil {
 			handleError(false, "ERROR: can't set git cookie file: %v", err)
 		}
-	}
-
-	// Set additional configs we want, but users might override.
-	if err := setupDefaultGitConfigs(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't set default git configs: %v\n", err)
-		os.Exit(1)
 	}
 
 	// This needs to be after all other git-related config flags.
@@ -509,6 +509,7 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
+		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
 		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, *flAskPassURL, *flSubmodules); err != nil {
@@ -520,7 +521,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			log.Error(err, "unexpected error syncing repo, will retry", "failCount", failCount, "waitTime", waitTime(*flWait))
+			log.Error(err, "error syncing repo, will retry", "failCount", failCount, "waitTime", waitTime(*flWait))
 			cancel()
 			time.Sleep(waitTime(*flWait))
 			continue
@@ -1092,16 +1093,11 @@ func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, s
 	return local, remote, nil
 }
 
-func setupGitAuth(ctx context.Context, username, password, gitURL string) error {
+func storeGitCredentials(ctx context.Context, username, password, gitURL string) error {
 	log.V(3).Info("storing git credentials")
 
-	_, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", "credential.helper", "store")
-	if err != nil {
-		return fmt.Errorf("can't configure git credential helper: %w", err)
-	}
-
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", gitURL, username, password)
-	_, err = cmdRunner.RunWithStdin(ctx, "", nil, creds, *flGitCmd, "credential", "approve")
+	_, err := cmdRunner.RunWithStdin(ctx, "", nil, creds, *flGitCmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1206,7 +1202,7 @@ func callGitAskPassURL(ctx context.Context, url string) error {
 		}
 	}
 
-	if err := setupGitAuth(ctx, username, password, *flRepo); err != nil {
+	if err := storeGitCredentials(ctx, username, password, *flRepo); err != nil {
 		return err
 	}
 
@@ -1222,6 +1218,10 @@ func setupDefaultGitConfigs(ctx context.Context) error {
 		// Fairly aggressive GC.
 		key: "gc.pruneExpire",
 		val: "now",
+	}, {
+		// How to manage credentials (for those modes that need it).
+		key: "credential.helper",
+		val: "store",
 	}}
 	for _, kv := range configs {
 		if _, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
