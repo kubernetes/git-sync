@@ -490,6 +490,12 @@ func main() {
 	// no long-running operations like `git clone`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
+	// Set additional configs we want, but users might override.
+	if err := git.setupDefaultGitConfigs(ctx); err != nil {
+		log.Error(err, "ERROR: can't set default git configs")
+		os.Exit(1)
+	}
+
 	if *flUsername != "" {
 		if *flPasswordFile != "" {
 			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
@@ -499,8 +505,8 @@ func main() {
 			}
 			*flPassword = string(passwordFileBytes)
 		}
-		if err := git.SetupAuth(ctx, *flUsername, *flPassword); err != nil {
-			log.Error(err, "ERROR: can't set up git auth")
+		if err := git.StoreCredentials(ctx, *flUsername, *flPassword); err != nil {
+			log.Error(err, "ERROR: can't store git credentials")
 			os.Exit(1)
 		}
 	}
@@ -517,12 +523,6 @@ func main() {
 			log.Error(err, "ERROR: can't set up git cookie file")
 			os.Exit(1)
 		}
-	}
-
-	// Set additional configs we want, but users might override.
-	if err := git.setupDefaultGitConfigs(ctx); err != nil {
-		log.Error(err, "ERROR: can't set default git configs")
-		os.Exit(1)
 	}
 
 	// This needs to be after all other git-related config flags.
@@ -617,6 +617,7 @@ func main() {
 	initialSync := true
 	failCount := 0
 	for {
+		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 		if initialSync {
@@ -636,7 +637,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			log.Error(err, "unexpected error syncing repo, will retry", "failCount", failCount, "waitTime", flPeriod.String())
+			log.Error(err, "error syncing repo, will retry", "failCount", failCount, "waitTime", flPeriod.String())
 			cancel()
 			time.Sleep(*flPeriod)
 			continue
@@ -1314,18 +1315,12 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	return local, remote, nil
 }
 
-// SetupAuth configures the local git repo to use a username and password when
-// accessing the repo.
-func (git *repoSync) SetupAuth(ctx context.Context, username, password string) error {
+// StoreCredentials stores the username and password for later use.
+func (git *repoSync) StoreCredentials(ctx context.Context, username, password string) error {
 	git.log.V(3).Info("storing git credentials")
 
-	_, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", "credential.helper", "store")
-	if err != nil {
-		return fmt.Errorf("can't configure git credential helper: %w", err)
-	}
-
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
-	_, err = git.run.RunWithStdin(ctx, "", nil, creds, git.cmd, "credential", "approve")
+	_, err := git.run.RunWithStdin(ctx, "", nil, creds, git.cmd, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1430,7 +1425,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 		}
 	}
 
-	if err := git.SetupAuth(ctx, username, password); err != nil {
+	if err := git.StoreCredentials(ctx, username, password); err != nil {
 		return err
 	}
 
@@ -1446,6 +1441,10 @@ func (git *repoSync) setupDefaultGitConfigs(ctx context.Context) error {
 		// Fairly aggressive GC.
 		key: "gc.pruneExpire",
 		val: "now",
+	}, {
+		// How to manage credentials (for those modes that need it).
+		key: "credential.helper",
+		val: "store",
 	}}
 	for _, kv := range configs {
 		if _, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", kv.key, kv.val); err != nil {
