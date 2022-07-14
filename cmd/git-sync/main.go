@@ -506,10 +506,6 @@ func main() {
 			}
 			*flPassword = string(passwordFileBytes)
 		}
-		if err := git.StoreCredentials(ctx, *flUsername, *flPassword); err != nil {
-			log.Error(err, "can't store git credentials")
-			os.Exit(1)
-		}
 	}
 
 	if *flSSH {
@@ -615,6 +611,26 @@ func main() {
 		go exechookRunner.Run(context.Background())
 	}
 
+	// Craft a function that can be called to refresh credentials when needed.
+	refreshCreds := func(ctx context.Context) error {
+		// These should all be mutually-exclusive configs.
+		if *flUsername != "" {
+			if err := git.StoreCredentials(ctx, *flUsername, *flPassword); err != nil {
+				return err
+			}
+		}
+		if *flAskPassURL != "" {
+			// When using an auth URL, the credentials can be dynamic, it needs to be
+			// re-fetched each time.
+			if err := git.CallAskPassURL(ctx); err != nil {
+				askpassCount.WithLabelValues(metricKeyError).Inc()
+				return err
+			}
+			askpassCount.WithLabelValues(metricKeySuccess).Inc()
+		}
+		return nil
+	}
+
 	initialSync := true
 	failCount := 0
 	for {
@@ -629,7 +645,7 @@ func main() {
 			}
 		}
 
-		if changed, hash, err := git.SyncRepo(ctx); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount > *flMaxSyncFailures {
@@ -1247,16 +1263,8 @@ func (git *repoSync) ResolveRef(ctx context.Context, ref string) (string, error)
 
 // SyncRepo syncs the branch of a given repository to the link at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func (git *repoSync) SyncRepo(ctx context.Context) (bool, string, error) {
-	if git.authURL != "" {
-		// When using an auth URL, the credentials can be dynamic, it needs to be
-		// re-fetched each time.
-		if err := git.CallAskPassURL(ctx); err != nil {
-			askpassCount.WithLabelValues(metricKeyError).Inc()
-			return false, "", fmt.Errorf("failed to get credentials from auth URL: %v", err)
-		}
-		askpassCount.WithLabelValues(metricKeySuccess).Inc()
-	}
+func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
+	refreshCreds(ctx)
 
 	currentWorktreeGit := filepath.Join(git.link, ".git")
 	var hash string
@@ -1453,7 +1461,7 @@ func (git *repoSync) setupDefaultGitConfigs(ctx context.Context) error {
 	}, {
 		// How to manage credentials (for those modes that need it).
 		key: "credential.helper",
-		val: "store",
+		val: "cache --timeout 3600",
 	}}
 	for _, kv := range configs {
 		if _, err := git.run.Run(ctx, "", nil, git.cmd, "config", "--global", kv.key, kv.val); err != nil {
