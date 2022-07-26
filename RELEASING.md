@@ -16,23 +16,7 @@ git tag -am v3.3.2 v3.3.2
 
 ## Build and push to staging
 
-To build git-sync you need [docker buildx](https://github.com/docker/buildx)
-and to cut a release you need
-[manifest-tool](https://github.com/estesp/manifest-tool).  At the time of this
-writing Go is functionally broken (see below) wrt modules and `go install`, so you have to
-build it manually:
-
-```
-(
-  set -o errexit
-  WD=$(pwd)
-  DIR=/tmp/manifest-tool-$RANDOM
-  mkdir $DIR
-  git clone https://github.com/estesp/manifest-tool -b v2.0.3 $DIR
-  cd $DIR/v2
-  go build -o $WD ./cmd/manifest-tool
-)
-```
+To build git-sync you need [docker buildx](https://github.com/docker/buildx).
 
 Make sure you are logged into Google Cloud (to push to GCR).
 
@@ -44,8 +28,7 @@ The following step will build for all platforms and push the container images
 to our staging repo (gcr.io/k8s-staging-git-sync).
 
 ```
-# Set PATH to find the `manifest-list` binary.
-PATH=".:$PATH" make manifest-list
+make manifest-list
 ```
 
 This will produce output like:
@@ -86,25 +69,3 @@ Lastly, make a release through the [github UI](https://github.com/kubernetes/git
 Include all the notable changes since the last release and the final container
 image location.  The "Auto-generate release notes" button is a great starting
 place.
-
-# Appendix: `go install` vs modules
-
-This section is added for future reference.
-
-As of Go 1.17, it does not seem possible to `go install` or `go get` a repo
-which uses `replace directives`.  https://github.com/golang/go/issues/44840 is
-not getting traction.
-
-```
-$ go get github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0
-go get: installing executables with 'go get' in module mode is deprecated.
-	Use 'go install pkg@version' instead.
-	For more information, see https://golang.org/doc/go-get-install-deprecation
-	or run 'go help get' or 'go help install'.
-
-$ go install github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0
-go install: github.com/estesp/manifest-tool/v2/cmd/manifest-tool@v2.0.0 (in github.com/estesp/manifest-tool/v2@v2.0.0):
-	The go.mod file for the module providing named packages contains one or
-	more replace directives. It must not contain directives that would cause
-	it to be interpreted differently than if it were the main module.
-```
