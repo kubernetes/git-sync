@@ -1,3 +1,4 @@
+//go:build tools
 // +build tools
 
 /*
@@ -26,4 +27,7 @@ limitations under the License.
 //   4) go mod vendor  # yes, again
 package tools
 
-import _ "github.com/google/go-licenses"
+import (
+	_ "github.com/estesp/manifest-tool/v2/cmd/manifest-tool"
+	_ "github.com/google/go-licenses"
+)
