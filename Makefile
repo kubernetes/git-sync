@@ -195,8 +195,10 @@ push-name:
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
+	echo "manifest-list: $(REGISTRY)/$(BIN):$(VERSION)"
+	go build -o ./bin/tools github.com/estesp/manifest-tool/v2/cmd/manifest-tool
 	platforms=$$(echo $(ALL_PLATFORMS) | sed 's/ /,/g');  \
-	manifest-tool                                         \
+	./bin/tools/manifest-tool                             \
 	    --username=oauth2accesstoken                      \
 	    --password=$$(gcloud auth print-access-token)     \
 	    push from-args                                    \
