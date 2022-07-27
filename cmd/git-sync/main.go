@@ -430,7 +430,8 @@ func main() {
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
 		"home", os.Getenv("HOME"),
-		"args", os.Args)
+		"args", logSafeArgs(os.Args),
+		"env", logSafeEnv(os.Environ()))
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
@@ -715,6 +716,43 @@ func main() {
 		cancel()
 		time.Sleep(*flPeriod)
 	}
+}
+
+const redactedString = "<REDACTED>"
+
+// logSafeArgs makes sure any sensitive args (e.g. passwords) are redacted
+// before logging.
+func logSafeArgs(args []string) []string {
+	ret := make([]string, len(args))
+	redact := false
+	for i, arg := range args {
+		if redact {
+			ret[i] = redactedString
+			redact = false
+			continue
+		}
+		if arg == "--password" {
+			redact = true
+		}
+		if strings.HasPrefix(arg, "--password=") {
+			arg = "--password=" + redactedString
+		}
+		ret[i] = arg
+	}
+	return ret
+}
+
+// logSafeEnv makes sure any sensitive env vars (e.g. passwords) are redacted
+// before logging.
+func logSafeEnv(env []string) []string {
+	ret := make([]string, len(env))
+	for i, ev := range env {
+		if strings.HasPrefix(ev, "GIT_SYNC_PASSWORD=") {
+			ev = "GIT_SYNC_PASSWORD=" + redactedString
+		}
+		ret[i] = ev
+	}
+	return ret
 }
 
 func normalizePath(path string) (string, error) {
