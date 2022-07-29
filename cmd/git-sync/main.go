@@ -641,7 +641,7 @@ func main() {
 		if initialSync {
 			err := git.InitRepo(ctx)
 			if err != nil {
-				log.Error(err, "can't init root", absRoot)
+				log.Error(err, "can't init root", "path", absRoot)
 				os.Exit(1)
 			}
 		}
