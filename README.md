@@ -64,6 +64,24 @@ docker run -d \
     nginx
 ```
 
+### Volumes
+
+The `--root` flag must indicate either a directory that either a) does not
+exist (it will be created); or b) exists and is empty; or c) can be emptied by
+removing all of the contents.
+
+Why?  Git demands to clone into an empty directory.  If the directory exists
+and is not empty, git-sync will try to empty it by removing everything in it
+(we can't just `rm -rf` the dir because it might be a mounted volume).  If that
+fails, git-sync will abort.
+
+With the above example or with a Kubernetes `emptyDir`, there is usually no
+problem.  The problematic case is when the volume is the root of a filesystem,
+which sometimes contains metadata (e.g. ext{2,3,4} have a `lost+found` dir).
+Git will not clone into such a directory (`fatal: destination path
+'/tmp/git-data' already exists and is not an empty directory`).  The only real
+solution is to use a sub-directory of the volume as the `--root`.
+
 ## Manual
 
 ```

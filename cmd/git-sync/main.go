@@ -1841,7 +1841,10 @@ OPTIONS
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
-            be created.  This flag is required.
+            be created.  This must be a path that either a) does not exist (it
+            will be created); b) is an empty directory; or c) is a directory
+            which can be emptied by removing all of the contents.  This flag is
+            required.
 
     --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
