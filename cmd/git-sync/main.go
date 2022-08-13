@@ -936,13 +936,13 @@ func (git *repoSync) UpdateSymlink(ctx context.Context, newDir string) (string, 
 	}
 
 	const tmplink = "tmp-link"
-	git.log.V(1).Info("creating tmp symlink", "root", linkDir, "dst", newDirRelative, "src", tmplink)
-	if _, err := git.run.Run(ctx, linkDir, nil, "ln", "-snf", newDirRelative, tmplink); err != nil {
+	git.log.V(1).Info("creating tmp symlink", "root", linkDir, "link", tmplink, "target", newDirRelative)
+	if err := os.Symlink(newDirRelative, filepath.Join(linkDir, tmplink)); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	git.log.V(1).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if _, err := git.run.Run(ctx, linkDir, nil, "mv", "-T", tmplink, linkFile); err != nil {
+	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
