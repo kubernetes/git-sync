@@ -142,9 +142,11 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
 LICENSES = .licenses
 
 $(LICENSES):
-	GOOS=$(shell go env GOHOSTOS)     \
-	GOARCH=$(shell go env GOHOSTARCH) \
-	go build -o ./bin/tools github.com/google/go-licenses
+	pushd tools >/dev/null;                                   \
+	  export GOOS=$(shell go env GOHOSTOS);                   \
+	  export GOARCH=$(shell go env GOHOSTARCH);               \
+	  go build -o ../bin/tools github.com/google/go-licenses; \
+	  popd >/dev/null
 	rm -rf $(LICENSES)
 	./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
 	chmod -R a+rx $(LICENSES)
@@ -196,7 +198,11 @@ push-name:
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
 	echo "manifest-list: $(REGISTRY)/$(BIN):$(VERSION)"
-	go build -o ./bin/tools github.com/estesp/manifest-tool/v2/cmd/manifest-tool
+	pushd tools >/dev/null;                                   \
+	  export GOOS=$(shell go env GOHOSTOS);                   \
+	  export GOARCH=$(shell go env GOHOSTARCH);               \
+	  go build -o ../bin/tools github.com/estesp/manifest-tool/v2/cmd/manifest-tool; \
+	  popd >/dev/null
 	platforms=$$(echo $(ALL_PLATFORMS) | sed 's/ /,/g');  \
 	./bin/tools/manifest-tool                             \
 	    --username=oauth2accesstoken                      \
