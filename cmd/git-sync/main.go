@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -718,24 +719,49 @@ func main() {
 	}
 }
 
-const redactedString = "<REDACTED>"
+const redactedString = "REDACTED"
+
+func redactURL(urlstr string) string {
+	u, err := url.Parse(urlstr)
+	if err != nil {
+		return err.Error()
+	}
+	if u.User != nil {
+		u.User = url.UserPassword(u.User.Username(), redactedString)
+	}
+	return u.String()
+}
 
 // logSafeArgs makes sure any sensitive args (e.g. passwords) are redacted
 // before logging.
 func logSafeArgs(args []string) []string {
 	ret := make([]string, len(args))
-	redact := false
+	redactWholeArg := false
+	readactURLArg := false
 	for i, arg := range args {
-		if redact {
+		if redactWholeArg {
 			ret[i] = redactedString
-			redact = false
+			redactWholeArg = false
 			continue
 		}
+		if readactURLArg {
+			ret[i] = redactURL(arg)
+			readactURLArg = false
+			continue
+		}
+		// Handle --password
 		if arg == "--password" {
-			redact = true
+			redactWholeArg = true
 		}
 		if strings.HasPrefix(arg, "--password=") {
 			arg = "--password=" + redactedString
+		}
+		// Handle password embedded in --repo
+		if arg == "--repo" {
+			readactURLArg = true
+		}
+		if strings.HasPrefix(arg, "--repo=") {
+			arg = "--repo=" + redactURL(arg[7:])
 		}
 		ret[i] = arg
 	}
@@ -749,6 +775,9 @@ func logSafeEnv(env []string) []string {
 	for i, ev := range env {
 		if strings.HasPrefix(ev, "GIT_SYNC_PASSWORD=") {
 			ev = "GIT_SYNC_PASSWORD=" + redactedString
+		}
+		if strings.HasPrefix(ev, "GIT_SYNC_REPO=") {
+			ev = "GIT_SYNC_REPO=" + redactURL(ev[14:])
 		}
 		ret[i] = ev
 	}
