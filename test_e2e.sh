@@ -38,8 +38,8 @@ function assert_link_exists() {
     fi
 }
 
-function assert_link_eq() {
-    if [[ $(readlink "$1") == "$2" ]]; then
+function assert_link_basename_eq() {
+    if [[ $(basename $(readlink "$1")) == "$2" ]]; then
         return
     fi
     fail "link $1 does not point to '$2': $(readlink $1)"
@@ -547,20 +547,20 @@ function e2e::readlink() {
         >> "$1" 2>&1 &
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
 }
 
 ##############################################
