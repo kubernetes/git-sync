@@ -24,6 +24,9 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 # This version-strategy uses a manual value to set the version string
 #VERSION ?= 1.2.3
 
+# Set this to 1 to build a debugger-friendly binary.
+DBG ?=
+
 # These are passed to docker when building and testing.
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
@@ -129,6 +132,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	        ARCH=$(ARCH)                                       \
 	        OS=$(OS)                                           \
 	        VERSION=$(VERSION)                                 \
+	        BUILD_DEBUG=$(DBG)                                 \
 	        ./build/build.sh                                   \
 	    "
 	if ! cmp -s .go/$(OUTBIN) $(OUTBIN); then  \
