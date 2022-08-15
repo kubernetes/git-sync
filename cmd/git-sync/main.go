@@ -694,6 +694,7 @@ func main() {
 					}
 				}
 				log.DeleteErrorFile()
+				log.V(2).Info("exiting after one sync", "status", exitCode)
 				os.Exit(exitCode)
 			}
 			if isHash, err := git.RevIsHash(ctx); err != nil {
