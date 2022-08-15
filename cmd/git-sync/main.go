@@ -1045,8 +1045,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 
-	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
+	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	if err != nil {
 		return err
 	}
