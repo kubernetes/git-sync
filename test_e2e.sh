@@ -934,10 +934,10 @@ function e2e::sync_slow_git_long_timeout() {
 ##############################################
 # Test depth syncing
 ##############################################
-function e2e::sync_depth_shallow() {
+function e2e::sync_branch_depth_shallow() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
     expected_depth="1"
+    echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -978,6 +978,55 @@ function e2e::sync_depth_shallow() {
     depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "backward depth mismatch expected=$expected_depth actual=$depth"
+    fi
+}
+
+##############################################
+# Test depth syncing with a tag not within depth
+##############################################
+function e2e::sync_tag_depth_shallow_out_of_range() {
+    TAG="e2e-tag"
+    expected_depth="1"
+
+    # First commits, tag is not within --depth
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 1" >/dev/null
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$TAG" \
+        --depth="$expected_depth" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    if [[ $expected_depth != $depth ]]; then
+        fail "initial depth mismatch expected=$expected_depth actual=$depth"
+    fi
+
+    # Make 2 new commits, and tag the older one, so it's not within --depth
+    echo "$FUNCNAME 3" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 3"
+    SHA=$(git -C "$REPO" rev-parse HEAD)
+    echo "$FUNCNAME 4" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 4"
+    git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 3" "$SHA" >/dev/null
+    sleep 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 3"
+    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    if [[ $expected_depth != $depth ]]; then
+        fail "forward depth mismatch expected=$expected_depth actual=$depth"
     fi
 }
 
