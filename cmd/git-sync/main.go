@@ -1112,7 +1112,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	// Reset the root's rev (so we can prune and so we can rely on it later).
-	_, err = git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--hard", hash, "--")
+	// Use --soft so we do not check out files into the root.
+	_, err = git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--soft", hash, "--")
 	if err != nil {
 		return err
 	}
