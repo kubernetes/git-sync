@@ -1417,23 +1417,28 @@ func (git *repoSync) StoreCredentials(ctx context.Context, username, password st
 func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSSHKnownHosts string) error {
 	git.log.V(1).Info("setting up git SSH credentials")
 
-	_, err := os.Stat(pathToSSHSecret)
-	if err != nil {
-		return fmt.Errorf("can't access SSH key: %w", err)
+	// If the user sets GIT_SSH_COMMAND we try to respect it.
+	sshCmd := os.Getenv("GIT_SSH_COMMAND")
+	if sshCmd == "" {
+		sshCmd = "ssh"
 	}
+
+	if _, err := os.Stat(pathToSSHSecret); err != nil {
+		return fmt.Errorf("can't access SSH key file %s: %w", pathToSSHSecret, err)
+	}
+	sshCmd += fmt.Sprintf(" -i %s", pathToSSHSecret)
 
 	if setupKnownHosts {
-		_, err = os.Stat(pathToSSHKnownHosts)
-		if err != nil {
-			return fmt.Errorf("can't access SSH known_hosts: %w", err)
+		if _, err := os.Stat(pathToSSHKnownHosts); err != nil {
+			return fmt.Errorf("can't access SSH known_hosts file %s: %w", pathToSSHKnownHosts, err)
 		}
-		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -o UserKnownHostsFile=%s -i %s", pathToSSHKnownHosts, pathToSSHSecret))
+		sshCmd += fmt.Sprintf(" -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s", pathToSSHKnownHosts)
 	} else {
-		err = os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -o StrictHostKeyChecking=no -i %s", pathToSSHSecret))
+		sshCmd += fmt.Sprintf(" -o StrictHostKeyChecking=no")
 	}
 
-	// set env variable GIT_SSH_COMMAND to force git use customized ssh command
-	if err != nil {
+	git.log.V(9).Info("setting GIT_SSH_COMMAND", "value", sshCmd)
+	if err := os.Setenv("GIT_SSH_COMMAND", sshCmd); err != nil {
 		return fmt.Errorf("can't set $GIT_SSH_COMMAND: %w", err)
 	}
 
