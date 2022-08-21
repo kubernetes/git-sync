@@ -264,21 +264,20 @@ func envDuration(key string, def time.Duration) time.Duration {
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd         string         // the git command to run
-	root        string         // absolute path to the root directory
-	repo        string         // remote repo to sync
-	branch      string         // remote branch to sync
-	rev         string         // the rev or SHA to sync
-	depth       int            // for shallow sync
-	submodules  submodulesMode // how to handle submodules
-	gc          gcMode         // garbage collection
-	chmod       int            // mode to change repo to, or 0
-	link        string         // the name of the symlink to publish under `root`
-	authURL     string         // a URL to re-fetch credentials, or ""
-	sparseFile  string         // path to a sparse-checkout file
-	syncHookCmd string         // command to run after each sync
-	log         *logging.Logger
-	run         *cmd.Runner
+	cmd        string         // the git command to run
+	root       string         // absolute path to the root directory
+	repo       string         // remote repo to sync
+	branch     string         // remote branch to sync
+	rev        string         // the rev or SHA to sync
+	depth      int            // for shallow sync
+	submodules submodulesMode // how to handle submodules
+	gc         gcMode         // garbage collection
+	chmod      int            // mode to change repo to, or 0
+	link       string         // the name of the symlink to publish under `root`
+	authURL    string         // a URL to re-fetch credentials, or ""
+	sparseFile string         // path to a sparse-checkout file
+	log        *logging.Logger
+	run        *cmd.Runner
 }
 
 func main() {
@@ -472,21 +471,20 @@ func main() {
 
 	// Capture the various git parameters.
 	git := &repoSync{
-		cmd:         *flGitCmd,
-		root:        absRoot,
-		repo:        *flRepo,
-		branch:      *flBranch,
-		rev:         *flRev,
-		depth:       *flDepth,
-		submodules:  submodulesMode(*flSubmodules),
-		gc:          gcMode(*flGitGC),
-		chmod:       *flChmod,
-		link:        absLink,
-		authURL:     *flAskPassURL,
-		sparseFile:  *flSparseCheckoutFile,
-		syncHookCmd: *flSyncHookCommand,
-		log:         log,
-		run:         cmdRunner,
+		cmd:        *flGitCmd,
+		root:       absRoot,
+		repo:       *flRepo,
+		branch:     *flBranch,
+		rev:        *flRev,
+		depth:      *flDepth,
+		submodules: submodulesMode(*flSubmodules),
+		gc:         gcMode(*flGitGC),
+		chmod:      *flChmod,
+		link:       absLink,
+		authURL:    *flAskPassURL,
+		sparseFile: *flSparseCheckoutFile,
+		log:        log,
+		run:        cmdRunner,
 	}
 
 	// This context is used only for git credentials initialization. There are
