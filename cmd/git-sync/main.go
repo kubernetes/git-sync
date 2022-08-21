@@ -78,7 +78,7 @@ var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TI
 	"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
 var flOneTime = pflag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the first sync")
-var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
+var flMaxFailures = pflag.Int("max-failures", envInt("GIT_SYNC_MAX_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
 var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"optionally change permissions on the checked-out files to the specified mode")
@@ -151,12 +151,15 @@ var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
 	"DEPRECATED: use --link instead")
 var flSyncHookCommand = pflag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
 	"DEPRECATED: use --exechook-command instead")
+var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
+	"DEPRECATED: use --max-failures instead")
 
 func init() {
 	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
 	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
 	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
 	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
+	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
 }
 
 // Total pull/error, summary on pull duration
@@ -342,6 +345,7 @@ func main() {
 	}
 
 	if *flDest != "" {
+		// Back-compat
 		*flLink = *flDest
 	}
 	if *flLink == "" {
@@ -353,6 +357,7 @@ func main() {
 	}
 
 	if *flWait != 0 {
+		// Back-compat
 		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
@@ -360,13 +365,20 @@ func main() {
 	}
 
 	if *flTimeout != 0 {
+		// Back-compat
 		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
 		handleConfigError(log, true, "ERROR: --sync-timeout must be at least 10ms")
 	}
 
+	if *flMaxSyncFailures != 0 {
+		// Back-compat
+		*flMaxFailures = *flMaxSyncFailures
+	}
+
 	if *flSyncHookCommand != "" {
+		// Back-compat
 		*flExechookCommand = *flSyncHookCommand
 	}
 	if *flExechookCommand != "" {
@@ -650,7 +662,7 @@ func main() {
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
-			if *flMaxSyncFailures != -1 && failCount > *flMaxSyncFailures {
+			if *flMaxFailures >= 0 && failCount > *flMaxFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
@@ -1840,10 +1852,10 @@ OPTIONS
     --man
             Print this manual and exit.
 
-    --max-sync-failures <int>, $GIT_SYNC_MAX_SYNC_FAILURES
+    --max-failures <int>, $GIT_SYNC_MAX_FAILURES
             The number of consecutive failures allowed before aborting (the
-            first sync must succeed), Setting this to -1 will retry forever
-            after the initial sync.  (default: 0)
+            first sync must succeed), Setting this to a negative value will
+            retry forever after the initial sync.  (default: 0)
 
     --one-time, $GIT_SYNC_ONE_TIME
             Exit after the first sync.
