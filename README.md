@@ -124,7 +124,7 @@ OPTIONS
             to use SSH (see --ssh) with an arbitrary UID.  This assumes that
             /etc/passwd is writable by the current UID.
 
-    --askpass-url <string>, $GIT_ASKPASS_URL
+    --askpass-url <string>, $GIT_SYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
@@ -136,7 +136,7 @@ OPTIONS
             Optionally change permissions on the checked-out files to the
             specified mode.
 
-    --cookie-file, $GIT_COOKIE_FILE
+    --cookie-file, $GIT_SYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
@@ -232,10 +232,10 @@ OPTIONS
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer --password-file or $GIT_SYNC_PASSWORD for
+            users should prefer --password-file or $GIT_SYNC_PASSWORD_FILE for
             specifying the password.
 
-    --password-file <string>, $GIT_SYNC_PASSWORD
+    --password-file <string>, $GIT_SYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
             sourced.
@@ -253,7 +253,10 @@ OPTIONS
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
-            be created.  This flag is required.
+            be created.  This must be a path that either a) does not exist (it
+            will be created); b) is an empty directory; or c) is a directory
+            which can be emptied by removing all of the contents.  This flag is
+            required.
 
     --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
@@ -263,14 +266,14 @@ OPTIONS
     --ssh, $GIT_SYNC_SSH
             Use SSH for git authentication and operations.
 
-    --ssh-key-file <string>, $GIT_SSH_KEY_FILE
+    --ssh-key-file <string>, $GIT_SYNC_SSH_KEY_FILE
             The SSH key to use when using --ssh.  (default: /etc/git-secret/ssh)
 
-    --ssh-known-hosts, $GIT_KNOWN_HOSTS
+    --ssh-known-hosts, $GIT_SYNC_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.
             (default: true)
 
-    --ssh-known-hosts-file <string>, $GIT_SSH_KNOWN_HOSTS_FILE
+    --ssh-known-hosts-file <string>, $GIT_SYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
             (default: /etc/git-secret/known_hosts)
 
@@ -336,19 +339,20 @@ AUTHENTICATION
             or GIT_SYNC_PASSWORD environment variable is almost always
             preferred to the --password flag.
 
-            A variant of this is --askpass-url (GIT_ASKPASS_URL), which
+            A variant of this is --askpass-url (GIT_SYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
 
     SSH
             When --ssh (GIT_SYNC_SSH) is specified, the --ssh-key-file
-            (GIT_SSH_KEY_FILE) will be used.  Users are strongly advised to
-            also use --ssh-known-hosts (GIT_KNOWN_HOSTS) and
-            --ssh-known-hosts-file (GIT_SSH_KNOWN_HOSTS_FILE) when using SSH.
+            (GIT_SYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
+            to also use --ssh-known-hosts (GIT_SYNC_KNOWN_HOSTS) and
+            --ssh-known-hosts-file (GIT_SYNC_SSH_KNOWN_HOSTS_FILE) when using
+            SSH.
 
     cookies
-            When --cookie-file (GIT_COOKIE_FILE) is specified, the associated
-            cookies can contain authentication information.
+            When --cookie-file (GIT_SYNC_COOKIE_FILE) is specified, the
+            associated cookies can contain authentication information.
 
 HOOKS
 
