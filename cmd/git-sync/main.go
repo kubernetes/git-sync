@@ -667,18 +667,15 @@ func main() {
 		return nil
 	}
 
-	initialSync := true
 	failCount := 0
 	for {
 		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		if initialSync {
-			err := git.InitRepo(ctx)
-			if err != nil {
-				log.Error(err, "can't init root", "path", absRoot)
-				os.Exit(1)
-			}
+
+		if err := git.InitRepo(ctx); err != nil {
+			log.Error(err, "can't init root", "path", absRoot)
+			os.Exit(1)
 		}
 
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
@@ -689,11 +686,7 @@ func main() {
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
 			}
-
-			log.Error(err, "error syncing repo, will retry", "failCount", failCount, "waitTime", flPeriod.String())
-			cancel()
-			time.Sleep(*flPeriod)
-			continue
+			log.Error(err, "error syncing repo, will retry", "failCount", failCount)
 		} else {
 			// this might have been called before, but also might not have
 			setRepoReady()
@@ -708,9 +701,7 @@ func main() {
 			} else {
 				updateSyncMetrics(metricKeyNoOp, start)
 			}
-		}
 
-		if initialSync {
 			// Determine if git-sync should terminate for one of several reasons
 			if *flOneTime {
 				// Wait for hooks to complete at least once, if not nil, before
@@ -732,6 +723,7 @@ func main() {
 				log.V(2).Info("exiting after one sync", "status", exitCode)
 				os.Exit(exitCode)
 			}
+
 			if isHash, err := git.RevIsHash(ctx); err != nil {
 				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", git.rev)
 				os.Exit(1)
@@ -740,14 +732,14 @@ func main() {
 				log.DeleteErrorFile()
 				sleepForever()
 			}
-			initialSync = false
+
+			if failCount > 0 {
+				log.V(5).Info("resetting failure count", "failCount", failCount)
+				failCount = 0
+			}
+			log.DeleteErrorFile()
 		}
 
-		if failCount > 0 {
-			log.V(5).Info("resetting failure count", "failCount", failCount)
-		}
-		failCount = 0
-		log.DeleteErrorFile()
 		log.V(1).Info("next sync", "waitTime", flPeriod.String())
 		cancel()
 		time.Sleep(*flPeriod)
@@ -834,6 +826,12 @@ func normalizePath(path string) (string, error) {
 // initRepo looks at the git root and initializes it if needed.  This assumes
 // the root dir already exists.
 func (git *repoSync) InitRepo(ctx context.Context) error {
+	// Make sure the root exists.  0755 ensures that this is usable as a volume
+	// when the consumer isn't running as the same UID.
+	if err := os.MkdirAll(git.root, 0755); err != nil {
+		return fmt.Errorf("can't make root directory: %w", err)
+	}
+
 	// Check out the git root, and see if it is already usable.
 	if _, err := os.Stat(git.root); err != nil {
 		return err
@@ -852,7 +850,7 @@ func (git *repoSync) InitRepo(ctx context.Context) error {
 	// use-case is to have a volume mounted at git.root, which makes removing
 	// it impossible.
 	if err := removeDirContents(git.root, git.log); err != nil {
-		return fmt.Errorf("can't remove unusable git root: %w", err)
+		return fmt.Errorf("can't wipe unusable root directory: %w", err)
 	}
 
 	return nil
