@@ -1205,7 +1205,7 @@ function e2e::auth_askpass_url_flaky() {
     GIT_SYNC \
         --git="$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
-        --max-sync-failures=2 \
+        --max-failures=2 \
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \

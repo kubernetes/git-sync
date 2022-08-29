@@ -221,7 +221,7 @@ OPTIONS
     --man
             Print this manual and exit.
 
-    --max-sync-failures <int>, $GIT_SYNC_MAX_SYNC_FAILURES
+    --max-failures <int>, $GIT_SYNC_MAX_FAILURES
             The number of consecutive failures allowed before aborting (the
             first sync must succeed), Setting this to -1 will retry forever
             after the initial sync.  (default: 0)
