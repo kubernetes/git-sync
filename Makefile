@@ -159,7 +159,7 @@ $(LICENSES):
 ALLOW_STALE_APT ?=
 
 container: .container-$(DOTFILE_IMAGE) container-name
-.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in
+.container-$(DOTFILE_IMAGE): bin/$(OS)_$(ARCH)/$(BIN) $(LICENSES) Dockerfile.in .buildx-initialized
 	sed                                  \
 	    -e 's|{ARG_BIN}|$(BIN)|g'        \
 	    -e 's|{ARG_ARCH}|$(ARCH)|g'      \
@@ -173,6 +173,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	FORCE=0;                                                     \
 	if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
 	docker buildx build                                          \
+	    --builder git-sync                                       \
 	    --build-arg FORCE_REBUILD="$$FORCE"                      \
 	    --build-arg HASH_LICENSES="$$HASH_LICENSES"              \
 	    --build-arg HASH_BINARY="$$HASH_BINARY"                  \
@@ -247,13 +248,9 @@ test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 # installed.  If you already have a buildx builder available, you don't need
 # this.  See https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
 # for great context.
-multiarch-build-tools: .qemu-initialized
-	docker buildx create --name git-sync --node git-sync-0
-	docker buildx use git-sync
-	docker buildx inspect --bootstrap
-
-.qemu-initialized:
-	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+.buildx-initialized:
+	docker buildx create --name git-sync --node git-sync-0 >/dev/null
+	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes >/dev/null
 	date > $@
 
 $(BUILD_DIRS):
@@ -262,7 +259,7 @@ $(BUILD_DIRS):
 clean: container-clean bin-clean
 
 container-clean:
-	rm -rf .container-* .dockerfile-* .push-* .qemu-initialized $(LICENSES)
+	rm -rf .container-* .dockerfile-* .push-* .buildx-initialized $(LICENSES)
 
 bin-clean:
 	rm -rf .go bin

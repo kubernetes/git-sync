@@ -3,5 +3,5 @@
 /.push-*
 /.container-*
 /.dockerfile-*
-/.qemu-initialized
+/.buildx-initialized
 /.licenses
