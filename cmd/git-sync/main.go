@@ -113,19 +113,19 @@ var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_
 
 var flSSH = pflag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
 	"use SSH for git operations")
-var flSSHKeyFile = pflag.String("ssh-key-file", envString("GIT_SSH_KEY_FILE", "/etc/git-secret/ssh"),
+var flSSHKeyFile = pflag.String("ssh-key-file", envMultiString([]string{"GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"}, "/etc/git-secret/ssh"),
 	"the SSH key to use")
-var flSSHKnownHosts = pflag.Bool("ssh-known-hosts", envBool("GIT_KNOWN_HOSTS", true),
+var flSSHKnownHosts = pflag.Bool("ssh-known-hosts", envMultiBool([]string{"GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"}, true),
 	"enable SSH known_hosts verification")
-var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file", envString("GIT_SSH_KNOWN_HOSTS_FILE", "/etc/git-secret/known_hosts"),
+var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file", envMultiString([]string{"GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"}, "/etc/git-secret/known_hosts"),
 	"the known_hosts file to use")
 var flAddUser = pflag.Bool("add-user", envBool("GIT_SYNC_ADD_USER", false),
 	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
 
-var flCookieFile = pflag.Bool("cookie-file", envBool("GIT_COOKIE_FILE", false),
+var flCookieFile = pflag.Bool("cookie-file", envMultiBool([]string{"GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"}, false),
 	"use a git cookiefile (/etc/git-secret/cookie_file) for authentication")
 
-var flAskPassURL = pflag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
+var flAskPassURL = pflag.String("askpass-url", envMultiString([]string{"GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"}, ""),
 	"a URL to query for git credentials (username=<value> and password=<value>)")
 
 var flGitCmd = pflag.String("git", envString("GIT_SYNC_GIT", "git"),
@@ -211,56 +211,80 @@ func init() {
 }
 
 func envString(key, def string) string {
-	if env := os.Getenv(key); env != "" {
-		return env
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return def
+}
+
+func envMultiString(keys []string, def string) string {
+	for i, key := range keys {
+		if val := os.Getenv(key); val != "" {
+			if i != 0 {
+				fmt.Fprintf(os.Stderr, "Env %s has been deprecated, use %s instead\n", key, keys[0])
+			}
+			return val
+		}
 	}
 	return def
 }
 
 func envBool(key string, def bool) bool {
-	if env := os.Getenv(key); env != "" {
-		res, err := strconv.ParseBool(env)
-		if err != nil {
-			return def
+	if val := os.Getenv(key); val != "" {
+		parsed, err := strconv.ParseBool(val)
+		if err == nil {
+			return parsed
 		}
+		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid bool env %s=%s: %v\n", key, val, err)
+	}
+	return def
+}
 
-		return res
+func envMultiBool(keys []string, def bool) bool {
+	for i, key := range keys {
+		if val := os.Getenv(key); val != "" {
+			parsed, err := strconv.ParseBool(val)
+			if err == nil {
+				if i != 0 {
+					fmt.Fprintf(os.Stderr, "Env %s has been deprecated, use %s instead\n", key, keys[0])
+				}
+				return parsed
+			}
+			fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid bool env %s=%s: %v\n", key, val, err)
+		}
 	}
 	return def
 }
 
 func envInt(key string, def int) int {
-	if env := os.Getenv(key); env != "" {
-		val, err := strconv.ParseInt(env, 0, 0)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%d\n", err, key, env, def)
-			return def
+	if val := os.Getenv(key); val != "" {
+		parsed, err := strconv.ParseInt(val, 0, 0)
+		if err == nil {
+			return int(parsed)
 		}
-		return int(val)
+		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid int env %s=%s: %v\n", key, val, err)
 	}
 	return def
 }
 
 func envFloat(key string, def float64) float64 {
-	if env := os.Getenv(key); env != "" {
-		val, err := strconv.ParseFloat(env, 64)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%f\n", err, key, env, def)
-			return def
+	if val := os.Getenv(key); val != "" {
+		parsed, err := strconv.ParseFloat(val, 64)
+		if err == nil {
+			return parsed
 		}
-		return val
+		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid float env %s=%s: %v\n", key, val, err)
 	}
 	return def
 }
 
 func envDuration(key string, def time.Duration) time.Duration {
-	if env := os.Getenv(key); env != "" {
-		val, err := time.ParseDuration(env)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: invalid env value (%v): using default, key=%s, val=%q, default=%d\n", err, key, env, def)
-			return def
+	if val := os.Getenv(key); val != "" {
+		parsed, err := time.ParseDuration(val)
+		if err == nil {
+			return parsed
 		}
-		return val
+		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid duration env %s=%s: %v\n", key, val, err)
 	}
 	return def
 }
@@ -1758,7 +1782,7 @@ OPTIONS
             to use SSH (see --ssh) with an arbitrary UID.  This assumes that
             /etc/passwd is writable by the current UID.
 
-    --askpass-url <string>, $GIT_ASKPASS_URL
+    --askpass-url <string>, $GIT_SYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
@@ -1770,7 +1794,7 @@ OPTIONS
             Optionally change permissions on the checked-out files to the
             specified mode.
 
-    --cookie-file, $GIT_COOKIE_FILE
+    --cookie-file, $GIT_SYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
@@ -1900,14 +1924,14 @@ OPTIONS
     --ssh, $GIT_SYNC_SSH
             Use SSH for git authentication and operations.
 
-    --ssh-key-file <string>, $GIT_SSH_KEY_FILE
+    --ssh-key-file <string>, $GIT_SYNC_SSH_KEY_FILE
             The SSH key to use when using --ssh.  (default: /etc/git-secret/ssh)
 
-    --ssh-known-hosts, $GIT_KNOWN_HOSTS
+    --ssh-known-hosts, $GIT_SYNC_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.
             (default: true)
 
-    --ssh-known-hosts-file <string>, $GIT_SSH_KNOWN_HOSTS_FILE
+    --ssh-known-hosts-file <string>, $GIT_SYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
             (default: /etc/git-secret/known_hosts)
 
@@ -1973,19 +1997,20 @@ AUTHENTICATION
             or GIT_SYNC_PASSWORD environment variable is almost always
             preferred to the --password flag.
 
-            A variant of this is --askpass-url (GIT_ASKPASS_URL), which
+            A variant of this is --askpass-url (GIT_SYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
 
     SSH
             When --ssh (GIT_SYNC_SSH) is specified, the --ssh-key-file
-            (GIT_SSH_KEY_FILE) will be used.  Users are strongly advised to
-            also use --ssh-known-hosts (GIT_KNOWN_HOSTS) and
-            --ssh-known-hosts-file (GIT_SSH_KNOWN_HOSTS_FILE) when using SSH.
+            (GIT_SYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
+            to also use --ssh-known-hosts (GIT_SYNC_KNOWN_HOSTS) and
+            --ssh-known-hosts-file (GIT_SYNC_SSH_KNOWN_HOSTS_FILE) when using
+            SSH.
 
     cookies
-            When --cookie-file (GIT_COOKIE_FILE) is specified, the associated
-            cookies can contain authentication information.
+            When --cookie-file (GIT_SYNC_COOKIE_FILE) is specified, the
+            associated cookies can contain authentication information.
 
 HOOKS
 
