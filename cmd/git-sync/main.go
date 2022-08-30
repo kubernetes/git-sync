@@ -490,7 +490,7 @@ func main() {
 		log.V(0).Info("normalized root path", "root", *flRoot, "result", absRoot)
 	}
 
-	// Convert the link into an aabsolute path.  We don't want to mkdir here,
+	// Convert the link into an absolute path.  We don't want to mkdir here,
 	// since it may be under --root, and that confuses `git clone`.
 	// TODO(thockin): put repo in a subdir and mkdir + nortmalizePath() here
 	absLink := *flLink
