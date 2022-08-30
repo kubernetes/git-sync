@@ -294,6 +294,12 @@ OPTIONS
             it will take precedence.  If not specified, this defaults to 120
             seconds ("120s").
 
+    --touch-file <string>, $GIT_SYNC_TOUCH_FILE
+            The path to an optional file which will be touched whenever a sync
+            completes.  This may be an absolute path or a relative path, in
+            which case it is relative to --root.  If it is relative to --root,
+            the first path element may not start with a period.
+
     --username <string>, $GIT_SYNC_USERNAME
             The username to use for git authentication (see --password-file or
             --password).
