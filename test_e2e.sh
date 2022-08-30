@@ -2365,6 +2365,10 @@ function run_test() {
     eval "$restore_opts"
 }
 
+# Override local configs for predictability in this test.
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
 # Iterate over the chosen tests and run them.
 FAILS=()
 RET=0
