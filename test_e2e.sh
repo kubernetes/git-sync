@@ -320,7 +320,7 @@ function e2e::sync_head_once_root_exists_but_is_not_git_root() {
     # Make a parent dir that is a git repo.
     mkdir -p "$ROOT/subdir/root"
     date > "$ROOT/subdir/root/file" # so it is not empty
-    git -C "$ROOT/subdir" init >/dev/null
+    git -C "$ROOT/subdir" init -q
 
     GIT_SYNC \
         --one-time \
@@ -344,7 +344,7 @@ function e2e::sync_head_once_root_exists_but_fails_sanity() {
     SHA=$(git -C "$REPO" rev-parse HEAD)
 
     # Make an invalid git repo.
-    git -C "$ROOT" init >/dev/null
+    git -C "$ROOT" init -q
     echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
 
     GIT_SYNC \
