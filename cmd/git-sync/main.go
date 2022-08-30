@@ -1379,7 +1379,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = git.LocalHashForRev(ctx, git.rev)
+		hash, err = git.ensureLocalHashForRev(ctx, git.rev)
 		if err != nil {
 			return false, "", err
 		}
@@ -1400,6 +1400,46 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	}
 
 	return true, hash, git.AddWorktreeAndSwap(ctx, hash)
+}
+
+func (git *repoSync) ensureLocalHashForRev(ctx context.Context, rev string) (string, error) {
+	hash, err := git.LocalHashForRev(ctx, rev)
+	if err == nil {
+		return hash, nil
+	}
+
+	// git might return either error, based on flags used internal to
+	// LocalHashForRev, so we will consider either one to be a "rev not found".
+	if es := err.Error(); !stringContainsOneOf(es, "unknown revision", "bad revision") {
+		return "", err
+	}
+
+	// The rev was not found, try to fetch it.
+	git.log.V(1).Info("rev was not found, trying fetch", "rev", git.rev)
+	args := []string{"fetch", "-f", "--tags"}
+	if git.depth != 0 {
+		args = append(args, "--depth", strconv.Itoa(git.depth))
+	}
+	args = append(args, git.repo, "--")
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
+		return "", err
+	}
+
+	// Try again.
+	hash, err = git.LocalHashForRev(ctx, git.rev)
+	if err != nil {
+		return "", err
+	}
+	return hash, nil
+}
+
+func stringContainsOneOf(s string, matches ...string) bool {
+	for _, m := range matches {
+		if strings.Contains(s, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetRevs returns the local and upstream hashes for rev.
