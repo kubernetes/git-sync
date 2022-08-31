@@ -19,14 +19,12 @@ set -o nounset
 set -o pipefail
 
 function fail() {
-    echo "FAIL: " "$@"
-    remove_containers || true
-    exit 1
+    echo "FAIL:" "$@"
+    return 42
 }
 
 function pass() {
     echo "PASS"
-    remove_containers || true
 }
 
 function assert_link_exists() {
@@ -42,7 +40,7 @@ function assert_link_basename_eq() {
     if [[ $(basename $(readlink "$1")) == "$2" ]]; then
         return
     fi
-    fail "link $1 does not point to '$2': $(readlink $1)"
+    fail "$1 does not point to $2: $(readlink $1)"
 }
 
 function assert_file_exists() {
@@ -53,7 +51,7 @@ function assert_file_exists() {
 
 function assert_file_absent() {
     if [[ -f "$1" ]]; then
-        fail "$1 exists"
+        fail "$1 exists but should not"
     fi
 }
 
@@ -61,14 +59,14 @@ function assert_file_eq() {
     if [[ $(cat "$1") == "$2" ]]; then
         return
     fi
-    fail "file $1 does not contain '$2': $(cat $1)"
+    fail "$1 does not contain '$2': $(cat $1)"
 }
 
 function assert_file_contains() {
     if grep -q "$2" "$1"; then
         return
     fi
-    fail "file $1 does not contain '$2': $(cat $1)"
+    fail "$1 does not contain '$2': $(cat $1)"
 }
 
 # Helper: run a docker container.
@@ -1391,16 +1389,23 @@ function e2e::exechook_fail_once() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
-    GIT_SYNC \
-        --period=100ms \
-        --one-time \
-        --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --root="$ROOT" \
-        --link="link" \
-        --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
-        --exechook-backoff=1s \
-        >> "$1" 2>&1
+    (
+        set +o errexit
+        GIT_SYNC \
+            --period=100ms \
+            --one-time \
+            --repo="file://$REPO" \
+            --branch="$MAIN_BRANCH" \
+            --root="$ROOT" \
+            --link="link" \
+            --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+            --exechook-backoff=1s \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+    )
 
     # Check that exechook was called
     sleep 2
@@ -1408,6 +1413,9 @@ function e2e::exechook_fail_once() {
     if [[ "$RUNS" != 1 ]]; then
         fail "exechook called $RUNS times, it should be at exactly 1"
     fi
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1423,6 +1431,7 @@ function e2e::webhook_success() {
         e2e/test/test-ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
+            echo
            ')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
@@ -1471,6 +1480,7 @@ function e2e::webhook_fail_retry() {
         e2e/test/test-ncsvr \
         80 'read X
             echo "HTTP/1.1 500 Internal Server Error"
+            echo
            ')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
@@ -1502,6 +1512,7 @@ function e2e::webhook_fail_retry() {
         e2e/test/test-ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
+            echo
            ')
     sleep 2
     HITS=$(cat "$HITLOG" | wc -l)
@@ -1522,8 +1533,8 @@ function e2e::webhook_success_once() {
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
         80 'read X
-            sleep 3
             echo "HTTP/1.1 200 OK"
+            echo
            ')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
@@ -1560,23 +1571,30 @@ function e2e::webhook_fail_retry_once() {
         -v "$HITLOG":/var/log/hits \
         e2e/test/test-ncsvr \
         80 'read X
-            sleep 3
             echo "HTTP/1.1 500 Internal Server Error"
+            echo
            ')
     IP=$(docker_ip "$CTR")
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
-    GIT_SYNC \
-        --period=100ms \
-        --one-time \
-        --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --root="$ROOT" \
-        --webhook-url="http://$IP" \
-        --webhook-success-status=200 \
-        --link="link" \
-        >> "$1" 2>&1
+    (
+        set +o errexit
+        GIT_SYNC \
+            --period=100ms \
+            --one-time \
+            --repo="file://$REPO" \
+            --branch="$MAIN_BRANCH" \
+            --root="$ROOT" \
+            --webhook-url="http://$IP" \
+            --webhook-success-status=200 \
+            --link="link" \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+    )
 
     # Check that webhook was called
     sleep 2
@@ -1584,6 +1602,9 @@ function e2e::webhook_fail_retry_once() {
     if [[ "$HITS" != 1 ]]; then
         fail "webhook called $HITS times"
     fi
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1598,6 +1619,7 @@ function e2e::webhook_fire_and_forget() {
         e2e/test/test-ncsvr \
         80 'read X
             echo "HTTP/1.1 404 Not Found"
+            echo
            ')
     IP=$(docker_ip "$CTR")
 
@@ -2306,7 +2328,6 @@ function finish() {
     echo "the directory $DIR was not removed as it contains"\
          "log files useful for debugging"
   fi
-  remove_containers
   exit $r
 }
 trap finish INT EXIT ERR
@@ -2315,23 +2336,73 @@ echo
 echo "test root is $DIR"
 echo
 
+# Run a test function and return its error code.  This is needed because POSIX
+# dictates that `errexit` does not apply inside a function called in an `if`
+# context.  But if we don't call it with `if`, then it terminates the whole
+# test run as soon as one test fails.  So this jumps through hoops to let the
+# individual test functions run outside of `if` and return a code in a
+# variable.
+#
+# Args:
+#  $1: the name of a variable to populate with the return code
+#  $2+: the test function to run and optional args
+function run_test() {
+    retvar=$1
+    shift
+
+    declare -g "$retvar"
+    local restore_opts=$(set +o)
+    set +o errexit
+    set +o nounset
+    set +o pipefail
+    (
+        set -o errexit
+        set -o nounset
+        set -o pipefail
+        "$@"
+    )
+    eval "$retvar=$?"
+    eval "$restore_opts"
+}
+
 # Iterate over the chosen tests and run them.
+FAILS=()
+RET=0
 for t; do
     clean_root
     clean_work
     init_repo
+
     echo -n "testcase $t: "
-    if "e2e::${t}" "${DIR}/log.$t"; then
-         pass
+
+    # See comments on run_test for details.
+    TESTRET=0
+    run_test TESTRET "e2e::${t}" "${DIR}/log.$t"
+    if [[ "$TESTRET" == 0 ]]; then
+        pass
+    else
+        RET=1
+        if [[ "$TESTRET" != 42 ]]; then
+            echo "FAIL: unknown error"
+        fi
+        FAILS+=("$t")
     fi
+    remove_containers || true
 done
+if [[ "$RET" != 0 ]]; then
+    echo
+    echo "the following tests failed:"
+    for f in "${FAILS[@]}"; do
+        echo "    $f"
+    done
+    exit 1
+fi
 
 # Finally...
 echo
 if [[ "${CLEANUP:-}" == 0 ]]; then
     echo "leaving logs in $DIR"
 else
-    echo "cleaning up $DIR"
     rm -rf "$DIR"
 fi
 
