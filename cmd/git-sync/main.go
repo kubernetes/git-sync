@@ -493,10 +493,7 @@ func main() {
 	// Convert the link into an absolute path.  We don't want to mkdir here,
 	// since it may be under --root, and that confuses `git clone`.
 	// TODO(thockin): put repo in a subdir and mkdir + nortmalizePath() here
-	absLink := *flLink
-	if !filepath.IsAbs(absLink) {
-		absLink = filepath.Join(absRoot, *flLink)
-	}
+	absLink := makeAbsPath(*flLink, absRoot)
 
 	if *flAddUser {
 		if err := addUser(); err != nil {
