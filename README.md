@@ -146,9 +146,10 @@ OPTIONS
             full history of the repo.
 
     --error-file <string>, $GIT_SYNC_ERROR_FILE
-            The name of an optional file (under --root) into which errors will
-            be written.  This must be a filename, not a path, and may not start
-            with a period.
+            The path to an optional file into which errors will be written.
+            This may be an absolute path or a relative path, in which case it
+            is relative to --root.  If it is relative to --root, the first path
+            element may not start with a period.
 
     --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --exechook-command.  If

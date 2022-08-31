@@ -2150,6 +2150,58 @@ function e2e::export_error() {
 }
 
 ##############################################
+# Test export-error with an absolute path
+##############################################
+function e2e::export_error_abs_path() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    (
+        set +o errexit
+        GIT_SYNC \
+            --repo="file://$REPO" \
+            --branch=does-not-exit \
+            --root="$ROOT" \
+            --link="link" \
+            --error-file="$ROOT/dir/error.json" \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/link/file
+        assert_file_contains "$ROOT"/dir/error.json "Remote branch does-not-exit not found in upstream origin"
+    )
+}
+
+##############################################
+# Test export-error with invalid path
+##############################################
+function e2e::export_error_invalid_file() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    (
+        set +o errexit
+        GIT_SYNC \
+            --repo="file://$REPO" \
+            --branch="$MAIN_BRANCH" \
+            --root="$ROOT" \
+            --link="link" \
+            --error-file=".error.json" \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/link/file
+        assert_file_absent "$ROOT"/.error.json
+    )
+}
+
+##############################################
 # Test github HTTPS
 # TODO: it would be better if we set up a local HTTPS server
 ##############################################
