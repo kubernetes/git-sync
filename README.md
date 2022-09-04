@@ -120,9 +120,9 @@ OPTIONS
     variable.
 
     --add-user, $GIT_SYNC_ADD_USER
-            Add a record to /etc/passwd for the current UID/GID.  This is needed
-            to use SSH (see --ssh) with an arbitrary UID.  This assumes that
-            /etc/passwd is writable by the current UID.
+            Add a record to /etc/passwd for the current UID/GID.  This is
+            needed to use SSH with an arbitrary UID (see --ssh).  This assumes
+            that /etc/passwd is writable by the current UID.
 
     --askpass-url <string>, $GIT_SYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
@@ -130,29 +130,29 @@ OPTIONS
             "username=<value>" and "password=<value>".
 
     --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out.  (default: <repo's default branch>)
+            The git branch to check out.  If not specified, this defaults to
+            the default branch of --repo.
 
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
-            Optionally change permissions on the checked-out files to the
-            specified mode.
+            Change permissions on the checked-out files to the specified mode.
 
-    --cookie-file, $GIT_SYNC_COOKIE_FILE
+    --cookie-file <string>, $GIT_SYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
     --depth <int>, $GIT_SYNC_DEPTH
             Create a shallow clone with history truncated to the specified
-            number of commits.
+            number of commits.  If not specified, this defaults to cloning the
+            full history of the repo.
 
-    --error-file, $GIT_SYNC_ERROR_FILE
-            The name of a file (under --root) into which errors will be
-            written.  This must be a filename, not a path, and may not start
-            with a period.  (default: "", which means error reporting will be
-            disabled)
+    --error-file <string>, $GIT_SYNC_ERROR_FILE
+            The name of an optional file (under --root) into which errors will
+            be written.  This must be a filename, not a path, and may not start
+            with a period.
 
     --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
-            The time to wait before retrying a failed --exechook-command.
-            (default: 3s)
+            The time to wait before retrying a failed --exechook-command.  If
+            not specified, this defaults to 3 seconds ("3s").
 
     --exechook-command <string>, $GIT_SYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
@@ -165,11 +165,12 @@ OPTIONS
             is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GIT_SYNC_EXECHOOK_TIMEOUT
-            The timeout for the --exechook-command.  (default: 30s)
+            The timeout for the --exechook-command.  If not specifid, this
+            defaults to 30 seconds ("30s").
 
     --git <string>, $GIT_SYNC_GIT
-            The git command to run (subject to PATH search, mostly for testing).
-            (default: git)
+            The git command to run (subject to PATH search, mostly for
+            testing).  This defaults to "git".
 
     --git-config <string>, $GIT_SYNC_GIT_CONFIG
             Additional git config options in 'key1:val1,key2:val2' format.  The
@@ -179,11 +180,12 @@ OPTIONS
             supported: '\n' => [newline], '\t' => [tab], '\"' => '"', '\,' =>
             ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
             Within quoted values, commas MAY be escaped, but are not required
-            to be.  Any other escape sequence is an error.  (default: "")
+            to be.  Any other escape sequence is an error.
 
     --git-gc <string>, $GIT_SYNC_GIT_GC
-            The git garbage collection behavior: one of 'auto', 'always',
-            'aggressive', or 'off'.  (default: auto)
+            The git garbage collection behavior: one of "auto", "always",
+            "aggressive", or "off".  If not specified, this defaults to
+            "auto".
 
             - auto: Run "git gc --auto" once per successful sync.  This mode
               respects git's gc.* config params.
@@ -197,16 +199,16 @@ OPTIONS
             Print help text and exit.
 
     --http-bind <string>, $GIT_SYNC_HTTP_BIND
-            The bind address (including port) for git-sync's HTTP endpoint.
-            (default: none)
+            The bind address (including port) for git-sync's HTTP endpoint.  If
+            not specified, the HTTP endpoint is not enabled.
 
     --http-metrics, $GIT_SYNC_HTTP_METRICS
-            Enable metrics on git-sync's HTTP endpoint (see --http-bind).
-            (default: true)
+            Enable metrics on git-sync's HTTP endpoint, if it is enabled (see
+            --http-bind).
 
     --http-pprof, $GIT_SYNC_HTTP_PPROF
-            Enable the pprof debug endpoints on git-sync's HTTP endpoint (see
-            --http-bind).  (default: false)
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint, if it
+            is enabled (see --http-bind).
 
     --link <string>, $GIT_SYNC_LINK
             The path to at which to create a symlink which points to the
@@ -216,18 +218,19 @@ OPTIONS
             start with a period.  Consumers of the synced files should always
             use this link - it is updated atomically and should always be
             valid.  The basename of the target of the link is the current SHA.
-            (default: the leaf dir of --repo)
+            If not specified, this defaults to the leaf dir of --repo.
 
     --man
             Print this manual and exit.
 
     --max-failures <int>, $GIT_SYNC_MAX_FAILURES
             The number of consecutive failures allowed before aborting (the
-            first sync must succeed), Setting this to -1 will retry forever
-            after the initial sync.  (default: 0)
+            first sync must succeed), Setting this to a negative value will
+            retry forever after the initial sync.  If not specified, this
+            defaults to 0, meaning any sync failure will terminate git-sync.
 
     --one-time, $GIT_SYNC_ONE_TIME
-            Exit after the first sync.
+            Exit after one sync.
 
     --password <string>, $GIT_SYNC_PASSWORD
             The password or personal access token (see github docs) to use for
@@ -238,18 +241,20 @@ OPTIONS
     --password-file <string>, $GIT_SYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            sourced.
+            read.
 
     --period <duration>, $GIT_SYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
-            will take precedence.  (default: 10s)
+            will take precedence.  If not specified, this defaults to 10
+            seconds ("10s").
 
     --repo <string>, $GIT_SYNC_REPO
-            The git repository to sync.
+            The git repository to sync.  This flag is required.
 
     --rev <string>, $GIT_SYNC_REV
-            The git revision (tag or hash) to check out.  (default: HEAD)
+            The git revision (tag or hash) to check out.  If not specified,
+            this defaults to "HEAD".
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
@@ -258,33 +263,35 @@ OPTIONS
             which can be emptied by removing all of the contents.  This flag is
             required.
 
-    --sparse-checkout-file, $GIT_SYNC_SPARSE_CHECKOUT_FILE
+    --sparse-checkout-file <string>, $GIT_SYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
             details) which controls which files and directories will be checked
-            out.
+            out.  If not specified, the default is to check out the entire repo.
 
     --ssh, $GIT_SYNC_SSH
             Use SSH for git authentication and operations.
 
     --ssh-key-file <string>, $GIT_SYNC_SSH_KEY_FILE
-            The SSH key to use when using --ssh.  (default: /etc/git-secret/ssh)
+            The SSH key to use when using --ssh.  If not specified, this
+            defaults to "/etc/git-secret/ssh".
 
     --ssh-known-hosts, $GIT_SYNC_KNOWN_HOSTS
-            Enable SSH known_hosts verification when using --ssh.
-            (default: true)
+            Enable SSH known_hosts verification when using --ssh.  If not
+            specified, this defaults to true.
 
     --ssh-known-hosts-file <string>, $GIT_SYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
-            (default: /etc/git-secret/known_hosts)
+            If not specified, this defaults to "/etc/git-secret/known_hosts".
 
     --submodules <string>, $GIT_SYNC_SUBMODULES
-            The git submodule behavior: one of 'recursive', 'shallow', or 'off'.
-            (default: recursive)
+            The git submodule behavior: one of "recursive", "shallow", or
+            "off".  If not specified, this defaults to "recursive".
 
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
             10ms.  This flag obsoletes --timeout, but if --timeout is specified,
-            it will take precedence.  (default: 120s)
+            it will take precedence.  If not specified, this defaults to 120
+            seconds ("120s").
 
     --username <string>, $GIT_SYNC_USERNAME
             The username to use for git authentication (see --password-file or
@@ -292,25 +299,26 @@ OPTIONS
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
-            printed.  (default: 0)
+            printed.
 
     --version
             Print the version and exit.
 
     --webhook-backoff <duration>, $GIT_SYNC_WEBHOOK_BACKOFF
-            The time to wait before retrying a failed --webhook-url.
-            (default: 3s)
+            The time to wait before retrying a failed --webhook-url.  If not
+            specified, this defaults to 3 seconds ("3s").
 
     --webhook-method <string>, $GIT_SYNC_WEBHOOK_METHOD
-            The HTTP method for the --webhook-url (default: POST)
+            The HTTP method for the --webhook-url.  If not specified, this defaults to "POST".
 
     --webhook-success-status <int>, $GIT_SYNC_WEBHOOK_SUCCESS_STATUS
             The HTTP status code indicating a successful --webhook-url.  Setting
-            this to -1 disables success checks to make webhooks fire-and-forget.
-            (default: 200)
+            this to -1 disables success checks to make webhooks
+            "fire-and-forget".  If not specified, this defaults to 200.
 
     --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT
-            The timeout for the --webhook-url.  (default: 1s)
+            The timeout for the --webhook-url.  If not specified, this defaults
+            to 1 second ("1s").
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
@@ -369,4 +377,3 @@ HOOKS
     Hooks are not guaranteed to succeed on every single SHA change.  For example,
     if a hook fails and a new SHA is synced during the backoff period, the
     retried hook will fire for the newest SHA.
-```
