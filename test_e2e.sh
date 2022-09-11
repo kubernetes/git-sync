@@ -285,32 +285,6 @@ function e2e::sync_head_once_root_flag_has_symlink() {
 }
 
 ##############################################
-# Test non-zero exit
-##############################################
-function e2e::error_non_zero_exit() {
-    echo "$FUNCNAME" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    (
-        set +o errexit
-        GIT_SYNC \
-            --one-time \
-            --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
-            --rev=does-not-exit \
-            --root="$ROOT" \
-            --link="link" \
-            >> "$1" 2>&1
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-    )
-}
-
-##############################################
 # Test HEAD one-time when root is under a git repo
 ##############################################
 function e2e::sync_head_once_root_exists_but_is_not_git_root() {
@@ -404,6 +378,58 @@ function e2e::sync_subdir_link() {
     assert_link_exists "$ROOT"/other/dir/link
     assert_file_exists "$ROOT"/other/dir/link/file
     assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+}
+
+##############################################
+# Test non-zero exit with a bad branch
+##############################################
+function e2e::bad_branch_non_zero_exit() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    (
+        set +o errexit
+        GIT_SYNC \
+            --one-time \
+            --repo="file://$REPO" \
+            --branch="does-not-exist" \
+            --rev="HEAD" \
+            --root="$ROOT" \
+            --link="link" \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/link/file
+    )
+}
+
+##############################################
+# Test non-zero exit with a bad rev
+##############################################
+function e2e::bad_rev_non_zero_exit() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    (
+        set +o errexit
+        GIT_SYNC \
+            --one-time \
+            --repo="file://$REPO" \
+            --branch="$MAIN_BRANCH" \
+            --rev=does-not-exit \
+            --root="$ROOT" \
+            --link="link" \
+            >> "$1" 2>&1
+        RET=$?
+        if [[ "$RET" != 1 ]]; then
+            fail "expected exit code 1, got $RET"
+        fi
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/link/file
+    )
 }
 
 ##############################################
