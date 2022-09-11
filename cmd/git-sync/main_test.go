@@ -148,6 +148,33 @@ func TestEnvDuration(t *testing.T) {
 	}
 }
 
+func TestMakeAbsPath(t *testing.T) {
+	cases := []struct {
+		path string
+		root string
+		exp  string
+	}{{
+		path: "", root: "", exp: "",
+	}, {
+		path: "", root: "/root", exp: "",
+	}, {
+		path: "path", root: "/root", exp: "/root/path",
+	}, {
+		path: "p/a/t/h", root: "/root", exp: "/root/p/a/t/h",
+	}, {
+		path: "/path", root: "/root", exp: "/path",
+	}, {
+		path: "/p/a/t/h", root: "/root", exp: "/p/a/t/h",
+	}}
+
+	for _, tc := range cases {
+		res := makeAbsPath(tc.path, tc.root)
+		if res != tc.exp {
+			t.Errorf("expected: %q, got: %q", tc.exp, res)
+		}
+	}
+}
+
 func TestManualHasNoTabs(t *testing.T) {
 	if strings.Contains(manual, "\t") {
 		t.Fatal("the manual text contains a tab")

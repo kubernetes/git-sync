@@ -71,7 +71,7 @@ var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
 var flLink = pflag.String("link", envString("GIT_SYNC_LINK", ""),
 	"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
 var flErrorFile = pflag.String("error-file", envString("GIT_SYNC_ERROR_FILE", ""),
-	"an optional file into which errors will be written under --root (defaults to disabled)")
+	"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
 var flPeriod = pflag.Duration("period", envDuration("GIT_SYNC_PERIOD", 10*time.Second),
 	"how long to wait between syncs, must be >= 10ms; --wait overrides this")
 var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TIMEOUT", 120*time.Second),
@@ -326,7 +326,14 @@ func main() {
 	pflag.Parse()
 
 	// Needs to happen very early for errors to be written to a file.
-	log := logging.New(*flRoot, *flErrorFile, *flVerbose)
+	log := func() *logging.Logger {
+		if strings.HasPrefix(*flErrorFile, ".") {
+			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'")
+			os.Exit(1)
+		}
+		dir, file := filepath.Split(makeAbsPath(*flErrorFile, *flRoot))
+		return logging.New(dir, file, *flVerbose)
+	}()
 	cmdRunner := cmd.NewRunner(log)
 
 	if *flVersion {
@@ -744,6 +751,20 @@ func main() {
 		cancel()
 		time.Sleep(*flPeriod)
 	}
+}
+
+// makeAbsPath makes an absolute path from a path which might be absolute
+// or relative.  If the path is already absolute, it will be used.  If it is
+// not absolute, it will be joined with the provided root. If the path is
+// empty, the result will be empty.
+func makeAbsPath(path, root string) string {
+	if path == "" {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(root, path)
 }
 
 const redactedString = "REDACTED"
@@ -1842,9 +1863,10 @@ OPTIONS
             full history of the repo.
 
     --error-file <string>, $GIT_SYNC_ERROR_FILE
-            The name of an optional file (under --root) into which errors will
-            be written.  This must be a filename, not a path, and may not start
-            with a period.
+            The path to an optional file into which errors will be written.
+            This may be an absolute path or a relative path, in which case it
+            is relative to --root.  If it is relative to --root, the first path
+            element may not start with a period.
 
     --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --exechook-command.  If
