@@ -325,17 +325,7 @@ func main() {
 
 	pflag.Parse()
 
-	// Needs to happen very early for errors to be written to a file.
-	log := func() *logging.Logger {
-		if strings.HasPrefix(*flErrorFile, ".") {
-			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'")
-			os.Exit(1)
-		}
-		dir, file := filepath.Split(makeAbsPath(*flErrorFile, *flRoot))
-		return logging.New(dir, file, *flVerbose)
-	}()
-	cmdRunner := cmd.NewRunner(log)
-
+	// Handle print-and-exit cases.
 	if *flVersion {
 		fmt.Println(version.VERSION)
 		os.Exit(0)
@@ -349,6 +339,17 @@ func main() {
 		printManPage()
 		os.Exit(0)
 	}
+
+	// Init logging very early, so most errors can be written to a file.
+	log := func() *logging.Logger {
+		if strings.HasPrefix(*flErrorFile, ".") {
+			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'")
+			os.Exit(1)
+		}
+		dir, file := filepath.Split(makeAbsPath(*flErrorFile, *flRoot))
+		return logging.New(dir, file, *flVerbose)
+	}()
+	cmdRunner := cmd.NewRunner(log)
 
 	if *flRepo == "" {
 		handleConfigError(log, true, "ERROR: --repo must be specified")
