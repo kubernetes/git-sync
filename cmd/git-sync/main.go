@@ -83,6 +83,9 @@ var flMaxFailures = pflag.Int("max-failures", envInt("GIT_SYNC_MAX_FAILURES", 0)
 var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"optionally change permissions on the checked-out files to the specified mode")
 
+var flTouchFile = pflag.String("touch-file", envString("GIT_SYNC_TOUCH_FILE", ""),
+	"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
+
 var flSparseCheckoutFile = pflag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
 	"the path to a sparse-checkout file")
 
@@ -408,6 +411,13 @@ func main() {
 		*flMaxFailures = *flMaxSyncFailures
 	}
 
+	if *flTouchFile != "" {
+		if strings.HasPrefix(*flTouchFile, ".") {
+			handleConfigError(log, true, "ERROR: --touch-file may not start with '.'")
+		}
+	}
+	absTouchFile := makeAbsPath(*flTouchFile, *flRoot)
+
 	if *flSyncHookCommand != "" {
 		// Back-compat
 		*flExechookCommand = *flSyncHookCommand
@@ -696,6 +706,13 @@ func main() {
 			// this might have been called before, but also might not have
 			setRepoReady()
 			if changed {
+				if absTouchFile != "" {
+					if err := touch(absTouchFile); err != nil {
+						log.Error(err, "failed to touch-file", "path", absTouchFile)
+					} else {
+						log.V(4).Info("touched touch-file", "path", absTouchFile)
+					}
+				}
 				if webhookRunner != nil {
 					webhookRunner.Send(hash)
 				}
@@ -763,6 +780,20 @@ func makeAbsPath(path, root string) string {
 		return path
 	}
 	return filepath.Join(root, path)
+}
+
+// touch will try to ensure that the file at the specified path exists and that
+// its timestamps are updated.
+func touch(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	return file.Close()
 }
 
 const redactedString = "REDACTED"
@@ -2008,6 +2039,12 @@ OPTIONS
             10ms.  This flag obsoletes --timeout, but if --timeout is specified,
             it will take precedence.  If not specified, this defaults to 120
             seconds ("120s").
+
+    --touch-file <string>, $GIT_SYNC_TOUCH_FILE
+            The path to an optional file which will be touched whenever a sync
+            completes.  This may be an absolute path or a relative path, in
+            which case it is relative to --root.  If it is relative to --root,
+            the first path element may not start with a period.
 
     --username <string>, $GIT_SYNC_USERNAME
             The username to use for git authentication (see --password-file or
