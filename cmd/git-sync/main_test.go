@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -270,10 +269,7 @@ func TestParseGitConfigs(t *testing.T) {
 }
 
 func TestDirIsEmpty(t *testing.T) {
-	root, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to make a temp dir: %v", err)
-	}
+	root := t.TempDir()
 
 	// Brand new should be empty.
 	if empty, err := dirIsEmpty(root); err != nil {
@@ -289,7 +285,7 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 	for _, file := range []string{"a", "b", "c"} {
 		path := filepath.Join(dir, file)
-		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
 		if empty, err := dirIsEmpty(dir); err != nil {
@@ -306,7 +302,7 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 	for _, file := range []string{".a", ".b", ".c"} {
 		path := filepath.Join(dir, file)
-		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
 		if empty, err := dirIsEmpty(dir); err != nil {
@@ -340,10 +336,7 @@ func TestDirIsEmpty(t *testing.T) {
 }
 
 func TestRemoveDirContents(t *testing.T) {
-	root, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to make a temp dir: %v", err)
-	}
+	root := t.TempDir()
 
 	// Brand new should be empty.
 	if empty, err := dirIsEmpty(root); err != nil {
@@ -360,7 +353,7 @@ func TestRemoveDirContents(t *testing.T) {
 	// Populate the dir.
 	for _, file := range []string{"f1", "f2", ".f3", ".f4"} {
 		path := filepath.Join(root, file)
-		if err := ioutil.WriteFile(path, []byte{}, 0755); err != nil {
+		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
 	}
