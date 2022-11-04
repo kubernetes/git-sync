@@ -19,7 +19,6 @@ package logging
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -111,7 +110,7 @@ func (l *Logger) writeContent(content []byte) {
 			return
 		}
 	}
-	tmpFile, err := ioutil.TempFile(l.root, "tmp-err-")
+	tmpFile, err := os.CreateTemp(l.root, "tmp-err-")
 	if err != nil {
 		l.Logger.Error(err, "can't create temporary error-file", "directory", l.root, "prefix", "tmp-err-")
 		return

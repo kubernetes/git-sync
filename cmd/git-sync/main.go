@@ -23,7 +23,6 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -550,7 +549,7 @@ func main() {
 
 	if *flUsername != "" {
 		if *flPasswordFile != "" {
-			passwordFileBytes, err := ioutil.ReadFile(*flPasswordFile)
+			passwordFileBytes, err := os.ReadFile(*flPasswordFile)
 			if err != nil {
 				log.Error(err, "can't read password file", "file", *flPasswordFile)
 				os.Exit(1)
@@ -941,7 +940,7 @@ func (git *repoSync) SanityCheck(ctx context.Context) bool {
 }
 
 func dirIsEmpty(dir string) (bool, error) {
-	dirents, err := ioutil.ReadDir(dir)
+	dirents, err := os.ReadDir(dir)
 	if err != nil {
 		return false, err
 	}
@@ -949,7 +948,7 @@ func dirIsEmpty(dir string) (bool, error) {
 }
 
 func removeDirContents(dir string, log *logging.Logger) error {
-	dirents, err := ioutil.ReadDir(dir)
+	dirents, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
@@ -1142,7 +1141,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		return err
 	}
 	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
-	if err = ioutil.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+	if err = os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
 		return err
 	}
 
@@ -1612,13 +1611,13 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != 200 {
-		errMessage, err := ioutil.ReadAll(resp.Body)
+		errMessage, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("auth URL returned status %d, failed to read body: %w", resp.StatusCode, err)
 		}
 		return fmt.Errorf("auth URL returned status %d, body: %q", resp.StatusCode, string(errMessage))
 	}
-	authData, err := ioutil.ReadAll(resp.Body)
+	authData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("can't read auth response: %w", err)
 	}
