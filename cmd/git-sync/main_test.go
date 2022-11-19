@@ -115,25 +115,65 @@ func TestParseGitConfigs(t *testing.T) {
 		input:  `k:v`,
 		expect: []keyVal{keyVal{"k", "v"}},
 	}, {
+		name:   "one-pair-qkey",
+		input:  `"k":v`,
+		expect: []keyVal{keyVal{"k", "v"}},
+	}, {
 		name:   "one-pair-qval",
 		input:  `k:"v"`,
 		expect: []keyVal{keyVal{"k", "v"}},
+	}, {
+		name:   "one-pair-qkey-qval",
+		input:  `"k":"v"`,
+		expect: []keyVal{keyVal{"k", "v"}},
+	}, {
+		name:   "multi-pair",
+		input:  `k1:v1,"k2":v2,k3:"v3","k4":"v4"`,
+		expect: []keyVal{{"k1", "v1"}, {"k2", "v2"}, {"k3", "v3"}, {"k4", "v4"}},
 	}, {
 		name:  "garbage",
 		input: `abc123`,
 		fail:  true,
 	}, {
-		name:  "invalid-val",
-		input: `k:v\xv`,
-		fail:  true,
+		name:   "key-section-var",
+		input:  `sect.var:v`,
+		expect: []keyVal{keyVal{"sect.var", "v"}},
 	}, {
-		name:  "invalid-qval",
-		input: `k:"v\xv"`,
-		fail:  true,
+		name:   "key-section-subsection-var",
+		input:  `sect.sub.var:v`,
+		expect: []keyVal{keyVal{"sect.sub.var", "v"}},
 	}, {
-		name:   "two-pair",
-		input:  `k1:v1,k2:v2`,
-		expect: []keyVal{{"k1", "v1"}, {"k2", "v2"}},
+		name:   "key-subsection-with-space",
+		input:  `k.sect.sub section:v`,
+		expect: []keyVal{keyVal{"k.sect.sub section", "v"}},
+	}, {
+		name:   "key-subsection-with-escape",
+		input:  `k.sect.sub\tsection:v`,
+		expect: []keyVal{keyVal{"k.sect.sub\\tsection", "v"}},
+	}, {
+		name:   "key-subsection-with-comma",
+		input:  `k.sect.sub,section:v`,
+		expect: []keyVal{keyVal{"k.sect.sub,section", "v"}},
+	}, {
+		name:   "qkey-subsection-with-space",
+		input:  `"k.sect.sub section":v`,
+		expect: []keyVal{keyVal{"k.sect.sub section", "v"}},
+	}, {
+		name:   "qkey-subsection-with-escapes",
+		input:  `"k.sect.sub\t\n\\section":v`,
+		expect: []keyVal{keyVal{"k.sect.sub\t\n\\section", "v"}},
+	}, {
+		name:   "qkey-subsection-with-comma",
+		input:  `"k.sect.sub,section":v`,
+		expect: []keyVal{keyVal{"k.sect.sub,section", "v"}},
+	}, {
+		name:   "qkey-subsection-with-colon",
+		input:  `"k.sect.sub:section":v`,
+		expect: []keyVal{keyVal{"k.sect.sub:section", "v"}},
+	}, {
+		name:  "invalid-qkey",
+		input: `"k\xk":v"`,
+		fail:  true,
 	}, {
 		name:   "val-spaces",
 		input:  `k1:v 1,k2:v 2`,
@@ -155,17 +195,21 @@ func TestParseGitConfigs(t *testing.T) {
 		input:  `k1:"v1",k2:"v2",`,
 		expect: []keyVal{{"k1", "v1"}, {"k2", "v2"}},
 	}, {
-		name:   "val-escapes",
+		name:   "val-with-escapes",
 		input:  `k1:v\n\t\\\"\,1`,
 		expect: []keyVal{{"k1", "v\n\t\\\",1"}},
 	}, {
-		name:   "qval-escapes",
+		name:   "qval-with-escapes",
 		input:  `k1:"v\n\t\\\"\,1"`,
 		expect: []keyVal{{"k1", "v\n\t\\\",1"}},
 	}, {
-		name:   "qval-comma",
+		name:   "qval-with-comma",
 		input:  `k1:"v,1"`,
 		expect: []keyVal{{"k1", "v,1"}},
+	}, {
+		name:  "qkey-missing-close",
+		input: `"k1:v1`,
+		fail:  true,
 	}, {
 		name:  "qval-missing-close",
 		input: `k1:"v1`,
@@ -182,7 +226,7 @@ func TestParseGitConfigs(t *testing.T) {
 				t.Errorf("unexpected success")
 			}
 			if !reflect.DeepEqual(kvs, tc.expect) {
-				t.Errorf("bad result: expected %v, got %v", tc.expect, kvs)
+				t.Errorf("bad result:\n\texpected: %#v\n\t     got: %#v", tc.expect, kvs)
 			}
 		})
 	}
