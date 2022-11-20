@@ -1588,8 +1588,9 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 //
 // The expected URL callback output is below,
 // see https://git-scm.com/docs/gitcredentials for more examples:
-//   username=xxx@example.com
-//   password=xxxyyyzzz
+//
+//	username=xxx@example.com
+//	password=xxxyyyzzz
 func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	git.log.V(2).Info("calling auth URL to get credentials")
 
