@@ -127,7 +127,7 @@ var flAskPassURL = flag.String("askpass-url", envString("GIT_ASKPASS_URL", ""),
 var flGitCmd = flag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
 var flGitConfig = flag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
-	"additional git config options in 'key1:val1,key2:val2' format")
+	"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
 var flGitGC = flag.String("git-gc", envString("GIT_SYNC_GIT_GC", "auto"),
 	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
 
@@ -1293,9 +1293,19 @@ func parseGitConfigs(configsFlag string) ([]keyVal, error) {
 		if r, ok := <-ch; !ok {
 			break
 		} else {
-			cur.key, err = parseGitConfigKey(r, ch)
-			if err != nil {
-				return nil, err
+			// This can accumulate things that git doesn't allow, but we'll
+			// just let git handle it, rather than try to pre-validate to their
+			// spec.
+			if r == '"' {
+				cur.key, err = parseGitConfigQKey(ch)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				cur.key, err = parseGitConfigKey(r, ch)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 
@@ -1322,6 +1332,23 @@ func parseGitConfigs(configsFlag string) ([]keyVal, error) {
 	return result, nil
 }
 
+func parseGitConfigQKey(ch <-chan rune) (string, error) {
+	str, err := parseQString(ch)
+	if err != nil {
+		return "", err
+	}
+
+	// The next character must be a colon.
+	r, ok := <-ch
+	if !ok {
+		return "", fmt.Errorf("unexpected end of key: %q", str)
+	}
+	if r != ':' {
+		return "", fmt.Errorf("unexpected character after quoted key: %q%c", str, r)
+	}
+	return str, nil
+}
+
 func parseGitConfigKey(r rune, ch <-chan rune) (string, error) {
 	buf := make([]rune, 0, 64)
 	buf = append(buf, r)
@@ -1331,9 +1358,6 @@ func parseGitConfigKey(r rune, ch <-chan rune) (string, error) {
 		case r == ':':
 			return string(buf), nil
 		default:
-			// This can accumulate things that git doesn't allow, but we'll
-			// just let git handle it, rather than try to pre-validate to their
-			// spec.
 			buf = append(buf, r)
 		}
 	}
@@ -1341,30 +1365,17 @@ func parseGitConfigKey(r rune, ch <-chan rune) (string, error) {
 }
 
 func parseGitConfigQVal(ch <-chan rune) (string, error) {
-	buf := make([]rune, 0, 64)
-
-	for r := range ch {
-		switch r {
-		case '\\':
-			if e, err := unescape(ch); err != nil {
-				return "", err
-			} else {
-				buf = append(buf, e)
-			}
-		case '"':
-			// Once we have a closing quote, the next must be either a comma or
-			// end-of-string.  This helps reset the state for the next key, if
-			// there is one.
-			r, ok := <-ch
-			if ok && r != ',' {
-				return "", fmt.Errorf("unexpected trailing character '%c'", r)
-			}
-			return string(buf), nil
-		default:
-			buf = append(buf, r)
-		}
+	str, err := parseQString(ch)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("unexpected end of value: %q", string(buf))
+
+	// If there is a next character, it must be a comma.
+	r, ok := <-ch
+	if ok && r != ',' {
+		return "", fmt.Errorf("unexpected character after quoted value %q%c", str, r)
+	}
+	return str, nil
 }
 
 func parseGitConfigVal(r rune, ch <-chan rune) (string, error) {
@@ -1387,6 +1398,26 @@ func parseGitConfigVal(r rune, ch <-chan rune) (string, error) {
 	}
 	// We ran out of characters, but that's OK.
 	return string(buf), nil
+}
+
+func parseQString(ch <-chan rune) (string, error) {
+	buf := make([]rune, 0, 64)
+
+	for r := range ch {
+		switch r {
+		case '\\':
+			if e, err := unescape(ch); err != nil {
+				return "", err
+			} else {
+				buf = append(buf, e)
+			}
+		case '"':
+			return string(buf), nil
+		default:
+			buf = append(buf, r)
+		}
+	}
+	return "", fmt.Errorf("unexpected end of quoted string: %q", string(buf))
 }
 
 // unescape processes most of the documented escapes that git config supports.
