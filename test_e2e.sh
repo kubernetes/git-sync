@@ -34,7 +34,7 @@ function wait_for_file_exists() {
     local ticks=$(($2*10)) # 100ms per tick
 
     while [[ $ticks > 0 ]]; do
-        if [[ -x "$file" ]]; then
+        if [[ -f "$file" ]]; then
             break
         fi
         sleep 0.1
@@ -1826,7 +1826,7 @@ function e2e::submodule_sync_default() {
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
 
     # Add submodule
-    git -C "$REPO" submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
@@ -1845,7 +1845,7 @@ function e2e::submodule_sync_default() {
     # Make change in submodule repo
     echo "$FUNCNAME 2" > "$SUBMODULE"/submodule
     git -C "$SUBMODULE" commit -qam "$FUNCNAME 2"
-    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1855,7 +1855,7 @@ function e2e::submodule_sync_default() {
 
     # Move backward in submodule repo
     git -C "$SUBMODULE" reset -q --hard HEAD^
-    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1864,9 +1864,9 @@ function e2e::submodule_sync_default() {
     assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "submodule"
 
     # Add nested submodule to submodule repo
-    git -C "$SUBMODULE" submodule add -q file://$NESTED_SUBMODULE
+    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE
     git -C "$SUBMODULE" commit -aqm "add nested submodule"
-    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 4"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1880,7 +1880,7 @@ function e2e::submodule_sync_default() {
     rm -rf "$SUBMODULE"/.git/modules/$NESTED_SUBMODULE_REPO_NAME
     git -C "$SUBMODULE" rm -qf $NESTED_SUBMODULE_REPO_NAME
     git -C "$SUBMODULE" commit -aqm "delete nested submodule"
-    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 5"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1918,7 +1918,7 @@ function e2e::submodule_sync_depth() {
     echo "$FUNCNAME 1" > "$SUBMODULE"/submodule
     git -C "$SUBMODULE" add submodule
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 1"
-    git -C "$REPO" submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
     git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
@@ -1946,7 +1946,7 @@ function e2e::submodule_sync_depth() {
     # Move forward
     echo "$FUNCNAME 2" > "$SUBMODULE"/submodule
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 2"
-    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1963,7 +1963,7 @@ function e2e::submodule_sync_depth() {
 
     # Move backward
     git -C "$SUBMODULE" reset -q --hard HEAD^
-    git -C "$REPO" submodule update --recursive --remote  > /dev/null 2>&1
+    git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote  > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
@@ -1995,7 +1995,7 @@ function e2e::submodule_sync_off() {
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
     # Add submodule
-    git -C "$REPO" submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
@@ -2034,11 +2034,11 @@ function e2e::submodule_sync_shallow() {
     echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
     git -C "$NESTED_SUBMODULE" add nested-submodule
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
-    git -C "$SUBMODULE" submodule add -q file://$NESTED_SUBMODULE
+    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE
     git -C "$SUBMODULE" commit -aqm "add nested submodule"
 
     # Add submodule
-    git -C "$REPO" submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
