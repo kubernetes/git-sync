@@ -177,7 +177,7 @@ EXECHOOK_COMMAND_SLEEPY=/test_exechook_command_with_sleep.sh
 EXECHOOK_COMMAND_FAIL_SLEEPY=/test_exechook_command_fail_with_sleep.sh
 EXECHOOK_ENVKEY=ENVKEY
 EXECHOOK_ENVVAL=envval
-RUNLOG="$DIR/runlog.exechook-fail-retry"
+RUNLOG="$DIR/runlog"
 rm -f $RUNLOG
 touch $RUNLOG
 
@@ -1390,7 +1390,7 @@ function e2e::exechook_fail_retry() {
         --exechook-command="$EXECHOOK_COMMAND_FAIL" \
         --exechook-backoff=1s \
         >> "$1" 2>&1 &
-    wait_for_sync 3
+    sleep 3 # give it time to retry
 
     # Check that exechook was called
     RUNS=$(cat "$RUNLOG" | wc -l)
