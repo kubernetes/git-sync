@@ -1088,8 +1088,10 @@ func (git *repoSync) CleanupWorkTree(ctx context.Context, gitRoot, worktree stri
 	return nil
 }
 
-// AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap the symlink to point to the new worktree
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error {
+// AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap
+// the symlink to point to the new worktree.  This returns 1) whether the link
+// has changed; 2) what the new hash is; 3) was there an error to be reported.
+func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool, string, error) {
 	git.log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
 	args := []string{"fetch", "-f", "--tags"}
@@ -1104,15 +1106,18 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 	// Update from the remote.
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
-		return err
+		return false, "", err
 	}
 
 	// With shallow fetches, it's possible to race with the upstream repo and
 	// end up NOT fetching the hash we wanted. If we can't resolve that hash
 	// to a commit we can just end early and leave it for the next sync period.
+	// This probably SHOULD be an error, but it can be a problem for startup
+	// and first-sync-must-succeed semantics.  If/when we fix that this can be
+	// fixed.
 	if _, err := git.ResolveRef(ctx, hash); err != nil {
 		git.log.Error(err, "can't resolve commit, will retry", "rev", git.rev, "hash", hash)
-		return nil
+		return false, "", nil
 	}
 
 	// Make a worktree for this exact git hash.
@@ -1123,13 +1128,13 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	// create the worktree and bails out. This manifests as:
 	//     "fatal: '/repo/root/rev-nnnn' already exists"
 	if err := git.CleanupWorkTree(ctx, git.root, worktreePath); err != nil {
-		return err
+		return false, "", err
 	}
 
 	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
 	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	if err != nil {
-		return err
+		return false, "", err
 	}
 
 	// The .git file in the worktree directory holds a reference to
@@ -1138,11 +1143,11 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	// mount name.
 	worktreePathRelative, err := filepath.Rel(git.root, worktreePath)
 	if err != nil {
-		return err
+		return false, "", err
 	}
 	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
 	if err = os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
-		return err
+		return false, "", err
 	}
 
 	// If sparse checkout is requested, configure git for it.
@@ -1157,7 +1162,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 
 		source, err := os.Open(checkoutFile)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 		defer source.Close()
 
@@ -1165,32 +1170,32 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 			fileMode := os.FileMode(int(0755))
 			err := os.Mkdir(gitInfoPath, fileMode)
 			if err != nil {
-				return err
+				return false, "", err
 			}
 		}
 
 		destination, err := os.Create(gitSparseConfigPath)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 		defer destination.Close()
 
 		_, err = io.Copy(destination, source)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 
 		args := []string{"sparse-checkout", "init"}
 		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, args...)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 	}
 
 	// Reset the worktree's working copy to the specific rev.
 	_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--")
 	if err != nil {
-		return err
+		return false, "", err
 	}
 	git.log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
@@ -1207,7 +1212,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		}
 		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, submodulesArgs...)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 	}
 
@@ -1217,7 +1222,7 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 		git.log.V(0).Info("changing file permissions", "mode", mode)
 		_, err = git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath)
 		if err != nil {
-			return err
+			return false, "", err
 		}
 	}
 
@@ -1225,14 +1230,14 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	// Use --soft so we do not check out files into the root.
 	_, err = git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--soft", hash, "--")
 	if err != nil {
-		return err
+		return false, "", err
 	}
 	git.log.V(0).Info("reset root to hash", "path", git.root, "hash", hash)
 
 	// Flip the symlink.
 	oldWorktree, err := git.UpdateSymlink(ctx, worktreePath)
 	if err != nil {
-		return err
+		return false, "", err
 	}
 	setRepoReady()
 
@@ -1263,9 +1268,9 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) error 
 	}
 
 	if len(cleanupErrs) > 0 {
-		return cleanupErrs
+		return true, hash, cleanupErrs
 	}
-	return nil
+	return true, hash, nil
 }
 
 type multiError []error
@@ -1446,7 +1451,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		hash = remote
 	}
 
-	return true, hash, git.AddWorktreeAndSwap(ctx, hash)
+	return git.AddWorktreeAndSwap(ctx, hash)
 }
 
 func (git *repoSync) ensureLocalHashForRev(ctx context.Context, rev string) (string, error) {
