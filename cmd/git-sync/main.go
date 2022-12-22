@@ -1387,12 +1387,12 @@ func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, 
 }
 
 func (git *repoSync) RevIsRemoteHash(ctx context.Context) (bool, error) {
-	count, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", git.repo,
-		"|", "cut", "-f1", "|", "grep", git.rev, "|", "wc", "-l")
+	var command = fmt.Sprintf("%s ls-remote -q %s | cut -f1 | grep -m 1 %s", git.cmd, git.repo, git.rev)
+	output, err := git.run.Run(ctx, git.root, nil, "sh", "-c", command)
 	if err != nil {
 		return false, err
 	}
-	if strings.Trim(count, " ") == "0" {
+	if strings.TrimSpace(string(output)) == "" {
 		return false, nil
 	} else {
 		return true, nil
