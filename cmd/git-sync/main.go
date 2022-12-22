@@ -1513,7 +1513,11 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	if isRemoteHash, err := git.RevIsRemoteHash(ctx); err != nil {
 		git.log.Info("Cannot tell if given rev is a remote hash", "rev", git.rev)
 	} else if isRemoteHash {
-		return "", git.rev, nil
+		localHead, err := git.LocalHashForRev(ctx, "HEAD")
+		if err != nil {
+			return "", "", err
+		}
+		return localHead, git.rev, nil
 	}
 	// Ask git what the exact hash is for rev.
 	local, err := git.LocalHashForRev(ctx, git.rev)
