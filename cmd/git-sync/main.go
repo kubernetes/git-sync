@@ -1094,30 +1094,35 @@ func (git *repoSync) CleanupWorkTree(ctx context.Context, gitRoot, worktree stri
 func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool, string, error) {
 	git.log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
 
-	args := []string{"fetch", "-f", "--tags"}
-	if git.depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(git.depth))
-	}
-	fetch := "HEAD"
-	if git.branch != "" {
-		fetch = git.branch
-	}
-	args = append(args, git.repo, fetch)
-
-	// Update from the remote.
-	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
-		return false, "", err
-	}
-
-	// With shallow fetches, it's possible to race with the upstream repo and
-	// end up NOT fetching the hash we wanted. If we can't resolve that hash
-	// to a commit we can just end early and leave it for the next sync period.
-	// This probably SHOULD be an error, but it can be a problem for startup
-	// and first-sync-must-succeed semantics.  If/when we fix that this can be
-	// fixed.
+	// If we don't have this hash, we need to fetch it.
 	if _, err := git.ResolveRef(ctx, hash); err != nil {
-		git.log.Error(err, "can't resolve commit, will retry", "rev", git.rev, "hash", hash)
-		return false, "", nil
+		git.log.V(2).Info("can't resolve commit, will try fetch", "rev", git.rev, "hash", hash)
+
+		args := []string{"fetch", "-f", "--tags"}
+		if git.depth != 0 {
+			args = append(args, "--depth", strconv.Itoa(git.depth))
+		}
+		fetch := "HEAD"
+		if git.branch != "" {
+			fetch = git.branch
+		}
+		args = append(args, git.repo, fetch)
+
+		// Update from the remote.
+		if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
+			return false, "", err
+		}
+
+		// With shallow fetches, it's possible to race with the upstream repo and
+		// end up NOT fetching the hash we wanted. If we can't resolve that hash
+		// to a commit we can just end early and leave it for the next sync period.
+		// This probably SHOULD be an error, but it can be a problem for startup
+		// and first-sync-must-succeed semantics.  If/when we fix that this can be
+		// fixed.
+		if _, err := git.ResolveRef(ctx, hash); err != nil {
+			git.log.Error(err, "can't resolve commit, will retry", "rev", git.rev, "hash", hash)
+			return false, "", nil
+		}
 	}
 
 	// Make a worktree for this exact git hash.
@@ -1373,6 +1378,16 @@ func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, e
 	if err != nil {
 		return "", err
 	}
+	result := strings.Trim(string(output), "\n")
+	if result == rev {
+		// It appears to be a SHA, so we need to verify that we have it.  We
+		// don't care what cat-file says, just whether it succeeds or fails.
+		_, err := git.run.Run(ctx, git.root, nil, git.cmd, "cat-file", "-t", rev)
+		if err != nil {
+			// Indicate that we do not have a local hash for this hash.
+			return "", err
+		}
+	}
 	return strings.Trim(string(output), "\n"), nil
 }
 
@@ -1494,16 +1509,20 @@ func stringContainsOneOf(s string, matches ...string) bool {
 	return false
 }
 
-// GetRevs returns the local and upstream hashes for rev.
+// GetRevs returns the current HEAD and upstream hash for rev.  Normally the
+// current HEAD is a previous or current version of git.rev, but if the app was
+// started with one rev and then restarted with a different one, HEAD could be
+// anything.
 func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
-	// Ask git what the exact hash is for rev.
-	local, err := git.LocalHashForRev(ctx, git.rev)
+	// Find the currently synced HEAD.
+	local, err := git.LocalHashForRev(ctx, "HEAD")
 	if err != nil {
 		return "", "", err
 	}
 
 	// Build a ref string, depending on whether the user asked to track HEAD or
-	// a tag.
+	// a tag.  We can't really tell if it is a SHA yet, so we will catch that
+	// case later.
 	ref := "HEAD"
 	if git.rev != "HEAD" {
 		ref = "refs/tags/" + git.rev
@@ -1515,6 +1534,20 @@ func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
 	remote, err := git.RemoteHashForRef(ctx, ref)
 	if err != nil {
 		return "", "", err
+	}
+
+	// If we couldn't find a remote hash, it might have been a SHA literal.
+	if remote == "" {
+		// If git thinks it tastes like a SHA, we just return that and if it
+		// is wrong, we will fail later.
+		output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", git.rev)
+		if err != nil {
+			return "", "", err
+		}
+		result := strings.Trim(string(output), "\n")
+		if result == git.rev {
+			remote = git.rev
+		}
 	}
 
 	return local, remote, nil
