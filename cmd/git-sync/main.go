@@ -1386,6 +1386,14 @@ func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, 
 	return parts[0], nil
 }
 
+func (git *repoSync) RevIsRemoteHash(ctx context.Context) (bool, error) {
+	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "branch", "-r", "--contains", git.rev)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
 	hash, err := git.ResolveRef(ctx, git.rev)
 	if err != nil {
@@ -1496,6 +1504,12 @@ func stringContainsOneOf(s string, matches ...string) bool {
 
 // GetRevs returns the local and upstream hashes for rev.
 func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
+	// Check if rev is a hash
+	if isRemoteHash, err := git.RevIsRemoteHash(ctx); err != nil {
+		git.log.Info("Cannot tell if given rev is a remote hash", "rev", git.rev)
+	} else if isRemoteHash {
+		return "", git.rev, nil
+	}
 	// Ask git what the exact hash is for rev.
 	local, err := git.LocalHashForRev(ctx, git.rev)
 	if err != nil {
