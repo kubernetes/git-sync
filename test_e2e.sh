@@ -853,6 +853,46 @@ function e2e::sync_sha_once() {
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
+
+##############################################
+# Test rev-sync multiple times
+##############################################
+function e2e::sync_sha_multiple_times() {
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    REV=$(git -C "$REPO" rev-list -n1 HEAD)
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    # Second sync
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    REV=$(git -C "$REPO" rev-list -n1 HEAD)
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+
+}
+
 ##############################################
 # Test syncing after a crash
 ##############################################
