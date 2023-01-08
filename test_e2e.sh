@@ -854,6 +854,90 @@ function e2e::sync_sha_once() {
 }
 
 ##############################################
+# Test rev-sync on a different rev we already have
+##############################################
+function e2e::sync_sha_once_sync_different_sha_known() {
+    # All revs will be known because we check out the branch
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    REV1=$(git -C "$REPO" rev-list -n1 HEAD)
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    REV2=$(git -C "$REPO" rev-list -n1 HEAD)
+    echo "$FUNCNAME 3" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 3"
+
+    # Sync REV1
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV1" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Sync REV2
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV2" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+
+##############################################
+# Test rev-sync on a different rev we do not have
+##############################################
+function e2e::sync_sha_once_sync_different_sha_unknown() {
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    REV1=$(git -C "$REPO" rev-list -n1 HEAD)
+
+    # Sync REV1
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV1" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # The locally synced repo does not know this new SHA.
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    REV2=$(git -C "$REPO" rev-list -n1 HEAD)
+    # Make sure the SHA is not at HEAD, to prevent things that only work in
+    # that case.
+    echo "$FUNCNAME 3" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 3"
+
+    # Sync REV2
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev="$REV2" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+##############################################
 # Test syncing after a crash
 ##############################################
 function e2e::sync_crash_cleanup_retry() {
