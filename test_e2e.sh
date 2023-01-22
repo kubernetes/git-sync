@@ -115,6 +115,14 @@ function docker_kill() {
     docker kill "$1" >/dev/null
 }
 
+function docker_signal() {
+    if [[ -z "$1" || -z "$2" ]]; then
+        echo "usage: $0 <id> <signal>"
+        return 1
+    fi
+    docker kill "--signal=$2" "$1" >/dev/null
+}
+
 # E2E_TAG is the tag used for docker builds.  This is needed because docker
 # tags are system-global, but one might have multiple repos checked out.
 E2E_TAG=$(git rev-parse --show-toplevel | sed 's|/|_|g')
@@ -974,6 +982,108 @@ function e2e::sync_slow_git_long_timeout() {
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync 10
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+
+##############################################
+# Test sync-on-signal with SIGHUP
+##############################################
+function e2e::sync_on_signal_sighup() {
+     # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100s \
+        --sync-on-signal="SIGHUP" \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    wait_for_sync 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    # Send signal (note --period is 100s, signal should trigger sync)
+    CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
+    docker_signal "$CTR" SIGHUP
+    wait_for_sync 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+
+##############################################
+# Test sync-on-signal with HUP
+##############################################
+function e2e::sync_on_signal_hup() {
+     # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100s \
+        --sync-on-signal="HUP" \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    wait_for_sync 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    # Send signal (note --period is 100s, signal should trigger sync)
+    CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
+    docker_signal "$CTR" SIGHUP
+    wait_for_sync 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+}
+
+##############################################
+# Test sync-on-signal with 1 (SIGHUP)
+##############################################
+function e2e::sync_on_signal_1() {
+     # First sync
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100s \
+        --sync-on-signal=1 \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1 &
+    wait_for_sync 3
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    # Send signal (note --period is 100s, signal should trigger sync)
+    CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
+    docker_signal "$CTR" SIGHUP
+    wait_for_sync 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"

@@ -35,11 +35,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
+	"golang.org/x/sys/unix"
 	"k8s.io/git-sync/pkg/cmd"
 	"k8s.io/git-sync/pkg/hook"
 	"k8s.io/git-sync/pkg/logging"
@@ -77,6 +79,8 @@ var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TI
 	"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
 var flOneTime = pflag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the first sync")
+var flSyncOnSignal = pflag.String("sync-on-signal", envString("GIT_SYNC_SYNC_ON_SIGNAL", ""),
+	"sync on receipt of the specified signal (e.g. SIGHUP)")
 var flMaxFailures = pflag.Int("max-failures", envInt("GIT_SYNC_MAX_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
 var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
@@ -397,6 +401,24 @@ func main() {
 		handleConfigError(log, true, "ERROR: --period must be at least 10ms")
 	}
 
+	var syncSig syscall.Signal
+	if *flSyncOnSignal != "" {
+		if num, err := strconv.ParseInt(*flSyncOnSignal, 0, 0); err == nil {
+			// sync-on-signal value is a number
+			syncSig = syscall.Signal(num)
+		} else {
+			// sync-on-signal value is a name
+			syncSig = unix.SignalNum(*flSyncOnSignal)
+			if syncSig == 0 {
+				// last resort - maybe they said "HUP", meaning "SIGHUP"
+				syncSig = unix.SignalNum("SIG" + *flSyncOnSignal)
+			}
+		}
+		if syncSig == 0 {
+			handleConfigError(log, true, "ERROR: --sync-on-signal must be a valid signal name or number")
+		}
+	}
+
 	if *flTimeout != 0 {
 		// Back-compat
 		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
@@ -661,6 +683,13 @@ func main() {
 		go exechookRunner.Run(context.Background())
 	}
 
+	// Setup signal notify channel
+	sigChan := make(chan os.Signal, 1)
+	if syncSig != 0 {
+		log.V(2).Info("installing signal handler", "signal", unix.SignalName(syncSig))
+		signal.Notify(sigChan, syncSig)
+	}
+
 	// Craft a function that can be called to refresh credentials when needed.
 	refreshCreds := func(ctx context.Context) error {
 		// These should all be mutually-exclusive configs.
@@ -763,7 +792,16 @@ func main() {
 
 		log.V(1).Info("next sync", "waitTime", flPeriod.String())
 		cancel()
-		time.Sleep(*flPeriod)
+
+		// Sleep until the next sync. If syncSig is set then the sleep may
+		// be interrupted by that signal.
+		t := time.NewTimer(*flPeriod)
+		select {
+		case <-t.C:
+		case <-sigChan:
+			log.V(2).Info("caught signal", "signal", unix.SignalName(syncSig))
+			t.Stop()
+		}
 	}
 }
 
@@ -2077,6 +2115,13 @@ OPTIONS
     --submodules <string>, $GIT_SYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
+
+    --sync-on-signal <string>, $GIT_SYNC_SYNC_ON_SIGNAL
+            Indicates that a sync attempt should occur upon receipt of the 
+            specified signal name (e.g. SIGHUP) or number (e.g. 1). If a sync
+            is already in progress, another sync will be triggered as soon as
+            the current one completes. If not specified, signals will not 
+            trigger syncs.
 
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
