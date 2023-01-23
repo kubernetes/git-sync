@@ -177,6 +177,12 @@ var (
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
 
+
+	webhookCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_webhook_total",
+		Help: "How many webhook calls completed, partitioned by state (success, error)",
+	}, []string{"status"})
+
 	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",

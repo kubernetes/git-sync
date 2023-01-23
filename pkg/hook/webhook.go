@@ -21,7 +21,21 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var (
+	webhookRunCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_webhook_run_count_total",
+		Help: "How many webhook runs completed, partitioned by state (success, error)",
+	}, []string{"status"})
+)
+
+
+func init() {
+	prometheus.MustRegister(webhookRunCount)
+}
 
 // WebHook structure, implements Hook
 type Webhook struct {
@@ -69,14 +83,21 @@ func (w *Webhook) Do(ctx context.Context, hash string) error {
 	w.log.V(0).Info("sending webhook", "hash", hash, "url", w.url, "method", w.method, "timeout", w.timeout)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		updateHookRunCountMetric("error")
 		return err
 	}
 	resp.Body.Close()
 
 	// If the webhook has a success statusCode, check against it
 	if w.success != -1 && resp.StatusCode != w.success {
+		updateHookRunCountMetric("error")
 		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, w.success)
 	}
-
+	updateHookRunCountMetric("success")
 	return nil
+}
+
+
+func updateWebhookRunCountMetric(status string) {
+	webhookRunCount.WithLabelValues(status).Inc()
 }
