@@ -1277,7 +1277,7 @@ function e2e::auth_askpass_url_wrong_password() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1310,7 +1310,7 @@ function e2e::auth_askpass_url_correct_password() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1363,7 +1363,7 @@ function e2e::auth_askpass_url_flaky() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1560,7 +1560,7 @@ function e2e::webhook_success() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1611,7 +1611,7 @@ function e2e::webhook_fail_retry() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 500 Internal Server Error"
             echo
@@ -1644,7 +1644,7 @@ function e2e::webhook_fail_retry() {
     CTR=$(docker_run \
         --ip="$IP" \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1666,7 +1666,7 @@ function e2e::webhook_success_once() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 200 OK"
             echo
@@ -1703,7 +1703,7 @@ function e2e::webhook_fail_retry_once() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 500 Internal Server Error"
             echo
@@ -1749,7 +1749,7 @@ function e2e::webhook_fire_and_forget() {
     cat /dev/null > "$HITLOG"
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
-        e2e/test/test-ncsvr \
+        e2e/test/ncsvr \
         80 'read X
             echo "HTTP/1.1 404 Not Found"
             echo
@@ -2152,7 +2152,7 @@ function e2e::auth_ssh() {
     CTR=$(docker_run \
         -v "$DOT_SSH":/dot_ssh:ro \
         -v "$REPO":/src:ro \
-        e2e/test/test-sshd)
+        e2e/test/sshd)
     IP=$(docker_ip "$CTR")
     git -C "$REPO" commit -qam "$FUNCNAME"
 
