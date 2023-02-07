@@ -69,9 +69,9 @@ type Collector interface {
 // If a Collector collects the same metrics throughout its lifetime, its
 // Describe method can simply be implemented as:
 //
-//   func (c customCollector) Describe(ch chan<- *Desc) {
-//   	DescribeByCollect(c, ch)
-//   }
+//	func (c customCollector) Describe(ch chan<- *Desc) {
+//		DescribeByCollect(c, ch)
+//	}
 //
 // However, this will not work if the metrics collected change dynamically over
 // the lifetime of the Collector in a way that their combined set of descriptors
@@ -79,7 +79,7 @@ type Collector interface {
 // of the Describe method. If a Collector sometimes collects no metrics at all
 // (for example vectors like CounterVec, GaugeVec, etc., which only collect
 // metrics after a metric with a fully specified label set has been accessed),
-// it might even get registered as an unchecked Collecter (cf. the Register
+// it might even get registered as an unchecked Collector (cf. the Register
 // method of the Registerer interface). Hence, only use this shortcut
 // implementation of Describe if you are certain to fulfill the contract.
 //
@@ -117,4 +117,12 @@ func (c *selfCollector) Describe(ch chan<- *Desc) {
 // Collect implements Collector.
 func (c *selfCollector) Collect(ch chan<- Metric) {
 	ch <- c.self
+}
+
+// collectorMetric is a metric that is also a collector.
+// Because of selfCollector, most (if not all) Metrics in
+// this package are also collectors.
+type collectorMetric interface {
+	Metric
+	Collector
 }
