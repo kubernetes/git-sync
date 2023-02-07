@@ -187,8 +187,9 @@ function GIT_SYNC() {
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
-            --add-user \
             --v=6 \
+            --add-user \
+            --git-config='protocol.file.allow:always' \
             "$@"
 }
 
