@@ -211,6 +211,7 @@ function GIT_SYNC() {
             -v=6 \
             --add-user \
             --touch-file="$INTERLOCK" \
+            --git-config='protocol.file.allow:always' \
             "$@"
 }
 
