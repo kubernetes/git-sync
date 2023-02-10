@@ -2715,7 +2715,8 @@ for t; do
 
         # See comments on run_test for details.
         RUN_RET=0
-        run_test RUN_RET "e2e::${t}" "${DIR}/log.$t"
+        LOG="${DIR}/log.$t"
+        run_test RUN_RET "e2e::${t}" "${LOG}.${RUN}"
         if [[ "$RUN_RET" == 0 ]]; then
             pass
         else
@@ -2729,7 +2730,7 @@ for t; do
     done
     if [[ "$TEST_RET" != 0 ]]; then
         FINAL_RET=1
-        FAILS+=("$t")
+        FAILS+=("$t  (log: ${LOG}.*)")
     fi
 done
 if [[ "$FINAL_RET" != 0 ]]; then
