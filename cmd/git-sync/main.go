@@ -747,23 +747,28 @@ func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
 func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
-	args := []string{"fetch", "-f", "--tags"}
-	if depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
-	}
-	args = append(args, repo, branch)
-
-	// Update from the remote.
-	if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
-		return err
-	}
-
-	// With shallow fetches, it's possible to race with the upstream repo and
-	// end up NOT fetching the hash we wanted. If we can't resolve that hash
-	// to a commit we can just end early and leave it for the next sync period.
+	// If we don't have this hash, we need to fetch it.
 	if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
-		log.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
-		return nil
+		log.V(2).Info("can't resolve commit, will try fetch", "rev", rev, "hash", hash)
+
+		args := []string{"fetch", "-f", "--tags"}
+		if depth != 0 {
+			args = append(args, "--depth", strconv.Itoa(depth))
+		}
+		args = append(args, repo, branch)
+
+		// Update from the remote.
+		if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
+			return err
+		}
+
+		// With shallow fetches, it's possible to race with the upstream repo and
+		// end up NOT fetching the hash we wanted. If we can't resolve that hash
+		// to a commit we can just end early and leave it for the next sync period.
+		if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
+			log.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
+			return nil
+		}
 	}
 
 	// Make a worktree for this exact git hash.
@@ -1002,17 +1007,42 @@ func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	result := strings.Trim(string(output), "\n")
+	if result == rev {
+		// It appears to be a SHA, so we need to verify that we have it.  We
+		// don't care what cat-file says, just whether it succeeds or fails.
+		_, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "cat-file", "-t", rev)
+		if err != nil {
+			// Indicate that we do not have a local hash for this hash.
+			return "", err
+		}
+	}
 	return strings.Trim(string(output), "\n"), nil
 }
 
 // remoteHashForRef returns the upstream hash for a given ref.
 func remoteHashForRef(ctx context.Context, repo, ref, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", repo, ref)
+	// Fetch both the bare and dereferenced rev. git sorts the results and
+	// prints the dereferenced result, if present, after the bare result, so we
+	// always want the last result it produces.
+	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", repo, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
-	parts := strings.Split(string(output), "\t")
+	lines := strings.Split(string(output), "\n") // guaranteed to have at least 1 element
+	line := lastNonEmpty(lines)
+	parts := strings.Split(line, "\t") // guaranteed to have at least 1 element
 	return parts[0], nil
+}
+
+func lastNonEmpty(lines []string) string {
+	last := ""
+	for _, line := range lines {
+		if line != "" {
+			last = line
+		}
+	}
+	return last
 }
 
 func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
@@ -1075,15 +1105,20 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 	return true, hash, addWorktreeAndSwap(ctx, repo, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
 }
 
-// getRevs returns the local and upstream hashes for rev.
+// getRevs returns the current HEAD and upstream hash for rev.  Normally the
+// current HEAD is a previous or current version of rev, but if the app was
+// started with one rev and then restarted with a different one, HEAD could be
+// anything.
 func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, string, error) {
-	// Ask git what the exact hash is for rev.
-	local, err := localHashForRev(ctx, rev, localDir)
+	// Find the currently synced HEAD.
+	local, err := localHashForRev(ctx, "HEAD", localDir)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Build a ref string, depending on whether the user asked to track HEAD or a tag.
+	// Build a ref string, depending on whether the user asked to track HEAD or
+	// a tag.  We can't really tell if it is a SHA yet, so we will catch that
+	// case later.
 	ref := ""
 	if rev == "HEAD" {
 		ref = "refs/heads/" + branch
@@ -1095,6 +1130,20 @@ func getRevs(ctx context.Context, repo, localDir, branch, rev string) (string, s
 	remote, err := remoteHashForRef(ctx, repo, ref, localDir)
 	if err != nil {
 		return "", "", err
+	}
+
+	// If we couldn't find a remote hash, it might have been a SHA literal.
+	if remote == "" {
+		// If git thinks it tastes like a SHA, we just return that and if it
+		// is wrong, we will fail later.
+		output, err := cmdRunner.Run(ctx, localDir, nil, *flGitCmd, "rev-parse", rev)
+		if err != nil {
+			return "", "", err
+		}
+		result := strings.Trim(string(output), "\n")
+		if result == rev {
+			remote = rev
+		}
 	}
 
 	return local, remote, nil
