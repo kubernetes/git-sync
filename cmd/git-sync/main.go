@@ -1393,12 +1393,27 @@ func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, e
 
 // RemoteHashForRef returns the upstream hash for a given ref.
 func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, error) {
-	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", git.repo, ref)
+	// Fetch both the bare and dereferenced rev. git sorts the results and
+	// prints the dereferenced result, if present, after the bare result, so we
+	// always want the last result it produces.
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", git.repo, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
-	parts := strings.Split(string(output), "\t")
+	lines := strings.Split(string(output), "\n") // guaranteed to have at least 1 element
+	line := lastNonEmpty(lines)
+	parts := strings.Split(line, "\t") // guaranteed to have at least 1 element
 	return parts[0], nil
+}
+
+func lastNonEmpty(lines []string) string {
+	last := ""
+	for _, line := range lines {
+		if line != "" {
+			last = line
+		}
+	}
+	return last
 }
 
 func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
