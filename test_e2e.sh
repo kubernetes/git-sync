@@ -2697,29 +2697,42 @@ export GIT_CONFIG_SYSTEM=/dev/null
 
 # Iterate over the chosen tests and run them.
 FAILS=()
-RET=0
+FINAL_RET=0
+RUNS="${RUNS:-1}"
 for t; do
-    clean_root
-    clean_work
-    init_repo
+    TEST_RET=0
+    RUN=0
+    while [[ "${RUN}" < "${RUNS}" ]]; do
+        clean_root
+        clean_work
+        init_repo
 
-    echo -n "testcase $t: "
-
-    # See comments on run_test for details.
-    TESTRET=0
-    run_test TESTRET "e2e::${t}" "${DIR}/log.$t"
-    if [[ "$TESTRET" == 0 ]]; then
-        pass
-    else
-        RET=1
-        if [[ "$TESTRET" != 42 ]]; then
-            echo "FAIL: unknown error"
+        sfx=""
+        if [[ "${RUNS}" > 1 ]]; then
+            sfx=" ($((RUN+1))/${RUNS})"
         fi
+        echo -n "testcase ${t}${sfx}: "
+
+        # See comments on run_test for details.
+        RUN_RET=0
+        run_test RUN_RET "e2e::${t}" "${DIR}/log.$t"
+        if [[ "$RUN_RET" == 0 ]]; then
+            pass
+        else
+            TEST_RET=1
+            if [[ "$RUN_RET" != 42 ]]; then
+                echo "FAIL: unknown error"
+            fi
+        fi
+        remove_containers || true
+        RUN=$((RUN+1))
+    done
+    if [[ "$TEST_RET" != 0 ]]; then
+        FINAL_RET=1
         FAILS+=("$t")
     fi
-    remove_containers || true
 done
-if [[ "$RET" != 0 ]]; then
+if [[ "$FINAL_RET" != 0 ]]; then
     echo
     echo "the following tests failed:"
     for f in "${FAILS[@]}"; do
