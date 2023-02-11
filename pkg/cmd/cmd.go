@@ -23,29 +23,36 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"k8s.io/git-sync/pkg/logging"
 )
 
 // Runner structure
 type Runner struct {
 	// Logger
-	logger *logging.Logger
+	logger logr.Logger
 }
 
 // NewRunner returns a new CommandRunner
 func NewRunner(logger *logging.Logger) *Runner {
-	return &Runner{logger: logger}
+	return &Runner{logger: logger.V(0)}
 }
 
 // Run runs given command
 func (c *Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, error) {
-	return c.RunWithStdin(ctx, cwd, env, "", command, args...)
+	// call depth = 2 to erase the runWithStdin frame and this one
+	return runWithStdin(ctx, c.logger.WithCallDepth(2), cwd, env, "", command, args...)
 }
 
 // RunWithStdin runs given command with stardart input
 func (c *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
+	// call depth = 2 to erase the runWithStdin frame and this one
+	return runWithStdin(ctx, c.logger.WithCallDepth(2), cwd, env, stdin, command, args...)
+}
+
+func runWithStdin(ctx context.Context, log logr.Logger, cwd string, env []string, stdin, command string, args ...string) (string, error) {
 	cmdStr := cmdForLog(command, args...)
-	c.logger.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
+	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)
 	if cwd != "" {
@@ -69,7 +76,7 @@ func (c *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, std
 	if err != nil {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
-	c.logger.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
+	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
 
 	return stdout, nil
 }
