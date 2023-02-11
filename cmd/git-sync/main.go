@@ -468,12 +468,21 @@ func main() {
 			handleConfigError(log, true, "ERROR: only one of --ssh and --cookie-file may be specified")
 		}
 		if *flSSHKeyFile == "" {
-			handleConfigError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is specified")
+			handleConfigError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is set")
 		}
 		if *flSSHKnownHosts {
 			if *flSSHKnownHostsFile == "" {
-				handleConfigError(log, true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
+				handleConfigError(log, true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is set")
 			}
+		}
+	}
+
+	if *flHTTPBind == "" {
+		if *flHTTPMetrics {
+			handleConfigError(log, true, "ERROR: --http-bind must be specified when --http-metrics is set")
+		}
+		if *flHTTPprof {
+			handleConfigError(log, true, "ERROR: --http-bind must be specified when --http-pprof is set")
 		}
 	}
 
@@ -2026,13 +2035,17 @@ OPTIONS
             The bind address (including port) for git-sync's HTTP endpoint.  If
             not specified, the HTTP endpoint is not enabled.
 
+            Examples:
+              ":1234": listen on any IP, port 1234
+              "127.0.0.1:1234": listen on localhost, port 1234
+
     --http-metrics, $GIT_SYNC_HTTP_METRICS
-            Enable metrics on git-sync's HTTP endpoint, if it is enabled (see
-            --http-bind).
+            Enable metrics on git-sync's HTTP endpoint.  Requires --http-bind
+            to be specified.
 
     --http-pprof, $GIT_SYNC_HTTP_PPROF
-            Enable the pprof debug endpoints on git-sync's HTTP endpoint, if it
-            is enabled (see --http-bind).
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint.
+            Requires --http-bind to be specified.
 
     --link <string>, $GIT_SYNC_LINK
             The path to at which to create a symlink which points to the
