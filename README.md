@@ -135,10 +135,6 @@ OPTIONS
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
-    --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out.  If not specified, this defaults to
-            the default branch of --repo.
-
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Change permissions on the checked-out files to the specified mode.
 
@@ -165,7 +161,7 @@ OPTIONS
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
-            environment variable $GITSYNC_HASH will be set to the git SHA that
+            environment variable $GITSYNC_HASH will be set to the git hash that
             was synced.  The execution is subject to the overall --sync-timeout
             flag and will extend the effective period between sync attempts.
             This flag obsoletes --sync-hook-command, but if sync-hook-command
@@ -180,14 +176,22 @@ OPTIONS
             testing).  This defaults to "git".
 
     --git-config <string>, $GIT_SYNC_GIT_CONFIG
-            Additional git config options in 'key1:val1,key2:val2' format.  The
-            key parts are passed to 'git config' and must be valid syntax for
-            that command.  The val parts can be either quoted or unquoted
-            values.  For all values the following escape sequences are
-            supported: '\n' => [newline], '\t' => [tab], '\"' => '"', '\,' =>
-            ',', '\\' => '\'.  Within unquoted values, commas MUST be escaped.
-            Within quoted values, commas MAY be escaped, but are not required
-            to be.  Any other escape sequence is an error.
+            Additional git config options in a comma-separated 'key:val'
+            format.  The parsed keys and values are passed to 'git config' and
+            must be valid syntax for that command.
+
+            Both keys and values can be either quoted or unquoted strings.
+            Within quoted keys and all values (quoted or not), the following
+            escape sequences are supported:
+                '\n' => [newline]
+                '\t' => [tab]
+                '\"' => '"'
+                '\,' => ','
+                '\\' => '\'
+            To include a colon within a key (e.g. a URL) the key must be
+            quoted.  Within unquoted values commas must be escaped.  Within
+            quoted values commas may be escaped, but are not required to be.
+            Any other escape sequence is an error.
 
     --git-gc <string>, $GIT_SYNC_GIT_GC
             The git garbage collection behavior: one of "auto", "always",
@@ -209,23 +213,27 @@ OPTIONS
             The bind address (including port) for git-sync's HTTP endpoint.  If
             not specified, the HTTP endpoint is not enabled.
 
+            Examples:
+              ":1234": listen on any IP, port 1234
+              "127.0.0.1:1234": listen on localhost, port 1234
+
     --http-metrics, $GIT_SYNC_HTTP_METRICS
-            Enable metrics on git-sync's HTTP endpoint, if it is enabled (see
-            --http-bind).
+            Enable metrics on git-sync's HTTP endpoint.  Requires --http-bind
+            to be specified.
 
     --http-pprof, $GIT_SYNC_HTTP_PPROF
-            Enable the pprof debug endpoints on git-sync's HTTP endpoint, if it
-            is enabled (see --http-bind).
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint.
+            Requires --http-bind to be specified.
 
     --link <string>, $GIT_SYNC_LINK
             The path to at which to create a symlink which points to the
-            current git directory, at the currently synced SHA.  This may be an
-            absolute path or a relative path, in which case it is relative to
-            --root.  The last path element is the name of the link and must not
-            start with a period.  Consumers of the synced files should always
-            use this link - it is updated atomically and should always be
-            valid.  The basename of the target of the link is the current SHA.
-            If not specified, this defaults to the leaf dir of --repo.
+            current git directory, at the currently synced hash.  This may be
+            an absolute path or a relative path, in which case it is relative
+            to --root.  The last path element is the name of the link and must
+            not start with a period.  Consumers of the synced files should
+            always use this link - it is updated atomically and should always
+            be valid.  The basename of the target of the link is the current
+            hash.  If not specified, this defaults to the leaf dir of --repo.
 
     --man
             Print this manual and exit.
@@ -256,12 +264,13 @@ OPTIONS
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
 
+    --ref <string>, $GIT_SYNC_REF
+            The git revision (branch, tag, or hash) to check out.  If not
+            specified, this defaults to "HEAD" (of the upstream repo's default
+            branch).
+
     --repo <string>, $GIT_SYNC_REPO
             The git repository to sync.  This flag is required.
-
-    --rev <string>, $GIT_SYNC_REV
-            The git revision (tag or hash) to check out.  If not specified,
-            this defaults to "HEAD".
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
@@ -293,6 +302,13 @@ OPTIONS
     --submodules <string>, $GIT_SYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
+
+    --sync-on-signal <string>, $GIT_SYNC_SYNC_ON_SIGNAL
+            Indicates that a sync attempt should occur upon receipt of the
+            specified signal name (e.g. SIGHUP) or number (e.g. 1). If a sync
+            is already in progress, another sync will be triggered as soon as
+            the current one completes. If not specified, signals will not
+            trigger syncs.
 
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
@@ -335,14 +351,13 @@ OPTIONS
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
-            header 'Gitsync-Hash' will be set to the git SHA that was synced.
+            header 'Gitsync-Hash' will be set to the git hash that was synced.
 
 EXAMPLE USAGE
 
     git-sync \
         --repo=https://github.com/kubernetes/git-sync \
-        --branch=main \
-        --rev=HEAD \
+        --ref=HEAD \
         --period=10s \
         --root=/mnt/git
 
@@ -387,6 +402,7 @@ HOOKS
     wait --exechook-backoff or --webhook-backoff (as appropriate) before
     re-trying the hook.
 
-    Hooks are not guaranteed to succeed on every single SHA change.  For example,
-    if a hook fails and a new SHA is synced during the backoff period, the
-    retried hook will fire for the newest SHA.
+    Hooks are not guaranteed to succeed on every single hash change.  For example,
+    if a hook fails and a new hash is synced during the backoff period, the
+    retried hook will fire for the newest hash.
+```

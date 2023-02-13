@@ -57,11 +57,9 @@ var flVerbose = pflag.IntP("verbose", "v", 0,
 	"logs at this V level and lower will be printed")
 
 var flRepo = pflag.String("repo", envString("GIT_SYNC_REPO", ""),
-	"the git repository to clone (required)")
-var flBranch = pflag.String("branch", envString("GIT_SYNC_BRANCH", ""),
-	"the git branch to check out (defaults to the default branch of --repo)")
-var flRev = pflag.String("rev", envString("GIT_SYNC_REV", "HEAD"),
-	"the git revision (tag or hash) to check out")
+	"the git repository to sync (required)")
+var flRef = pflag.String("ref", envString("GIT_SYNC_REF", "HEAD"),
+	"the git revision (branch, tag, or hash) to sync")
 var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
 	"create a shallow clone with history truncated to the specified number of commits")
 var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
@@ -149,6 +147,10 @@ var flHTTPprof = pflag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
 // Obsolete flags, kept for compat.
+var flBranch = pflag.String("branch", envString("GIT_SYNC_BRANCH", ""),
+	"DEPRECATED: use --ref instead")
+var flRev = pflag.String("rev", envString("GIT_SYNC_REV", ""),
+	"DEPRECATED: use --ref instead")
 var flWait = pflag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
 	"DEPRECATED: use --period instead")
 var flTimeout = pflag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 0),
@@ -161,11 +163,13 @@ var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC
 	"DEPRECATED: use --max-failures instead")
 
 func init() {
-	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
-	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
 	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
-	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
 	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
+	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
+	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
+	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
 }
 
 // Total pull/error, summary on pull duration
@@ -333,8 +337,7 @@ type repoSync struct {
 	cmd        string         // the git command to run
 	root       string         // absolute path to the root directory
 	repo       string         // remote repo to sync
-	branch     string         // remote branch to sync
-	rev        string         // the rev or SHA to sync
+	ref        string         // the ref to sync
 	depth      int            // for shallow sync
 	submodules submodulesMode // how to handle submodules
 	gc         gcMode         // garbage collection
@@ -392,6 +395,21 @@ func main() {
 
 	if *flRepo == "" {
 		handleConfigError(log, true, "ERROR: --repo must be specified")
+	}
+
+	if *flBranch != "" && (*flRev == "" || *flRev == "HEAD") {
+		// Back-compat
+		log.V(1).Info("setting --ref from deprecated --branch")
+		*flRef = *flBranch
+	} else if *flRev != "" {
+		// Back-compat
+		log.V(1).Info("setting --ref from deprecated --rev")
+		*flRef = *flRev
+	} else if *flBranch != "" && *flRev != "" {
+		handleConfigError(log, true, "ERROR: can't set --ref from deprecated --branch and --rev")
+	}
+	if *flRef == "" {
+		handleConfigError(log, true, "ERROR: --ref must be specified")
 	}
 
 	if *flDepth < 0 { // 0 means "no limit"
@@ -576,9 +594,7 @@ func main() {
 		log.V(0).Info("normalized root path", "root", *flRoot, "result", absRoot)
 	}
 
-	// Convert the link into an absolute path.  We don't want to mkdir here,
-	// since it may be under --root, and that confuses `git clone`.
-	// TODO(thockin): put repo in a subdir and mkdir + nortmalizePath() here
+	// Convert the link into an absolute path.
 	absLink := makeAbsPath(*flLink, absRoot)
 
 	if *flAddUser {
@@ -605,8 +621,7 @@ func main() {
 		cmd:        *flGitCmd,
 		root:       absRoot,
 		repo:       *flRepo,
-		branch:     *flBranch,
-		rev:        *flRev,
+		ref:        *flRef,
 		depth:      *flDepth,
 		submodules: submodulesMode(*flSubmodules),
 		gc:         gcMode(*flGitGC),
@@ -619,11 +634,11 @@ func main() {
 	}
 
 	// This context is used only for git credentials initialization. There are
-	// no long-running operations like `git clone`, so hopefully 30 seconds will be enough.
+	// no long-running operations like `git fetch`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	// Set various configs we want, but users might override.
-	if err := git.setupDefaultGitConfigs(ctx); err != nil {
+	if err := git.SetupDefaultGitConfigs(ctx); err != nil {
 		log.Error(err, "can't set default git configs")
 		os.Exit(1)
 	}
@@ -655,7 +670,7 @@ func main() {
 
 	// This needs to be after all other git-related config flags.
 	if *flGitConfig != "" {
-		if err := git.setupExtraGitConfigs(ctx, *flGitConfig); err != nil {
+		if err := git.SetupExtraGitConfigs(ctx, *flGitConfig); err != nil {
 			log.Error(err, "can't set additional git configs", "configs", *flGitConfig)
 			os.Exit(1)
 		}
@@ -771,14 +786,8 @@ func main() {
 
 	failCount := 0
 	for {
-		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-
-		if err := git.InitRepo(ctx); err != nil {
-			log.Error(err, "can't init root", "path", absRoot)
-			os.Exit(1)
-		}
 
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
@@ -833,11 +842,11 @@ func main() {
 				os.Exit(exitCode)
 			}
 
-			if isHash, err := git.RevIsHash(ctx); err != nil {
-				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", git.rev)
+			if isHash, err := git.IsKnownHash(ctx, git.ref); err != nil {
+				log.Error(err, "can't tell if ref is a git hash, exiting", "ref", git.ref)
 				os.Exit(1)
 			} else if isHash {
-				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", git.rev)
+				log.V(0).Info("ref appears to be a git hash, no further sync needed", "ref", git.ref)
 				log.DeleteErrorFile()
 				sleepForever()
 			}
@@ -969,67 +978,103 @@ func normalizePath(path string) (string, error) {
 	return abs, nil
 }
 
-// initRepo looks at the git root and initializes it if needed.  This assumes
-// the root dir already exists.
-func (git *repoSync) InitRepo(ctx context.Context) error {
-	// Make sure the root exists.  0755 ensures that this is usable as a volume
-	// when the consumer isn't running as the same UID.
-	if err := os.MkdirAll(git.root, 0755); err != nil {
-		return fmt.Errorf("can't make root directory: %w", err)
+// initRepo examines the git repo and determines if it is usable or not.  If
+// not, it will (re)initialize it.  After running this function, callers can
+// assume the repo is valid, though maybe empty.
+func (git *repoSync) initRepo(ctx context.Context) error {
+	// Check out the git root, and see if it is already usable.
+	_, err := os.Stat(git.root)
+	switch {
+	case os.IsNotExist(err):
+		// Probably the first sync.  0755 ensures that this is usable as a
+		// volume when the consumer isn't running as the same UID.
+		git.log.V(2).Info("repo directory does not exist, creating it", "path", git.root)
+		if err := os.MkdirAll(git.root, 0755); err != nil {
+			return err
+		}
+	case err != nil:
+		return err
+	default:
+		// Make sure the directory we found is actually usable.
+		git.log.V(2).Info("repo directory exists", "path", git.root)
+		if git.sanityCheckRepo(ctx) {
+			git.log.V(2).Info("repo directory is valid", "path", git.root)
+			return nil
+		} else {
+			// Maybe a previous run crashed?  Git won't use this dir.  We remove
+			// the contents rather than the dir itself, because a common use-case
+			// is to have a volume mounted at git.root, which makes removing it
+			// impossible.
+			git.log.V(0).Info("repo directory failed checks, cleaning up", "path", git.root)
+			if err := removeDirContents(git.root, git.log); err != nil {
+				return fmt.Errorf("can't wipe unusable root directory: %w", err)
+			}
+		}
 	}
 
-	// Check out the git root, and see if it is already usable.
-	if _, err := os.Stat(git.root); err != nil {
+	// Running `git init` in an existing repo is safe (according to git docs).
+	git.log.V(2).Info("initializing repo directory", "path", git.root)
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "init", "-b", "git-sync"); err != nil {
 		return err
 	}
-
-	// Make sure the directory we found is actually usable.
-	if git.SanityCheck(ctx) {
-		git.log.V(0).Info("root directory is valid", "path", git.root)
-		return nil
-	}
-
-	// Maybe a previous run crashed?  Git won't use this dir.
-	git.log.V(0).Info("root directory exists but failed checks, cleaning up", "path", git.root)
-
-	// We remove the contents rather than the dir itself, because a common
-	// use-case is to have a volume mounted at git.root, which makes removing
-	// it impossible.
-	if err := removeDirContents(git.root, git.log); err != nil {
-		return fmt.Errorf("can't wipe unusable root directory: %w", err)
-	}
-
 	return nil
 }
 
-// sanityCheck tries to make sure that the dir is a valid git repository.
-func (git *repoSync) SanityCheck(ctx context.Context) bool {
+// sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
+func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	git.log.V(0).Info("sanity-checking git repo", "repo", git.root)
 
 	// If it is empty, we are done.
 	if empty, err := dirIsEmpty(git.root); err != nil {
-		git.log.Error(err, "can't list repo directory", "repo", git.root)
+		git.log.Error(err, "can't list repo directory", "path", git.root)
 		return false
 	} else if empty {
-		git.log.V(0).Info("git repo is empty", "repo", git.root)
-		return true
+		git.log.V(0).Info("repo directory is empty", "path", git.root)
+		return false
 	}
 
 	// Check that this is actually the root of the repo.
 	if root, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", "--show-toplevel"); err != nil {
-		git.log.Error(err, "can't get repo toplevel", "repo", git.root)
+		git.log.Error(err, "can't get repo toplevel", "path", git.root)
 		return false
 	} else {
 		root = strings.TrimSpace(root)
 		if root != git.root {
-			git.log.V(0).Info("git repo is under another repo", "repo", git.root, "parent", root)
+			git.log.V(0).Info("repo directory is under another repo", "path", git.root, "parent", root)
 			return false
 		}
 	}
 
 	// Consistency-check the repo.
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
-		git.log.Error(err, "repo sanity check failed", "repo", git.root)
+		git.log.Error(err, "repo fsck failed", "path", git.root)
+		return false
+	}
+
+	return true
+}
+
+// sanityCheckWorktree tries to make sure that the dir is a valid git
+// repository.  Note that this does not guarantee that the worktree has all the
+// files checked out - git could have died halfway through and the repo will
+// still pass this check.
+func (git *repoSync) sanityCheckWorktree(ctx context.Context, sha string) bool {
+	git.log.V(0).Info("sanity-checking worktree", "repo", git.root, "sha", sha)
+
+	worktreePath := filepath.Join(git.root, sha)
+
+	// If it is empty, we are done.
+	if empty, err := dirIsEmpty(worktreePath); err != nil {
+		git.log.Error(err, "can't list worktree directory", "path", worktreePath)
+		return false
+	} else if empty {
+		git.log.V(0).Info("worktree is empty", "path", worktreePath)
+		return false
+	}
+
+	// Consistency-check the worktree.
+	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+		git.log.Error(err, "worktree fsck failed", "path", worktreePath)
 		return false
 	}
 
@@ -1117,47 +1162,46 @@ func addUser() error {
 	return err
 }
 
-// UpdateSymlink atomically swaps the symlink to point at the specified
-// directory and cleans up the previous worktree.  If there was a previous
-// worktree, this returns the path to it.
-func (git *repoSync) UpdateSymlink(ctx context.Context, newDir string) (string, error) {
-	linkDir, linkFile := filepath.Split(git.link)
+// publishSymlink atomically sets link to point at the specified target.  If the
+// link existed, this returns the previous target.
+func (git *repoSync) publishSymlink(ctx context.Context, linkPath, targetPath string) (string, error) {
+	linkDir, linkFile := filepath.Split(linkPath)
 
-	// Make sure the link directory exists. We do this here, rather than at
-	// startup because it might be under --root and that gets wiped in some
-	// circumstances.
-	if err := os.MkdirAll(filepath.Dir(linkDir), os.FileMode(int(0755))); err != nil {
+	// Make sure the link directory exists.
+	if err := os.MkdirAll(linkDir, os.FileMode(int(0755))); err != nil {
 		return "", fmt.Errorf("error making symlink dir: %v", err)
 	}
 
-	// Get currently-linked repo directory (to be removed), unless it doesn't exist
-	oldWorktreePath, err := filepath.EvalSymlinks(git.link)
-	if err != nil && !os.IsNotExist(err) {
+	// Get the current hash from the link target, if it exists.
+	oldHash := ""
+	if oldTarget, err := os.Readlink(linkPath); err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error accessing current worktree: %v", err)
+	} else if oldTarget != "" {
+		oldHash = filepath.Base(oldTarget)
 	}
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
-	newDirRelative, err := filepath.Rel(linkDir, newDir)
+	targetRelative, err := filepath.Rel(linkDir, targetPath)
 	if err != nil {
 		return "", fmt.Errorf("error converting to relative path: %v", err)
 	}
 
 	const tmplink = "tmp-link"
-	git.log.V(1).Info("creating tmp symlink", "root", linkDir, "link", tmplink, "target", newDirRelative)
-	if err := os.Symlink(newDirRelative, filepath.Join(linkDir, tmplink)); err != nil {
+	git.log.V(1).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
+	if err := os.Symlink(targetRelative, filepath.Join(linkDir, tmplink)); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	git.log.V(1).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link); err != nil {
+	if err := os.Rename(filepath.Join(linkDir, tmplink), linkPath); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
 
-	return oldWorktreePath, nil
+	return oldHash, nil
 }
 
-// repoReady indicates that the repo has been cloned and synced.
+// repoReady indicates that the repo has been synced.
 var readyLock sync.Mutex
 var repoReady = false
 
@@ -1173,98 +1217,79 @@ func setRepoReady() {
 	repoReady = true
 }
 
-// CleanupWorkTree() is used to remove a worktree and its folder
-func (git *repoSync) CleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
-	// Clean up worktree(s)
+// cleanupWorktree is used to remove a worktree and its folder
+func (git *repoSync) cleanupWorktree(ctx context.Context, worktree string) error {
+	// Clean up worktree, if needed.
+	_, err := os.Stat(worktree)
+	switch {
+	case os.IsNotExist(err):
+		return nil
+	case err != nil:
+		return err
+	}
 	git.log.V(1).Info("removing worktree", "path", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
-	} else if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune"); err != nil {
+	}
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune"); err != nil {
 		return err
 	}
 	return nil
 }
 
-// AddWorktreeAndSwap creates a new worktree and calls UpdateSymlink to swap
-// the symlink to point to the new worktree.  This returns 1) whether the link
-// has changed; 2) what the new hash is; 3) was there an error to be reported.
-func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool, string, error) {
-	git.log.V(0).Info("syncing git", "rev", git.rev, "hash", hash)
-
-	// If we don't have this hash, we need to fetch it.
-	if _, err := git.ResolveRef(ctx, hash); err != nil {
-		git.log.V(2).Info("can't resolve commit, will try fetch", "rev", git.rev, "hash", hash)
-
-		args := []string{"fetch", "-f", "--tags"}
-		if git.depth != 0 {
-			args = append(args, "--depth", strconv.Itoa(git.depth))
-		}
-		fetch := "HEAD"
-		if git.branch != "" {
-			fetch = git.branch
-		}
-		args = append(args, git.repo, fetch)
-
-		// Update from the remote.
-		if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
-			return false, "", err
-		}
-
-		// With shallow fetches, it's possible to race with the upstream repo and
-		// end up NOT fetching the hash we wanted. If we can't resolve that hash
-		// to a commit we can just end early and leave it for the next sync period.
-		// This probably SHOULD be an error, but it can be a problem for startup
-		// and first-sync-must-succeed semantics.  If/when we fix that this can be
-		// fixed.
-		if _, err := git.ResolveRef(ctx, hash); err != nil {
-			git.log.Error(err, "can't resolve commit, will retry", "rev", git.rev, "hash", hash)
-			return false, "", nil
-		}
-	}
-
+// createWorktree creates a new worktree and checks out the given hash.  This
+// returns the path to the new worktree.
+func (git *repoSync) createWorktree(ctx context.Context, hash string) error {
 	// Make a worktree for this exact git hash.
 	worktreePath := filepath.Join(git.root, hash)
 
 	// Avoid wedge cases where the worktree was created but this function
 	// error'd without cleaning up.  The next time thru the sync loop fails to
 	// create the worktree and bails out. This manifests as:
-	//     "fatal: '/repo/root/rev-nnnn' already exists"
-	if err := git.CleanupWorkTree(ctx, git.root, worktreePath); err != nil {
-		return false, "", err
+	//     "fatal: '/repo/root/nnnn' already exists"
+	if err := git.cleanupWorktree(ctx, worktreePath); err != nil {
+		return err
 	}
 
 	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
 	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	if err != nil {
-		return false, "", err
+		return err
 	}
+
+	return nil
+}
+
+// configureWorktree applies some configuration (e.g. sparse checkout) to
+// the specified worktree and checks out the specified hash and submodules.
+func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
+	// Make a worktree for this exact git hash.
+	worktreePath := filepath.Join(git.root, hash)
 
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
-	worktreePathRelative, err := filepath.Rel(git.root, worktreePath)
-	if err != nil {
-		return false, "", err
-	}
-	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
-	if err = os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
-		return false, "", err
+	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", hash) + "\n")
+	if err := os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+		return err
 	}
 
-	// If sparse checkout is requested, configure git for it.
-	if git.sparseFile != "" {
+	// If sparse checkout is requested, configure git for it, otherwise
+	// unconfigure it.
+	gitInfoPath := filepath.Join(git.root, fmt.Sprintf(".git/worktrees/%s/info", hash))
+	gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
+	if git.sparseFile == "" {
+		os.RemoveAll(gitSparseConfigPath)
+	} else {
 		// This is required due to the undocumented behavior outlined here:
 		// https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
 		git.log.V(0).Info("configuring worktree sparse checkout")
 		checkoutFile := git.sparseFile
 
-		gitInfoPath := filepath.Join(git.root, fmt.Sprintf(".git/worktrees/%s/info", hash))
-		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
-
 		source, err := os.Open(checkoutFile)
 		if err != nil {
-			return false, "", err
+			return err
 		}
 		defer source.Close()
 
@@ -1272,34 +1297,31 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool,
 			fileMode := os.FileMode(int(0755))
 			err := os.Mkdir(gitInfoPath, fileMode)
 			if err != nil {
-				return false, "", err
+				return err
 			}
 		}
 
 		destination, err := os.Create(gitSparseConfigPath)
 		if err != nil {
-			return false, "", err
+			return err
 		}
 		defer destination.Close()
 
 		_, err = io.Copy(destination, source)
 		if err != nil {
-			return false, "", err
+			return err
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, args...)
-		if err != nil {
-			return false, "", err
+		if _, err = git.run.Run(ctx, worktreePath, nil, git.cmd, args...); err != nil {
+			return err
 		}
 	}
 
-	// Reset the worktree's working copy to the specific rev.
-	_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--")
-	if err != nil {
-		return false, "", err
+	// Reset the worktree's working copy to the specific ref.
+	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--"); err != nil {
+		return err
 	}
-	git.log.V(0).Info("reset worktree to hash", "path", worktreePath, "hash", hash)
 
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
@@ -1312,9 +1334,8 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool,
 		if git.depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(git.depth))
 		}
-		_, err = git.run.Run(ctx, worktreePath, nil, git.cmd, submodulesArgs...)
-		if err != nil {
-			return false, "", err
+		if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, submodulesArgs...); err != nil {
+			return err
 		}
 	}
 
@@ -1322,33 +1343,24 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool,
 	if git.chmod != 0 {
 		mode := fmt.Sprintf("%#o", git.chmod)
 		git.log.V(0).Info("changing file permissions", "mode", mode)
-		_, err = git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath)
-		if err != nil {
-			return false, "", err
+		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath); err != nil {
+			return err
 		}
 	}
 
-	// Reset the root's rev (so we can prune and so we can rely on it later).
-	// Use --soft so we do not check out files into the root.
-	_, err = git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--soft", hash, "--")
-	if err != nil {
-		return false, "", err
-	}
-	git.log.V(0).Info("reset root to hash", "path", git.root, "hash", hash)
+	return nil
+}
 
-	// Flip the symlink.
-	oldWorktree, err := git.UpdateSymlink(ctx, worktreePath)
-	if err != nil {
-		return false, "", err
-	}
-	setRepoReady()
-
-	// From here on we have to save errors until the end.
+// cleanup removes old worktrees and runs git's garbage collection.
+func (git *repoSync) cleanup(ctx context.Context, oldHash string) error {
+	// Save errors until the end.
 	var cleanupErrs multiError
 
-	// Clean up previous worktree(s).
-	if oldWorktree != "" {
-		if err := git.CleanupWorkTree(ctx, git.root, oldWorktree); err != nil {
+	// Clean up previous worktree.
+	// TODO: list and clean up all old worktrees
+	if oldHash != "" {
+		oldWorktree := filepath.Join(git.root, oldHash)
+		if err := git.cleanupWorktree(ctx, oldWorktree); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -1370,9 +1382,9 @@ func (git *repoSync) AddWorktreeAndSwap(ctx context.Context, hash string) (bool,
 	}
 
 	if len(cleanupErrs) > 0 {
-		return true, hash, cleanupErrs
+		return cleanupErrs
 	}
-	return true, hash, nil
+	return nil
 }
 
 type multiError []error
@@ -1391,278 +1403,194 @@ func (m multiError) Error() string {
 	return strings.Join(strs, "; ")
 }
 
-// CloneRepo does an initial clone of the git repo.
-func (git *repoSync) CloneRepo(ctx context.Context) error {
-	args := []string{"clone", "--no-checkout"}
-	if git.branch != "" {
-		args = append(args, "-b", git.branch)
-	}
-	if git.depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(git.depth))
-	}
-	args = append(args, git.repo, git.root)
-	git.log.V(0).Info("cloning repo", "origin", git.repo, "path", git.root)
-
-	_, err := git.run.Run(ctx, "", nil, git.cmd, args...)
-	if err != nil {
-		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
-			// Maybe a previous run crashed?  Git won't use this dir.
-			git.log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", git.root)
-			// We remove the contents rather than the dir itself, because a
-			// common use-case is to have a volume mounted at git.root, which
-			// makes removing it impossible.
-			err := removeDirContents(git.root, git.log)
-			if err != nil {
-				return err
-			}
-			_, err = git.run.Run(ctx, "", nil, git.cmd, args...)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	}
-
-	// If sparse checkout is requested, configure git for it.
-	if git.sparseFile != "" {
-		git.log.V(0).Info("configuring sparse checkout")
-		checkoutFile := git.sparseFile
-
-		// TODO: capture this as a function (mostly duplicated above)
-		gitRepoPath := filepath.Join(git.root, ".git")
-		gitInfoPath := filepath.Join(gitRepoPath, "info")
-		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
-
-		source, err := os.Open(checkoutFile)
-		if err != nil {
-			return err
-		}
-		defer source.Close()
-
-		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
-			fileMode := os.FileMode(int(0755))
-			err := os.Mkdir(gitInfoPath, fileMode)
-			if err != nil {
-				return err
-			}
-		}
-
-		destination, err := os.Create(gitSparseConfigPath)
-		if err != nil {
-			return err
-		}
-		defer destination.Close()
-
-		_, err = io.Copy(destination, source)
-		if err != nil {
-			return err
-		}
-
-		args := []string{"sparse-checkout", "init"}
-		_, err = git.run.Run(ctx, git.root, nil, git.cmd, args...)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// LocalHashForRev returns the locally known hash for a given rev.
-func (git *repoSync) LocalHashForRev(ctx context.Context, rev string) (string, error) {
-	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", rev)
-	if err != nil {
-		return "", err
-	}
-	result := strings.Trim(string(output), "\n")
-	if result == rev {
-		// It appears to be a SHA, so we need to verify that we have it.  We
-		// don't care what cat-file says, just whether it succeeds or fails.
-		_, err := git.run.Run(ctx, git.root, nil, git.cmd, "cat-file", "-t", rev)
-		if err != nil {
-			// Indicate that we do not have a local hash for this hash.
-			return "", err
-		}
-	}
-	return strings.Trim(string(output), "\n"), nil
-}
-
-// RemoteHashForRef returns the upstream hash for a given ref.
-func (git *repoSync) RemoteHashForRef(ctx context.Context, ref string) (string, error) {
-	// Fetch both the bare and dereferenced rev. git sorts the results and
+// remoteHashForRef returns the upstream hash for a given ref.
+func (git *repoSync) remoteHashForRef(ctx context.Context, ref string) (string, error) {
+	// Fetch both the bare and dereferenced ref. git sorts the results and
 	// prints the dereferenced result, if present, after the bare result, so we
 	// always want the last result it produces.
 	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "ls-remote", "-q", git.repo, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
-	lines := strings.Split(string(output), "\n") // guaranteed to have at least 1 element
-	line := lastNonEmpty(lines)
+	line := lastNonEmptyLine(output)
 	parts := strings.Split(line, "\t") // guaranteed to have at least 1 element
 	return parts[0], nil
 }
 
-func lastNonEmpty(lines []string) string {
-	last := ""
-	for _, line := range lines {
+func lastNonEmptyLine(text string) string {
+	lines := strings.Split(text, "\n") // guaranteed to have at least 1 element
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
 		if line != "" {
-			last = line
+			return line
 		}
 	}
-	return last
+	return ""
 }
 
-func (git *repoSync) RevIsHash(ctx context.Context) (bool, error) {
-	hash, err := git.ResolveRef(ctx, git.rev)
+// IsKnownHash returns true if ref is the hash of a commit which is known to this
+// repo.  In the event that ref is an abbreviated hash (e.g. "abcd" which
+// resolves to "abcdef1234567890"), this will return true by prefix-matching.
+// If ref is ambiguous, it will consider whatever result git returns.  If ref
+// is not a hash or is not known to this repo, even if it appears to be a hash,
+// this will return false.
+func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) {
+	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", ref+"^{commit}")
 	if err != nil {
+		if strings.Contains(err.Error(), "unknown revision") {
+			return false, nil
+		}
 		return false, err
 	}
-	return strings.HasPrefix(hash, git.rev), nil
+	line := lastNonEmptyLine(output)
+	return strings.HasPrefix(line, ref), nil
 }
 
-func (git *repoSync) ResolveRef(ctx context.Context, ref string) (string, error) {
-	// If git doesn't identify rev as a commit, we're done.
-	output, err := git.run.Run(ctx, git.root, nil, git.cmd, "cat-file", "-t", ref)
-	if err != nil {
-		return "", err
-	}
-	o := strings.Trim(string(output), "\n")
-	if o != "commit" {
-		return "", nil
-	}
-
-	// `git cat-file -t` also returns "commit" for tags. If rev is already a git
-	// hash, the output will be the same hash as the input.  Of course, a user
-	// could specify "abc" and match "abcdef12345678", so we just do a prefix
-	// match.
-	output, err = git.LocalHashForRev(ctx, ref)
-	if err != nil {
-		return "", err
-	}
-	return output, nil
-}
-
-// SyncRepo syncs the branch of a given repository to the link at the given rev.
-// returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
+// SyncRepo syncs the repository to the desired ref, publishes it via the link,
+// and tries to clean up any detritus.  This function returns whether the
+// current hash has changed and what the new hash is.
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
+	git.log.V(1).Info("syncing", "repo", git.repo)
+
 	refreshCreds(ctx)
 
-	currentWorktreeGit := filepath.Join(git.link, ".git")
-	var hash string
-	_, err := os.Stat(currentWorktreeGit)
-	switch {
-	case os.IsNotExist(err):
-		// First time. Just clone it and get the hash.
-		err = git.CloneRepo(ctx)
-		if err != nil {
-			return false, "", err
-		}
-		hash, err = git.ensureLocalHashForRev(ctx, git.rev)
-		if err != nil {
-			return false, "", err
-		}
-	case err != nil:
-		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, err)
-	default:
-		// Not the first time. Figure out if the ref has changed.
-		local, remote, err := git.GetRevs(ctx)
-		if err != nil {
-			return false, "", err
-		}
-		if local == remote {
-			git.log.V(1).Info("no update required", "rev", git.rev, "local", local, "remote", remote)
-			return false, "", nil
-		}
-		git.log.V(0).Info("update required", "rev", git.rev, "local", local, "remote", remote)
-		hash = remote
+	// Initialize the repo directory if needed.
+	if err := git.initRepo(ctx); err != nil {
+		return false, "", err
 	}
 
-	return git.AddWorktreeAndSwap(ctx, hash)
-}
-
-func (git *repoSync) ensureLocalHashForRev(ctx context.Context, rev string) (string, error) {
-	hash, err := git.LocalHashForRev(ctx, rev)
-	if err == nil {
-		return hash, nil
-	}
-
-	// git might return either error, based on flags used internal to
-	// LocalHashForRev, so we will consider either one to be a "rev not found".
-	if es := err.Error(); !stringContainsOneOf(es, "unknown revision", "bad revision") {
-		return "", err
-	}
-
-	// The rev was not found, try to fetch it.
-	git.log.V(1).Info("rev was not found, trying fetch", "rev", git.rev)
-	args := []string{"fetch", "-f", "--tags"}
-	if git.depth != 0 {
-		args = append(args, "--depth", strconv.Itoa(git.depth))
-	}
-	args = append(args, git.repo, "--")
-	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
-		return "", err
-	}
-
-	// Try again.
-	hash, err = git.LocalHashForRev(ctx, git.rev)
+	// Figure out what hash the remote resolves to.
+	remote, err := git.remoteHashForRef(ctx, git.ref)
 	if err != nil {
-		return "", err
-	}
-	return hash, nil
-}
-
-func stringContainsOneOf(s string, matches ...string) bool {
-	for _, m := range matches {
-		if strings.Contains(s, m) {
-			return true
-		}
-	}
-	return false
-}
-
-// GetRevs returns the current HEAD and upstream hash for rev.  Normally the
-// current HEAD is a previous or current version of git.rev, but if the app was
-// started with one rev and then restarted with a different one, HEAD could be
-// anything.
-func (git *repoSync) GetRevs(ctx context.Context) (string, string, error) {
-	// Find the currently synced HEAD.
-	local, err := git.LocalHashForRev(ctx, "HEAD")
-	if err != nil {
-		return "", "", err
+		return false, "", err
 	}
 
-	// Build a ref string, depending on whether the user asked to track HEAD or
-	// a tag.  We can't really tell if it is a SHA yet, so we will catch that
-	// case later.
-	ref := "HEAD"
-	if git.rev != "HEAD" {
-		ref = "refs/tags/" + git.rev
-	} else if git.branch != "" {
-		ref = "refs/heads/" + git.branch
-	}
-
-	// Figure out what hash the remote resolves ref to.
-	remote, err := git.RemoteHashForRef(ctx, ref)
-	if err != nil {
-		return "", "", err
-	}
-
-	// If we couldn't find a remote hash, it might have been a SHA literal.
+	// If we couldn't find a remote commit, it might have been a hash literal.
 	if remote == "" {
-		// If git thinks it tastes like a SHA, we just return that and if it
+		// If git thinks it tastes like a hash, we just use that and if it
 		// is wrong, we will fail later.
-		output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", git.rev)
+		output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", git.ref)
 		if err != nil {
-			return "", "", err
+			return false, "", err
 		}
 		result := strings.Trim(string(output), "\n")
-		if result == git.rev {
-			remote = git.rev
+		if result == git.ref {
+			remote = git.ref
 		}
 	}
 
-	return local, remote, nil
+	// Find out what we currently have synced, if anything.
+	current, err := os.Readlink(git.link)
+	if err != nil && !os.IsNotExist(err) {
+		return false, "", err
+	}
+	if current == remote {
+		// We seem to have the right hash already.  Let's be sure it's good.
+		if !git.sanityCheckWorktree(ctx, current) {
+			// Sanity check failed, nuke it and start over.
+			worktreePath := filepath.Join(git.root, current)
+			if err := git.cleanupWorktree(ctx, worktreePath); err != nil {
+				return false, "", err
+			}
+			current = ""
+		}
+	}
+	changed := false
+	if current != remote {
+		git.log.V(0).Info("update required", "ref", git.ref, "local", current, "remote", remote)
+		changed = true
+	}
+
+	// We always do a fetch, to ensure that parameters like depth are set
+	// properly.  This is cheap when we already have the target hash.
+	if err := git.fetch(ctx, remote); err != nil {
+		return false, "", err
+	}
+
+	// Reset the repo (note: not the worktree - that happens later) to the new
+	// ref.  This makes subsequent fetches much less expensive.  It uses --soft
+	// so no files are checked out.
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "reset", "--soft", "FETCH_HEAD"); err != nil {
+		return false, "", err
+	}
+
+	if current != remote {
+		// Create a worktree for this hash in git.root.
+		if err := git.createWorktree(ctx, remote); err != nil {
+			return false, "", err
+		}
+	}
+
+	// Even if this worktree exists and passes sanity, it might not have all
+	// the correct settings (e.g. sparse checkout).  The best way to get
+	// it all set is just to re-run the configuration,
+	if err := git.configureWorktree(ctx, remote); err != nil {
+		return false, "", err
+	}
+
+	oldHash := ""
+	if current != remote {
+		// Point the symlink to the new hash.
+		old, err := git.publishSymlink(ctx, git.link, filepath.Join(git.root, remote))
+		if err != nil {
+			return false, "", err
+		}
+		oldHash = old
+	}
+
+	// Mark ourselves as "ready".
+	setRepoReady()
+
+	if oldHash != "" {
+		// Clean up the old worktree(s).
+		if err := git.cleanup(ctx, oldHash); err != nil {
+			git.log.Error(err, "git cleanup failed", "oldHash", oldHash)
+		}
+	}
+
+	return changed, remote, nil
+}
+
+// fetch retrieves the specified ref from the upstream repo.
+func (git *repoSync) fetch(ctx context.Context, ref string) error {
+	git.log.V(0).Info("fetching ref", "ref", ref, "repo", git.repo)
+
+	// Fetch the ref and do some cleanup, setting or un-setting the repo's
+	// shallow flag as appropriate.
+	args := []string{"fetch", git.repo, ref, "--prune", "--no-auto-gc"}
+	if git.depth > 0 {
+		args = append(args, "--depth", strconv.Itoa(git.depth))
+	} else {
+		// If the local repo is shallow and we're not using depth any more, we
+		// need a special case.
+		shallow, err := git.isShallow(ctx)
+		if err != nil {
+			return err
+		}
+		if shallow {
+			args = append(args, "--unshallow")
+		}
+	}
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, args...); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (git *repoSync) isShallow(ctx context.Context) (bool, error) {
+	boolStr, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return false, fmt.Errorf("can't determine repo shallowness: %w", err)
+	}
+	boolStr = strings.TrimSpace(boolStr)
+	switch boolStr {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("unparseable bool: %q", boolStr)
 }
 
 func md5sum(s string) string {
@@ -1795,7 +1723,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	return nil
 }
 
-func (git *repoSync) setupDefaultGitConfigs(ctx context.Context) error {
+func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 	configs := []keyVal{{
 		// Never auto-detach GC runs.
 		key: "gc.autoDetach",
@@ -1817,7 +1745,7 @@ func (git *repoSync) setupDefaultGitConfigs(ctx context.Context) error {
 	return nil
 }
 
-func (git *repoSync) setupExtraGitConfigs(ctx context.Context, configsFlag string) error {
+func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 	git.log.V(1).Info("setting additional git configs")
 
 	configs, err := parseGitConfigs(configsFlag)
@@ -2056,10 +1984,6 @@ OPTIONS
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
-    --branch <string>, $GIT_SYNC_BRANCH
-            The git branch to check out.  If not specified, this defaults to
-            the default branch of --repo.
-
     --change-permissions <int>, $GIT_SYNC_PERMISSIONS
             Change permissions on the checked-out files to the specified mode.
 
@@ -2086,7 +2010,7 @@ OPTIONS
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
-            environment variable $GITSYNC_HASH will be set to the git SHA that
+            environment variable $GITSYNC_HASH will be set to the git hash that
             was synced.  The execution is subject to the overall --sync-timeout
             flag and will extend the effective period between sync attempts.
             This flag obsoletes --sync-hook-command, but if sync-hook-command
@@ -2152,13 +2076,13 @@ OPTIONS
 
     --link <string>, $GIT_SYNC_LINK
             The path to at which to create a symlink which points to the
-            current git directory, at the currently synced SHA.  This may be an
-            absolute path or a relative path, in which case it is relative to
-            --root.  The last path element is the name of the link and must not
-            start with a period.  Consumers of the synced files should always
-            use this link - it is updated atomically and should always be
-            valid.  The basename of the target of the link is the current SHA.
-            If not specified, this defaults to the leaf dir of --repo.
+            current git directory, at the currently synced hash.  This may be
+            an absolute path or a relative path, in which case it is relative
+            to --root.  The last path element is the name of the link and must
+            not start with a period.  Consumers of the synced files should
+            always use this link - it is updated atomically and should always
+            be valid.  The basename of the target of the link is the current
+            hash.  If not specified, this defaults to the leaf dir of --repo.
 
     --man
             Print this manual and exit.
@@ -2189,12 +2113,13 @@ OPTIONS
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
 
+    --ref <string>, $GIT_SYNC_REF
+            The git revision (branch, tag, or hash) to check out.  If not
+            specified, this defaults to "HEAD" (of the upstream repo's default
+            branch).
+
     --repo <string>, $GIT_SYNC_REPO
             The git repository to sync.  This flag is required.
-
-    --rev <string>, $GIT_SYNC_REV
-            The git revision (tag or hash) to check out.  If not specified,
-            this defaults to "HEAD".
 
     --root <string>, $GIT_SYNC_ROOT
             The root directory for git-sync operations, under which --link will
@@ -2228,10 +2153,10 @@ OPTIONS
             "off".  If not specified, this defaults to "recursive".
 
     --sync-on-signal <string>, $GIT_SYNC_SYNC_ON_SIGNAL
-            Indicates that a sync attempt should occur upon receipt of the 
+            Indicates that a sync attempt should occur upon receipt of the
             specified signal name (e.g. SIGHUP) or number (e.g. 1). If a sync
             is already in progress, another sync will be triggered as soon as
-            the current one completes. If not specified, signals will not 
+            the current one completes. If not specified, signals will not
             trigger syncs.
 
     --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
@@ -2275,14 +2200,13 @@ OPTIONS
 
     --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
-            header 'Gitsync-Hash' will be set to the git SHA that was synced.
+            header 'Gitsync-Hash' will be set to the git hash that was synced.
 
 EXAMPLE USAGE
 
     git-sync \
         --repo=https://github.com/kubernetes/git-sync \
-        --branch=main \
-        --rev=HEAD \
+        --ref=HEAD \
         --period=10s \
         --root=/mnt/git
 
@@ -2327,9 +2251,9 @@ HOOKS
     wait --exechook-backoff or --webhook-backoff (as appropriate) before
     re-trying the hook.
 
-    Hooks are not guaranteed to succeed on every single SHA change.  For example,
-    if a hook fails and a new SHA is synced during the backoff period, the
-    retried hook will fire for the newest SHA.
+    Hooks are not guaranteed to succeed on every single hash change.  For example,
+    if a hook fails and a new hash is synced during the backoff period, the
+    retried hook will fire for the newest hash.
 `
 
 func printManPage() {
