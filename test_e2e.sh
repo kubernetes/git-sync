@@ -212,7 +212,6 @@ ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
 TEST_TOOLS="_test_tools"
-SLOW_GIT_CLONE="$TEST_TOOLS/git_slow_clone.sh"
 SLOW_GIT_FETCH="$TEST_TOOLS/git_slow_fetch.sh"
 ASKPASS_GIT="$TEST_TOOLS/git_askpass.sh"
 EXECHOOK_COMMAND="$TEST_TOOLS/exechook_command.sh"
@@ -281,7 +280,6 @@ function e2e::init_root_doesnt_exist() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT/subdir" \
         --link="link" \
         >> "$1" 2>&1
@@ -300,7 +298,6 @@ function e2e::init_root_exists_empty() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -319,7 +316,6 @@ function e2e::init_root_flag_is_weird() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="../../../../../$ROOT/../../../../../../$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -339,7 +335,6 @@ function e2e::init_root_flag_has_symlink() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT/rootlink" \
         --link="link" \
         >> "$1" 2>&1
@@ -363,7 +358,6 @@ function e2e::init_root_is_under_another_repo() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT/subdir/root" \
         --link="link" \
         >> "$1" 2>&1
@@ -387,7 +381,6 @@ function e2e::init_root_fails_sanity() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -395,10 +388,6 @@ function e2e::init_root_fails_sanity() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
-
-## FIXME: test when repo is valid git, but wrong remote
-## FIXME: test when repo is valid git, but not ar ref we need
-## FIXME: test when repo is valid git, and is already correct
 
 ##############################################
 # Test init  with an absolute-path link
@@ -410,8 +399,6 @@ function e2e::sync_absolute_link() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="HEAD" \
         --root="$ROOT/root" \
         --link="$ROOT/other/dir/link" \
         >> "$1" 2>&1
@@ -431,8 +418,6 @@ function e2e::sync_subdir_link() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="HEAD" \
         --root="$ROOT" \
         --link="other/dir/link" \
         >> "$1" 2>&1
@@ -443,9 +428,9 @@ function e2e::sync_subdir_link() {
 }
 
 ##############################################
-# Test non-zero exit with a bad branch
+# Test non-zero exit with a bad ref
 ##############################################
-function e2e::bad_branch_non_zero_exit() {
+function e2e::bad_ref_non_zero_exit() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -454,8 +439,7 @@ function e2e::bad_branch_non_zero_exit() {
         GIT_SYNC \
             --one-time \
             --repo="file://$REPO" \
-            --branch="does-not-exist" \
-            --rev="HEAD" \
+            --ref=does-not-exist \
             --root="$ROOT" \
             --link="link" \
             >> "$1" 2>&1
@@ -469,35 +453,9 @@ function e2e::bad_branch_non_zero_exit() {
 }
 
 ##############################################
-# Test non-zero exit with a bad rev
+# Test default ref syncing
 ##############################################
-function e2e::bad_rev_non_zero_exit() {
-    echo "$FUNCNAME" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    (
-        set +o errexit
-        GIT_SYNC \
-            --one-time \
-            --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
-            --rev=does-not-exit \
-            --root="$ROOT" \
-            --link="link" \
-            >> "$1" 2>&1
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-    )
-}
-
-##############################################
-# Test default-branch syncing
-##############################################
-function e2e::sync_default_branch() {
+function e2e::sync_default_ref() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -544,8 +502,7 @@ function e2e::sync_head() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
+        --ref=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -583,7 +540,6 @@ function e2e::worktree_cleanup() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -633,7 +589,6 @@ function e2e::readlink() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -670,7 +625,7 @@ function e2e::sync_named_branch() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$OTHER_BRANCH" \
+        --ref="$OTHER_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -713,7 +668,7 @@ function e2e::sync_branch_switch() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
+        --ref="$MAIN_BRANCH" \
         --depth=1 \
         --root="$ROOT" \
         --link="link" \
@@ -730,7 +685,7 @@ function e2e::sync_branch_switch() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch=$OTHER_BRANCH \
+        --ref=$OTHER_BRANCH \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -753,8 +708,7 @@ function e2e::sync_tag() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$TAG" \
+        --ref="$TAG" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -807,8 +761,7 @@ function e2e::sync_annotated_tag() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$TAG" \
+        --ref="$TAG" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -859,8 +812,7 @@ function e2e::sync_sha() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA" \
+        --ref="$SHA" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -900,8 +852,7 @@ function e2e::sync_sha_once() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA" \
+        --ref="$SHA" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -928,8 +879,7 @@ function e2e::sync_sha_once_sync_different_sha_known() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA1" \
+        --ref="$SHA1" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -941,8 +891,7 @@ function e2e::sync_sha_once_sync_different_sha_known() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA2" \
+        --ref="$SHA2" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -963,8 +912,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA1" \
+        --ref="$SHA1" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -985,8 +933,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$SHA2" \
+        --ref="$SHA2" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -994,6 +941,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
 }
+
 ##############################################
 # Test syncing after a crash
 ##############################################
@@ -1005,7 +953,6 @@ function e2e::sync_crash_cleanup_retry() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -1020,7 +967,6 @@ function e2e::sync_crash_cleanup_retry() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -1040,7 +986,6 @@ function e2e::sync_repo_switch() {
     # First sync
     GIT_SYNC \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --one-time \
@@ -1056,7 +1001,6 @@ function e2e::sync_repo_switch() {
     # Now sync the other repo
     GIT_SYNC \
         --repo="file://$REPO2" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --one-time \
@@ -1075,11 +1019,10 @@ function e2e::error_slow_git_short_timeout() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="/$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_FETCH" \
         --one-time \
         --sync-timeout=1s \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 || true
@@ -1098,11 +1041,10 @@ function e2e::sync_slow_git_long_timeout() {
 
     # run with slow_git_clone but without timing out
     GIT_SYNC \
-        --git="/$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_FETCH" \
         --period=100ms \
         --sync-timeout=16s \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1134,7 +1076,6 @@ function e2e::sync_on_signal_sighup() {
         --period=100s \
         --sync-on-signal="SIGHUP" \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1167,7 +1108,6 @@ function e2e::sync_on_signal_hup() {
         --period=100s \
         --sync-on-signal="HUP" \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1200,7 +1140,6 @@ function e2e::sync_on_signal_1() {
         --period=100s \
         --sync-on-signal=1 \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1233,7 +1172,6 @@ function e2e::sync_branch_depth_shallow() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --depth="$expected_depth" \
         --root="$ROOT" \
         --link="link" \
@@ -1291,8 +1229,7 @@ function e2e::sync_tag_depth_shallow_out_of_range() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --rev="$TAG" \
+        --ref="$TAG" \
         --depth="$expected_depth" \
         --root="$ROOT" \
         --link="link" \
@@ -1326,49 +1263,6 @@ function e2e::sync_tag_depth_shallow_out_of_range() {
 }
 
 ##############################################
-# Test fetch skipping commit
-##############################################
-function e2e::sync_fetch_skip_depth_1() {
-    echo "$FUNCNAME" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    GIT_SYNC \
-        --git="/$SLOW_GIT_FETCH" \
-        --period=100ms \
-        --depth=1 \
-        --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
-        --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1 &
-
-    # wait for first sync which does a clone followed by an artifically slowed fetch
-    wait_for_sync "$((MAXWAIT * 3))"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-
-    # make a second commit to trigger a sync with shallow fetch
-    echo "$FUNCNAME-ok" > "$REPO"/file2
-    git -C "$REPO" add file2
-    git -C "$REPO" commit -qam "$FUNCNAME new file"
-
-    # Give time for ls-remote to detect the commit and slowed fetch to start
-    sleep 2
-
-    # make a third commit to insert the commit between ls-remote and fetch
-    echo "$FUNCNAME-ok" > "$REPO"/file3
-    git -C "$REPO" add file3
-    git -C "$REPO" commit -qam "$FUNCNAME third file"
-    wait_for_sync "$((MAXWAIT * 3))"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_eq "$ROOT"/link/file3 "$FUNCNAME-ok"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-}
-
-##############################################
 # Test password auth with the wrong password
 ##############################################
 function e2e::auth_password_wrong_password() {
@@ -1382,7 +1276,6 @@ function e2e::auth_password_wrong_password() {
         --password="wrong" \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 || true
@@ -1405,7 +1298,6 @@ function e2e::auth_password_correct_password() {
         --password="my-password" \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1456,7 +1348,6 @@ function e2e::auth_askpass_url_wrong_password() {
         --askpass-url="http://$IP/git_askpass" \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 || true
@@ -1492,7 +1383,6 @@ function e2e::auth_askpass_url_correct_password() {
         --askpass-url="http://$IP/git_askpass" \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1555,7 +1445,6 @@ function e2e::auth_askpass_url_flaky() {
         --max-failures=2 \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1594,7 +1483,6 @@ function e2e::exechook_success() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --exechook-command="/$EXECHOOK_COMMAND" \
@@ -1636,7 +1524,6 @@ function e2e::exechook_fail_retry() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --exechook-command="/$EXECHOOK_COMMAND_FAIL" \
@@ -1663,7 +1550,6 @@ function e2e::exechook_success_once() {
         --period=100ms \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --exechook-command="/$EXECHOOK_COMMAND_SLEEPY" \
@@ -1696,7 +1582,6 @@ function e2e::exechook_fail_once() {
             --period=100ms \
             --one-time \
             --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
             --root="$ROOT" \
             --link="link" \
             --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
@@ -1740,7 +1625,6 @@ function e2e::webhook_success() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
@@ -1791,7 +1675,6 @@ function e2e::webhook_fail_retry() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
@@ -1847,7 +1730,6 @@ function e2e::webhook_success_once() {
         --period=100ms \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
@@ -1886,7 +1768,6 @@ function e2e::webhook_fail_retry_once() {
             --period=100ms \
             --one-time \
             --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
             --root="$ROOT" \
             --webhook-url="http://$IP" \
             --webhook-success-status=200 \
@@ -1931,7 +1812,6 @@ function e2e::webhook_fire_and_forget() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --webhook-url="http://$IP" \
         --webhook-success-status=-1 \
@@ -1956,10 +1836,9 @@ function e2e::expose_http() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="/$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_FETCH" \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -2008,7 +1887,6 @@ function e2e::expose_http_after_restart() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -2019,7 +1897,6 @@ function e2e::expose_http_after_restart() {
     # Sync again and prove readiness.
     GIT_SYNC \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -2076,7 +1953,6 @@ function e2e::submodule_sync_default() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -2175,7 +2051,6 @@ function e2e::submodule_sync_depth() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --depth="$expected_depth" \
         --root="$ROOT" \
         --link="link" \
@@ -2254,7 +2129,6 @@ function e2e::submodule_sync_off() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --submodules=off \
@@ -2297,7 +2171,6 @@ function e2e::submodule_sync_shallow() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --submodules=shallow \
@@ -2332,7 +2205,6 @@ function e2e::auth_ssh() {
     GIT_SYNC \
         --period=100ms \
         --repo="test@$IP:/src" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --ssh \
@@ -2380,7 +2252,6 @@ function e2e::sparse_checkout() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --sparse-checkout-file="$WORK/sparseconfig" \
@@ -2403,7 +2274,6 @@ function e2e::additional_git_configs() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val' \
@@ -2424,7 +2294,7 @@ function e2e::export_error() {
         set +o errexit
         GIT_SYNC \
             --repo="file://$REPO" \
-            --branch=does-not-exit \
+            --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
             --error-file="error.json" \
@@ -2435,14 +2305,13 @@ function e2e::export_error() {
         fi
         assert_file_absent "$ROOT"/link
         assert_file_absent "$ROOT"/link/file
-        assert_file_contains "$ROOT"/error.json "Remote branch does-not-exit not found in upstream origin"
+        assert_file_contains "$ROOT"/error.json "unknown revision"
     )
 
     # the error.json file should be removed if sync succeeds.
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --error-file="error.json" \
@@ -2464,7 +2333,7 @@ function e2e::export_error_abs_path() {
         set +o errexit
         GIT_SYNC \
             --repo="file://$REPO" \
-            --branch=does-not-exit \
+            --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
             --error-file="$ROOT/dir/error.json" \
@@ -2475,7 +2344,7 @@ function e2e::export_error_abs_path() {
         fi
         assert_file_absent "$ROOT"/link
         assert_file_absent "$ROOT"/link/file
-        assert_file_contains "$ROOT"/dir/error.json "Remote branch does-not-exit not found in upstream origin"
+        assert_file_contains "$ROOT"/dir/error.json "unknown revision"
     )
 }
 
@@ -2490,7 +2359,6 @@ function e2e::export_error_invalid_file() {
         set +o errexit
         GIT_SYNC \
             --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
             --root="$ROOT" \
             --link="link" \
             --error-file=".error.json" \
@@ -2516,7 +2384,6 @@ function e2e::touch_file() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --touch-file="touch.file" \
@@ -2571,7 +2438,6 @@ function e2e::touch_file_abs_path() {
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --touch-file="$ROOT/dir/touch.file" \
@@ -2626,7 +2492,6 @@ function e2e::touch_file_invalid_file() {
         set +o errexit
         GIT_SYNC \
             --repo="file://$REPO" \
-            --branch="$MAIN_BRANCH" \
             --root="$ROOT" \
             --link="link" \
             --touch-file=".touch.file" \
@@ -2649,7 +2514,6 @@ function e2e::github_https() {
     GIT_SYNC \
         --one-time \
         --repo="https://github.com/kubernetes/git-sync" \
-        --branch=master \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -2666,7 +2530,6 @@ function e2e::gc_auto() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --git-gc="auto" \
@@ -2686,7 +2549,6 @@ function e2e::gc_always() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --git-gc="always" \
@@ -2706,7 +2568,6 @@ function e2e::gc_aggressive() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --git-gc="aggressive" \
@@ -2726,7 +2587,6 @@ function e2e::gc_off() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
         --git-gc="off" \

@@ -20,5 +20,5 @@ if [ "$1" != "fetch" ]; then
   exit $?
 fi
 
-sleep 5
+sleep 2
 git "$@"

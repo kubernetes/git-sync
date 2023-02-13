@@ -38,7 +38,6 @@ spec:
           image: registry.k8s.io/git-sync/git-sync:v4.0.0
           args:
             - --repo=https://github.com/kubernetes/git-sync
-            - --branch=master
             - --depth=1
             - --period=60
             - --link=current

@@ -79,12 +79,11 @@ as user ID "65533" which is created for running git-sync as non-root.
       # ...
       containers:
       - name: git-sync
-        image: registry.k8s.io/git-sync:v3.1.5
+        image: registry.k8s.io/git-sync:v4.0.0
         args:
          - "--ssh"
          - "--repo=git@github.com:foo/bar"
          - "--link=bar"
-         - "--branch=master"
         volumeMounts:
         - name: git-secret
           mountPath: /etc/git-secret
@@ -138,12 +137,10 @@ spec:
           defaultMode: 0400
       containers:
       - name: git-sync
-        image: registry.k8s.io/git-sync:v3.1.5
+        image: registry.k8s.io/git-sync:v4.0.0
         args:
          - "--ssh"
          - "--repo=git@github.com:torvalds/linux"
-         - "--link=linux"
-         - "--branch=master"
          - "--depth=1"
         securityContext:
           runAsUser: 65533 # git-sync user
