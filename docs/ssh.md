@@ -79,7 +79,7 @@ as user ID "65533" which is created for running git-sync as non-root.
       # ...
       containers:
       - name: git-sync
-        image: k8s.gcr.io/git-sync:v3.1.5
+        image: registry.k8s.io/git-sync:v3.1.5
         args:
          - "--ssh"
          - "--repo=git@github.com:foo/bar"
@@ -138,7 +138,7 @@ spec:
           defaultMode: 0400
       containers:
       - name: git-sync
-        image: k8s.gcr.io/git-sync:v3.1.5
+        image: registry.k8s.io/git-sync:v3.1.5
         args:
          - "--ssh"
          - "--repo=git@github.com:torvalds/linux"

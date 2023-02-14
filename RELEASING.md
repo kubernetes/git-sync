@@ -61,7 +61,7 @@ name from above.  For example:
 ```
 
 When that PR is merged, the promoter bot will copy the images from staging to
-the final prod location (e.g. `k8s.gcr.io/git-sync/git-sync:v3.3.2`).
+the final prod location (e.g. `registry.k8s.io/git-sync/git-sync:v3.3.2`).
 
 ## Make a GitHub release
 

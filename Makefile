@@ -43,7 +43,7 @@ ALL_PLATFORMS := linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/s390x
 OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
 ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 
-BASEIMAGE ?= k8s.gcr.io/build-image/debian-base:bullseye-v1.4.2
+BASEIMAGE ?= registry.k8s.io/build-image/debian-base:bullseye-v1.4.2
 
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)__$(OS)_$(ARCH)
