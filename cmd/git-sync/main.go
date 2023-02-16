@@ -227,7 +227,7 @@ func envMultiString(keys []string, def string) string {
 	for i, key := range keys {
 		if val := os.Getenv(key); val != "" {
 			if i != 0 {
-				fmt.Fprintf(os.Stderr, "Env %s has been deprecated, use %s instead\n", key, keys[0])
+				fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", key, keys[0])
 			}
 			return val
 		}
@@ -252,7 +252,7 @@ func envMultiBool(keys []string, def bool) bool {
 			parsed, err := strconv.ParseBool(val)
 			if err == nil {
 				if i != 0 {
-					fmt.Fprintf(os.Stderr, "Env %s has been deprecated, use %s instead\n", key, keys[0])
+					fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", key, keys[0])
 				}
 				return parsed
 			}
@@ -383,6 +383,7 @@ func main() {
 
 	if *flDest != "" {
 		// Back-compat
+		log.V(1).Info("setting --link from deprecated --dest")
 		*flLink = *flDest
 	}
 	if *flLink == "" {
@@ -395,6 +396,7 @@ func main() {
 
 	if *flWait != 0 {
 		// Back-compat
+		log.V(1).Info("setting --period from deprecated --wait")
 		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
@@ -421,6 +423,7 @@ func main() {
 
 	if *flTimeout != 0 {
 		// Back-compat
+		log.V(1).Info("setting --sync-timeout from deprecated --timeout")
 		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
@@ -429,6 +432,7 @@ func main() {
 
 	if *flMaxSyncFailures != 0 {
 		// Back-compat
+		log.V(1).Info("setting --max-failures from deprecated --max-sync-failures")
 		*flMaxFailures = *flMaxSyncFailures
 	}
 
@@ -441,6 +445,7 @@ func main() {
 
 	if *flSyncHookCommand != "" {
 		// Back-compat
+		log.V(1).Info("setting --exechook-command from deprecated --sync-hook-command")
 		*flExechookCommand = *flSyncHookCommand
 	}
 	if *flExechookCommand != "" {
