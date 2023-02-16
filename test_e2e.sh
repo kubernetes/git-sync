@@ -590,8 +590,8 @@ function e2e::worktree_cleanup() {
     git -C "$REPO" commit -qam "$FUNCNAME new file"
 
     # make a worktree to collide with git-sync
-    REV=$(git -C "$REPO" rev-list -n1 HEAD)
-    git -C "$REPO" worktree add -q "$ROOT"/"$REV" -b e2e --no-checkout
+    SHA=$(git -C "$REPO" rev-list -n1 HEAD)
+    git -C "$REPO" worktree add -q "$ROOT"/"$SHA" -b e2e --no-checkout
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
@@ -831,19 +831,19 @@ function e2e::sync_annotated_tag() {
 }
 
 ##############################################
-# Test rev syncing
+# Test SHA syncing
 ##############################################
 function e2e::sync_sha() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    REV=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA=$(git -C "$REPO" rev-list -n1 HEAD)
 
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV" \
+        --rev="$SHA" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -872,19 +872,19 @@ function e2e::sync_sha() {
 }
 
 ##############################################
-# Test rev-sync one-time
+# Test SHA-sync one-time
 ##############################################
 function e2e::sync_sha_once() {
     # First sync
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
-    REV=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA=$(git -C "$REPO" rev-list -n1 HEAD)
 
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV" \
+        --rev="$SHA" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -894,25 +894,25 @@ function e2e::sync_sha_once() {
 }
 
 ##############################################
-# Test rev-sync on a different rev we already have
+# Test SHA-sync on a different SHA we already have
 ##############################################
 function e2e::sync_sha_once_sync_different_sha_known() {
     # All revs will be known because we check out the branch
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    REV1=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA1=$(git -C "$REPO" rev-list -n1 HEAD)
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    REV2=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA2=$(git -C "$REPO" rev-list -n1 HEAD)
     echo "$FUNCNAME 3" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
-    # Sync REV1
+    # Sync SHA1
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV1" \
+        --rev="$SHA1" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -920,12 +920,12 @@ function e2e::sync_sha_once_sync_different_sha_known() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
 
-    # Sync REV2
+    # Sync SHA2
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV2" \
+        --rev="$SHA2" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -935,19 +935,19 @@ function e2e::sync_sha_once_sync_different_sha_known() {
 }
 
 ##############################################
-# Test rev-sync on a different rev we do not have
+# Test SHA-sync on a different SHA we do not have
 ##############################################
 function e2e::sync_sha_once_sync_different_sha_unknown() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    REV1=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA1=$(git -C "$REPO" rev-list -n1 HEAD)
 
-    # Sync REV1
+    # Sync SHA1
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV1" \
+        --rev="$SHA1" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -958,18 +958,18 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
     # The locally synced repo does not know this new SHA.
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    REV2=$(git -C "$REPO" rev-list -n1 HEAD)
+    SHA2=$(git -C "$REPO" rev-list -n1 HEAD)
     # Make sure the SHA is not at HEAD, to prevent things that only work in
     # that case.
     echo "$FUNCNAME 3" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
-    # Sync REV2
+    # Sync SHA2
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="$REV2" \
+        --rev="$SHA2" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
