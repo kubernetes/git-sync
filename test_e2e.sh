@@ -260,9 +260,9 @@ function remove_containers() {
 #
 
 ##############################################
-# Test HEAD one-time when root doesn't exist
+# Test init when root doesn't exist
 ##############################################
-function e2e::sync_head_once_root_doesnt_exist() {
+function e2e::init_root_doesnt_exist() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -270,7 +270,6 @@ function e2e::sync_head_once_root_doesnt_exist() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT/subdir" \
         --link="link" \
         >> "$1" 2>&1
@@ -280,9 +279,9 @@ function e2e::sync_head_once_root_doesnt_exist() {
 }
 
 ##############################################
-# Test HEAD one-time when root exists and is empty
+# Test init  when root exists and is empty
 ##############################################
-function e2e::sync_head_once_root_exists_empty() {
+function e2e::init_root_exists_empty() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -290,7 +289,6 @@ function e2e::sync_head_once_root_exists_empty() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -300,9 +298,9 @@ function e2e::sync_head_once_root_exists_empty() {
 }
 
 ##############################################
-# Test HEAD one-time with a weird --root flag
+# Test init  with a weird --root flag
 ##############################################
-function e2e::sync_head_once_root_flag_is_weird() {
+function e2e::init_root_flag_is_weird() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -310,7 +308,6 @@ function e2e::sync_head_once_root_flag_is_weird() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="../../../../../$ROOT/../../../../../../$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -320,9 +317,9 @@ function e2e::sync_head_once_root_flag_is_weird() {
 }
 
 ##############################################
-# Test HEAD one-time with a symlink in --root
+# Test init  with a symlink in --root
 ##############################################
-function e2e::sync_head_once_root_flag_has_symlink() {
+function e2e::init_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     ln -s "$ROOT" "$ROOT/rootlink" # symlink to test
@@ -331,7 +328,6 @@ function e2e::sync_head_once_root_flag_has_symlink() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT/rootlink" \
         --link="link" \
         >> "$1" 2>&1
@@ -341,9 +337,9 @@ function e2e::sync_head_once_root_flag_has_symlink() {
 }
 
 ##############################################
-# Test HEAD one-time when root is under a git repo
+# Test init  when root is under a git repo
 ##############################################
-function e2e::sync_head_once_root_exists_but_is_not_git_root() {
+function e2e::init_root_is_under_another_repo() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
 
@@ -356,7 +352,6 @@ function e2e::sync_head_once_root_exists_but_is_not_git_root() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT/subdir/root" \
         --link="link" \
         >> "$1" 2>&1
@@ -366,9 +361,9 @@ function e2e::sync_head_once_root_exists_but_is_not_git_root() {
 }
 
 ##############################################
-# Test HEAD one-time when root fails sanity
+# Test init  when root fails sanity
 ##############################################
-function e2e::sync_head_once_root_exists_but_fails_sanity() {
+function e2e::init_root_fails_sanity() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
     SHA=$(git -C "$REPO" rev-parse HEAD)
@@ -381,7 +376,6 @@ function e2e::sync_head_once_root_exists_but_fails_sanity() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev="HEAD" \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -395,7 +389,7 @@ function e2e::sync_head_once_root_exists_but_fails_sanity() {
 ## FIXME: test when repo is valid git, and is already correct
 
 ##############################################
-# Test HEAD one-time with an absolute-path link
+# Test init  with an absolute-path link
 ##############################################
 function e2e::sync_absolute_link() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -416,7 +410,7 @@ function e2e::sync_absolute_link() {
 }
 
 ##############################################
-# Test HEAD one-time with a subdir-path link
+# Test init  with a subdir-path link
 ##############################################
 function e2e::sync_subdir_link() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -578,7 +572,6 @@ function e2e::worktree_cleanup() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -629,7 +622,6 @@ function e2e::readlink() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -727,7 +719,6 @@ function e2e::sync_branch_switch() {
         --one-time \
         --repo="file://$REPO" \
         --branch=$OTHER_BRANCH \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -1132,7 +1123,6 @@ function e2e::sync_on_signal_sighup() {
         --sync-on-signal="SIGHUP" \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1166,7 +1156,6 @@ function e2e::sync_on_signal_hup() {
         --sync-on-signal="HUP" \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1200,7 +1189,6 @@ function e2e::sync_on_signal_1() {
         --sync-on-signal=1 \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1338,7 +1326,6 @@ function e2e::sync_fetch_skip_depth_1() {
         --depth=1 \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1384,7 +1371,6 @@ function e2e::auth_password_wrong_password() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 || true
@@ -1408,7 +1394,6 @@ function e2e::auth_password_correct_password() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1460,7 +1445,6 @@ function e2e::auth_askpass_url_wrong_password() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 || true
@@ -1497,7 +1481,6 @@ function e2e::auth_askpass_url_correct_password() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -1561,7 +1544,6 @@ function e2e::auth_askpass_url_flaky() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1 &
@@ -2339,7 +2321,6 @@ function e2e::auth_ssh() {
         --period=100ms \
         --repo="test@$IP:/src" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --ssh \
@@ -2388,7 +2369,6 @@ function e2e::sparse_checkout() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --sparse-checkout-file="$WORK/sparseconfig" \
@@ -2412,7 +2392,6 @@ function e2e::additional_git_configs() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val' \
@@ -2526,7 +2505,6 @@ function e2e::touch_file() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --touch-file="touch.file" \
@@ -2582,7 +2560,6 @@ function e2e::touch_file_abs_path() {
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --touch-file="$ROOT/dir/touch.file" \
@@ -2661,7 +2638,6 @@ function e2e::github_https() {
         --one-time \
         --repo="https://github.com/kubernetes/git-sync" \
         --branch=master \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         >> "$1" 2>&1
@@ -2679,7 +2655,6 @@ function e2e::gc_auto() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --git-gc="auto" \
@@ -2700,7 +2675,6 @@ function e2e::gc_always() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --git-gc="always" \
@@ -2721,7 +2695,6 @@ function e2e::gc_aggressive() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --git-gc="aggressive" \
@@ -2742,7 +2715,6 @@ function e2e::gc_off() {
         --one-time \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \
-        --rev=HEAD \
         --root="$ROOT" \
         --link="link" \
         --git-gc="off" \
