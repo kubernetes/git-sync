@@ -194,13 +194,14 @@ mkdir -p "$DOT_SSH"
 ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
 
-SLOW_GIT_CLONE=/slow_git_clone.sh
-SLOW_GIT_FETCH=/slow_git_fetch.sh
-ASKPASS_GIT=/askpass_git.sh
-EXECHOOK_COMMAND=/test_exechook_command.sh
-EXECHOOK_COMMAND_FAIL=/test_exechook_command_fail.sh
-EXECHOOK_COMMAND_SLEEPY=/test_exechook_command_with_sleep.sh
-EXECHOOK_COMMAND_FAIL_SLEEPY=/test_exechook_command_fail_with_sleep.sh
+TEST_TOOLS="_test_tools"
+SLOW_GIT_CLONE="$TEST_TOOLS/git_slow_clone.sh"
+SLOW_GIT_FETCH="$TEST_TOOLS/git_slow_fetch.sh"
+ASKPASS_GIT="$TEST_TOOLS/git_askpass.sh"
+EXECHOOK_COMMAND="$TEST_TOOLS/exechook_command.sh"
+EXECHOOK_COMMAND_FAIL="$TEST_TOOLS/exechook_command_fail.sh"
+EXECHOOK_COMMAND_SLEEPY="$TEST_TOOLS/exechook_command_with_sleep.sh"
+EXECHOOK_COMMAND_FAIL_SLEEPY="$TEST_TOOLS/exechook_command_fail_with_sleep.sh"
 EXECHOOK_ENVKEY=ENVKEY
 EXECHOOK_ENVVAL=envval
 RUNLOG="$DIR/runlog"
@@ -225,13 +226,7 @@ function GIT_SYNC() {
         -v "$REPO":"$REPO":ro \
         -v "$REPO2":"$REPO2":ro \
         -v "$WORK":"$WORK":ro \
-        -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
-        -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
-        -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
-        -v "$(pwd)/test_exechook_command.sh":"$EXECHOOK_COMMAND":ro \
-        -v "$(pwd)/test_exechook_command_fail.sh":"$EXECHOOK_COMMAND_FAIL":ro \
-        -v "$(pwd)/test_exechook_command_with_sleep.sh":"$EXECHOOK_COMMAND_SLEEPY":ro \
-        -v "$(pwd)/test_exechook_command_fail_with_sleep.sh":"$EXECHOOK_COMMAND_FAIL_SLEEPY":ro \
+        -v "$(pwd)/$TEST_TOOLS":"/$TEST_TOOLS":ro \
         --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
@@ -1072,7 +1067,7 @@ function e2e::error_slow_git_short_timeout() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_CLONE" \
         --one-time \
         --sync-timeout=1s \
         --repo="file://$REPO" \
@@ -1095,7 +1090,7 @@ function e2e::sync_slow_git_long_timeout() {
 
     # run with slow_git_clone but without timing out
     GIT_SYNC \
-        --git="$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_CLONE" \
         --period=100ms \
         --sync-timeout=16s \
         --repo="file://$REPO" \
@@ -1333,7 +1328,7 @@ function e2e::sync_fetch_skip_depth_1() {
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
-        --git="$SLOW_GIT_FETCH" \
+        --git="/$SLOW_GIT_FETCH" \
         --period=100ms \
         --depth=1 \
         --repo="file://$REPO" \
@@ -1378,7 +1373,7 @@ function e2e::auth_password_wrong_password() {
 
     # run with askpass_git but with wrong password
     GIT_SYNC \
-        --git="$ASKPASS_GIT" \
+        --git="/$ASKPASS_GIT" \
         --username="my-username" \
         --password="wrong" \
         --one-time \
@@ -1402,7 +1397,7 @@ function e2e::auth_password_correct_password() {
 
     # run with askpass_git with correct password
     GIT_SYNC \
-        --git="$ASKPASS_GIT" \
+        --git="/$ASKPASS_GIT" \
         --username="my-username" \
         --password="my-password" \
         --period=100ms \
@@ -1455,7 +1450,7 @@ function e2e::auth_askpass_url_wrong_password() {
     IP=$(docker_ip "$CTR")
 
     GIT_SYNC \
-        --git="$ASKPASS_GIT" \
+        --git="/$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
         --one-time \
         --repo="file://$REPO" \
@@ -1492,7 +1487,7 @@ function e2e::auth_askpass_url_correct_password() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="$ASKPASS_GIT" \
+        --git="/$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
         --period=100ms \
         --repo="file://$REPO" \
@@ -1555,7 +1550,7 @@ function e2e::auth_askpass_url_flaky() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="$ASKPASS_GIT" \
+        --git="/$ASKPASS_GIT" \
         --askpass-url="http://$IP/git_askpass" \
         --max-failures=2 \
         --period=100ms \
@@ -1603,7 +1598,7 @@ function e2e::exechook_success() {
         --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
-        --exechook-command="$EXECHOOK_COMMAND" \
+        --exechook-command="/$EXECHOOK_COMMAND" \
         >> "$1" 2>&1 &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
@@ -1645,7 +1640,7 @@ function e2e::exechook_fail_retry() {
         --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
-        --exechook-command="$EXECHOOK_COMMAND_FAIL" \
+        --exechook-command="/$EXECHOOK_COMMAND_FAIL" \
         --exechook-backoff=1s \
         >> "$1" 2>&1 &
     sleep 3 # give it time to retry
@@ -1672,7 +1667,7 @@ function e2e::exechook_success_once() {
         --branch="$MAIN_BRANCH" \
         --root="$ROOT" \
         --link="link" \
-        --exechook-command="$EXECHOOK_COMMAND_SLEEPY" \
+        --exechook-command="/$EXECHOOK_COMMAND_SLEEPY" \
         >> "$1" 2>&1
 
     wait_for_sync "${MAXWAIT}"
@@ -1705,7 +1700,7 @@ function e2e::exechook_fail_once() {
             --branch="$MAIN_BRANCH" \
             --root="$ROOT" \
             --link="link" \
-            --exechook-command="$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+            --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
             --exechook-backoff=1s \
             >> "$1" 2>&1
         RET=$?
@@ -1962,7 +1957,7 @@ function e2e::expose_http() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="$SLOW_GIT_CLONE" \
+        --git="/$SLOW_GIT_CLONE" \
         --period=100ms \
         --repo="file://$REPO" \
         --branch="$MAIN_BRANCH" \

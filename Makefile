@@ -237,7 +237,7 @@ test: $(BUILD_DIRS)
 	    "
 	./test_e2e.sh
 
-TEST_TOOLS := $(shell ls _test_tools)
+TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
 .container-test_tool.%: _test_tools/% _test_tools/%/*
