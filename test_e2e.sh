@@ -18,8 +18,25 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+function caller() {
+  local stack_skip=${1:-0}
+  stack_skip=$((stack_skip + 1))
+  if [[ ${#FUNCNAME[@]} -gt ${stack_skip} ]]; then
+    local i
+    for ((i=1 ; i <= ${#FUNCNAME[@]} - stack_skip ; i++))
+    do
+      local frame_no=$((i - 1 + stack_skip))
+      local source_lineno=${BASH_LINENO[$((frame_no - 1))]}
+      local funcname=${FUNCNAME[${frame_no}]}
+      if [[ "$funcname" =~ 'e2e::' ]]; then
+          echo "${source_lineno}"
+      fi
+    done
+  fi
+}
+
 function fail() {
-    echo "FAIL:" "$@"
+    echo "FAIL: line $(caller):" "$@"
     return 42
 }
 
