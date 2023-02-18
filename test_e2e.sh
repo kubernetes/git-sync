@@ -33,7 +33,7 @@ function wait_for_file_exists() {
     local file=$1
     local ticks=$(($2*10)) # 100ms per tick
 
-    while [[ $ticks > 0 ]]; do
+    while (( $ticks > 0 )); do
         if [[ -f "$file" ]]; then
             break
         fi
@@ -1629,7 +1629,7 @@ function e2e::exechook_fail_retry() {
 
     # Check that exechook was called
     RUNS=$(cat "$RUNLOG" | wc -l)
-    if [[ "$RUNS" < 2 ]]; then
+    if (( "$RUNS" < 2 )); then
         fail "exechook called $RUNS times, it should be at least 2"
     fi
 }
@@ -1734,7 +1734,7 @@ function e2e::webhook_success() {
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
+    if (( "$HITS" < 1 )); then
         fail "webhook 1 called $HITS times"
     fi
 
@@ -1747,7 +1747,7 @@ function e2e::webhook_success() {
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
+    if (( "$HITS" < 1 )); then
         fail "webhook 2 called $HITS times"
     fi
 }
@@ -1785,7 +1785,7 @@ function e2e::webhook_fail_retry() {
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
+    if (( "$HITS" < 1 )); then
         fail "webhook 1 called $HITS times"
     fi
 
@@ -1802,7 +1802,7 @@ function e2e::webhook_fail_retry() {
            ')
     sleep 2 # webhooks are async
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
+    if (( "$HITS" < 1 )); then
         fail "webhook 2 called $HITS times"
     fi
 }
@@ -1925,7 +1925,7 @@ function e2e::webhook_fire_and_forget() {
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
     HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" < 1 ]]; then
+    if (( "$HITS" < 1 )); then
         fail "webhook called $HITS times"
     fi
 }
@@ -2846,13 +2846,13 @@ RUNS="${RUNS:-1}"
 for t; do
     TEST_RET=0
     RUN=0
-    while [[ "${RUN}" < "${RUNS}" ]]; do
+    while (( "${RUN}" < "${RUNS}" )); do
         clean_root
         clean_work
         init_repo
 
         sfx=""
-        if [[ "${RUNS}" > 1 ]]; then
+        if (( "${RUNS}" > 1 )); then
             sfx=" ($((RUN+1))/${RUNS})"
         fi
         echo -n "testcase ${t}${sfx}: "
