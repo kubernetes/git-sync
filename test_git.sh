@@ -934,13 +934,13 @@ RUNS="${RUNS:-1}"
 for t; do
     TEST_RET=0
     RUN=0
-    while [[ "${RUN}" < "${RUNS}" ]]; do
+    while (( "${RUN}" < "${RUNS}" )); do
         clean_workdir
 
         pushd "$WORKDIR" >/dev/null
 
         sfx=""
-        if [[ "${RUNS}" > 1 ]]; then
+        if (( "${RUNS}" > 1 )); then
             sfx=" ($((RUN+1))/${RUNS})"
         fi
         echo -n "testcase ${t}${sfx}: "
