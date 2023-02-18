@@ -36,7 +36,7 @@ function caller() {
 }
 
 function fail() {
-    echo "FAIL: line $(caller):" "$@"
+    echo "FAIL: line $(caller):" "$@" >&3
     return 42
 }
 
@@ -281,15 +281,14 @@ function e2e::init_root_doesnt_exist() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT/subdir" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/subdir/link
     assert_file_exists "$ROOT"/subdir/link/file
     assert_file_eq "$ROOT"/subdir/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  when root exists and is empty
+# Test init when root exists and is empty
 ##############################################
 function e2e::init_root_exists_empty() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -299,15 +298,14 @@ function e2e::init_root_exists_empty() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  with a weird --root flag
+# Test init with a weird --root flag
 ##############################################
 function e2e::init_root_flag_is_weird() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -317,15 +315,14 @@ function e2e::init_root_flag_is_weird() {
         --one-time \
         --repo="file://$REPO" \
         --root="../../../../../$ROOT/../../../../../../$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  with a symlink in --root
+# Test init with a symlink in --root
 ##############################################
 function e2e::init_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -336,15 +333,14 @@ function e2e::init_root_flag_has_symlink() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT/rootlink" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  when root is under a git repo
+# Test init when root is under a git repo
 ##############################################
 function e2e::init_root_is_under_another_repo() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -359,15 +355,14 @@ function e2e::init_root_is_under_another_repo() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT/subdir/root" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/subdir/root/link
     assert_file_exists "$ROOT"/subdir/root/link/file
     assert_file_eq "$ROOT"/subdir/root/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  when root fails sanity
+# Test init when root fails sanity
 ##############################################
 function e2e::init_root_fails_sanity() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -382,15 +377,14 @@ function e2e::init_root_fails_sanity() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
 }
 
 ##############################################
-# Test init  with an absolute-path link
+# Test init with an absolute-path link
 ##############################################
 function e2e::sync_absolute_link() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -400,8 +394,7 @@ function e2e::sync_absolute_link() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT/root" \
-        --link="$ROOT/other/dir/link" \
-        >> "$1" 2>&1
+        --link="$ROOT/other/dir/link"
     assert_file_absent "$ROOT"/root/link
     assert_link_exists "$ROOT"/other/dir/link
     assert_file_exists "$ROOT"/other/dir/link/file
@@ -409,7 +402,7 @@ function e2e::sync_absolute_link() {
 }
 
 ##############################################
-# Test init  with a subdir-path link
+# Test init with a subdir-path link
 ##############################################
 function e2e::sync_subdir_link() {
     echo "$FUNCNAME" > "$REPO"/file
@@ -419,8 +412,7 @@ function e2e::sync_subdir_link() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="other/dir/link" \
-        >> "$1" 2>&1
+        --link="other/dir/link"
     assert_file_absent "$ROOT"/link
     assert_link_exists "$ROOT"/other/dir/link
     assert_file_exists "$ROOT"/other/dir/link/file
@@ -441,8 +433,7 @@ function e2e::bad_ref_non_zero_exit() {
             --repo="file://$REPO" \
             --ref=does-not-exist \
             --root="$ROOT" \
-            --link="link" \
-            >> "$1" 2>&1
+            --link="link"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -466,7 +457,7 @@ function e2e::sync_default_ref() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -505,7 +496,7 @@ function e2e::sync_head() {
         --ref=HEAD \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -542,7 +533,7 @@ function e2e::worktree_cleanup() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
 
     # wait for first sync
     wait_for_sync "${MAXWAIT}"
@@ -591,7 +582,7 @@ function e2e::readlink() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
@@ -628,7 +619,7 @@ function e2e::sync_branch() {
         --ref="$OTHER_BRANCH" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -671,8 +662,7 @@ function e2e::sync_branch_switch() {
         --ref="$MAIN_BRANCH" \
         --depth=1 \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -687,8 +677,7 @@ function e2e::sync_branch_switch() {
         --repo="file://$REPO" \
         --ref=$OTHER_BRANCH \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
@@ -711,7 +700,7 @@ function e2e::sync_tag() {
         --ref="$TAG" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -764,7 +753,7 @@ function e2e::sync_annotated_tag() {
         --ref="$TAG" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -815,7 +804,7 @@ function e2e::sync_sha() {
         --ref="$SHA" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -854,8 +843,7 @@ function e2e::sync_sha_once() {
         --repo="file://$REPO" \
         --ref="$SHA" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -881,8 +869,7 @@ function e2e::sync_sha_once_sync_different_sha_known() {
         --repo="file://$REPO" \
         --ref="$SHA1" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -893,8 +880,7 @@ function e2e::sync_sha_once_sync_different_sha_known() {
         --repo="file://$REPO" \
         --ref="$SHA2" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
@@ -914,8 +900,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
         --repo="file://$REPO" \
         --ref="$SHA1" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -935,8 +920,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
         --repo="file://$REPO" \
         --ref="$SHA2" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
@@ -954,8 +938,7 @@ function e2e::sync_crash_cleanup_retry() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -968,8 +951,7 @@ function e2e::sync_crash_cleanup_retry() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -988,8 +970,7 @@ function e2e::sync_repo_switch() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --one-time \
-        >> "$1" 2>&1
+        --one-time
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
@@ -1003,8 +984,7 @@ function e2e::sync_repo_switch() {
         --repo="file://$REPO2" \
         --root="$ROOT" \
         --link="link" \
-        --one-time \
-        >> "$1" 2>&1
+        --one-time
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
@@ -1025,7 +1005,7 @@ function e2e::error_slow_git_short_timeout() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 || true
+        || true
 
     # check for failure
     assert_file_absent "$ROOT"/link/file
@@ -1047,7 +1027,7 @@ function e2e::sync_slow_git_long_timeout() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "$((MAXWAIT * 3))"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1078,7 +1058,7 @@ function e2e::sync_on_signal_sighup() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1110,7 +1090,7 @@ function e2e::sync_on_signal_hup() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1142,7 +1122,7 @@ function e2e::sync_on_signal_1() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync 3
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1175,8 +1155,7 @@ function e2e::sync_depth_default_shallow() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
@@ -1200,7 +1179,7 @@ function e2e::sync_depth_across_updates() {
         --depth="$expected_depth" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1254,8 +1233,7 @@ function e2e::sync_depth_change_on_restart() {
         --repo="file://$REPO" \
         --depth=1 \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1270,8 +1248,7 @@ function e2e::sync_depth_change_on_restart() {
         --repo="file://$REPO" \
         --depth=2 \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1286,8 +1263,7 @@ function e2e::sync_depth_change_on_restart() {
         --repo="file://$REPO" \
         --depth=1 \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1302,8 +1278,7 @@ function e2e::sync_depth_change_on_restart() {
         --repo="file://$REPO" \
         --depth=0 \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1329,7 +1304,7 @@ function e2e::auth_password_wrong_password() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 || true
+        || true
 
     # check for failure
     assert_file_absent "$ROOT"/link/file
@@ -1351,7 +1326,7 @@ function e2e::auth_password_correct_password() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1401,7 +1376,7 @@ function e2e::auth_askpass_url_wrong_password() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 || true
+        || true
 
     # check for failure
     assert_file_absent "$ROOT"/link/file
@@ -1436,7 +1411,7 @@ function e2e::auth_askpass_url_correct_password() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1498,7 +1473,7 @@ function e2e::auth_askpass_url_flaky() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1537,7 +1512,7 @@ function e2e::exechook_success() {
         --root="$ROOT" \
         --link="link" \
         --exechook-command="/$EXECHOOK_COMMAND" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -1579,7 +1554,7 @@ function e2e::exechook_fail_retry() {
         --link="link" \
         --exechook-command="/$EXECHOOK_COMMAND_FAIL" \
         --exechook-backoff=1s \
-        >> "$1" 2>&1 &
+        &
     sleep 3 # give it time to retry
 
     # Check that exechook was called
@@ -1603,8 +1578,7 @@ function e2e::exechook_success_once() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --exechook-command="/$EXECHOOK_COMMAND_SLEEPY" \
-        >> "$1" 2>&1
+        --exechook-command="/$EXECHOOK_COMMAND_SLEEPY"
 
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
@@ -1636,8 +1610,7 @@ function e2e::exechook_fail_once() {
             --root="$ROOT" \
             --link="link" \
             --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
-            --exechook-backoff=1s \
-            >> "$1" 2>&1
+            --exechook-backoff=1s
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -1680,7 +1653,7 @@ function e2e::webhook_success() {
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
 
     # check that basic call works
     wait_for_sync "${MAXWAIT}"
@@ -1730,7 +1703,7 @@ function e2e::webhook_fail_retry() {
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
 
     # Check that webhook was called
     wait_for_sync "${MAXWAIT}"
@@ -1784,8 +1757,7 @@ function e2e::webhook_success_once() {
         --root="$ROOT" \
         --webhook-url="http://$IP" \
         --webhook-success-status=200 \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
 
     # check that basic call works
     HITS=$(cat "$HITLOG" | wc -l)
@@ -1822,8 +1794,7 @@ function e2e::webhook_fail_retry_once() {
             --root="$ROOT" \
             --webhook-url="http://$IP" \
             --webhook-success-status=200 \
-            --link="link" \
-            >> "$1" 2>&1
+            --link="link"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -1867,7 +1838,7 @@ function e2e::webhook_fire_and_forget() {
         --webhook-url="http://$IP" \
         --webhook-success-status=0 \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
 
     # check that basic call works
     wait_for_sync "${MAXWAIT}"
@@ -1892,7 +1863,7 @@ function e2e::expose_http() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
 
     # do nothing, just wait for the HTTP to come up
     for i in $(seq 1 5); do
@@ -1939,8 +1910,7 @@ function e2e::expose_http_after_restart() {
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -1950,7 +1920,7 @@ function e2e::expose_http_after_restart() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     # do nothing, just wait for the HTTP to come up
     for i in $(seq 1 5); do
         sleep 1
@@ -2006,7 +1976,7 @@ function e2e::submodule_sync_default() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -2105,7 +2075,7 @@ function e2e::submodule_sync_depth() {
         --depth="$expected_depth" \
         --root="$ROOT" \
         --link="link" \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
@@ -2183,7 +2153,7 @@ function e2e::submodule_sync_off() {
         --root="$ROOT" \
         --link="link" \
         --submodules=off \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
     rm -rf $SUBMODULE
@@ -2225,7 +2195,7 @@ function e2e::submodule_sync_shallow() {
         --root="$ROOT" \
         --link="link" \
         --submodules=shallow \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -2260,7 +2230,7 @@ function e2e::auth_ssh() {
         --link="link" \
         --ssh \
         --ssh-known-hosts=false \
-        >> "$1" 2>&1 &
+        &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
@@ -2305,8 +2275,7 @@ function e2e::sparse_checkout() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --sparse-checkout-file="$WORK/sparseconfig" \
-        >> "$1" 2>&1
+        --sparse-checkout-file="$WORK/sparseconfig"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file2
     assert_file_absent "$ROOT"/link/file
@@ -2327,8 +2296,7 @@ function e2e::additional_git_configs() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val' \
-        >> "$1" 2>&1
+        --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val'
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2348,8 +2316,7 @@ function e2e::export_error() {
             --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
-            --error-file="error.json" \
-            >> "$1" 2>&1
+            --error-file="error.json"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -2365,8 +2332,7 @@ function e2e::export_error() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --error-file="error.json" \
-        >> "$1" 2>&1
+        --error-file="error.json"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2387,8 +2353,7 @@ function e2e::export_error_abs_path() {
             --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
-            --error-file="$ROOT/dir/error.json" \
-            >> "$1" 2>&1
+            --error-file="$ROOT/dir/error.json"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -2412,8 +2377,7 @@ function e2e::export_error_invalid_file() {
             --repo="file://$REPO" \
             --root="$ROOT" \
             --link="link" \
-            --error-file=".error.json" \
-            >> "$1" 2>&1
+            --error-file=".error.json"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -2438,7 +2402,7 @@ function e2e::touch_file() {
         --root="$ROOT" \
         --link="link" \
         --touch-file="touch.file" \
-        >> "$1" 2>&1 &
+        &
     wait_for_file_exists "$ROOT"/touch.file 3
     assert_file_exists "$ROOT"/touch.file
     rm -f "$ROOT"/touch.file
@@ -2492,7 +2456,7 @@ function e2e::touch_file_abs_path() {
         --root="$ROOT" \
         --link="link" \
         --touch-file="$ROOT/dir/touch.file" \
-        >> "$1" 2>&1 &
+        &
     wait_for_file_exists "$ROOT"/dir/touch.file 3
     assert_file_exists "$ROOT"/dir/touch.file
     rm -f "$ROOT"/dir/touch.file
@@ -2545,8 +2509,7 @@ function e2e::touch_file_invalid_file() {
             --repo="file://$REPO" \
             --root="$ROOT" \
             --link="link" \
-            --touch-file=".touch.file" \
-            >> "$1" 2>&1
+            --touch-file=".touch.file"
         RET=$?
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
@@ -2566,8 +2529,7 @@ function e2e::github_https() {
         --one-time \
         --repo="https://github.com/kubernetes/git-sync" \
         --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1
+        --link="link"
     assert_file_exists "$ROOT"/link/LICENSE
 }
 
@@ -2670,8 +2632,7 @@ function e2e::gc_auto() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-gc="auto" \
-        >> "$1" 2>&1
+        --git-gc="auto"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2689,8 +2650,7 @@ function e2e::gc_always() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-gc="always" \
-        >> "$1" 2>&1
+        --git-gc="always"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2708,8 +2668,7 @@ function e2e::gc_aggressive() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-gc="aggressive" \
-        >> "$1" 2>&1
+        --git-gc="aggressive"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2727,8 +2686,7 @@ function e2e::gc_off() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-gc="off" \
-        >> "$1" 2>&1
+        --git-gc="off"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
@@ -2872,10 +2830,13 @@ for t; do
         fi
         echo -n "testcase ${t}${sfx}: "
 
+        # Set &3 for our own output, let testcases use &2 and &1.
+        exec 3>&1
+
         # See comments on run_test for details.
         RUN_RET=0
         LOG="${DIR}/log.$t"
-        run_test RUN_RET "e2e::${t}" "${LOG}.${RUN}"
+        run_test RUN_RET "e2e::${t}" >"${LOG}.${RUN}" 2>&1
         if [[ "$RUN_RET" == 0 ]]; then
             pass
         else
