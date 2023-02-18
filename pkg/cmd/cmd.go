@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -73,7 +74,9 @@ func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, st
 	cmd.Stderr = errbuf
 	cmd.Stdin = bytes.NewBufferString(stdin)
 
+	start := time.Now()
 	err := cmd.Run()
+	wallTime := time.Since(start)
 	stdout := strings.TrimSpace(outbuf.String())
 	stderr := strings.TrimSpace(errbuf.String())
 	if ctx.Err() == context.DeadlineExceeded {
@@ -82,7 +85,7 @@ func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, st
 	if err != nil {
 		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
-	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr)
+	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr, "time", wallTime)
 
 	return stdout, nil
 }
