@@ -1161,9 +1161,34 @@ function e2e::sync_on_signal_1() {
 }
 
 ##############################################
-# Test depth syncing
+# Test depth default is shallow
 ##############################################
-function e2e::sync_branch_depth_shallow() {
+function e2e::sync_depth_default_shallow() {
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    echo "$FUNCNAME 2" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    echo "$FUNCNAME 3" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME 3"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
+    if [[ $depth != 1 ]]; then
+        fail "expected depth 1, got $depth"
+    fi
+}
+
+##############################################
+# Test depth syncing across updates
+##############################################
+function e2e::sync_depth_across_updates() {
     # First sync
     expected_depth="1"
     echo "$FUNCNAME 1" > "$REPO"/file
@@ -1181,9 +1206,9 @@ function e2e::sync_branch_depth_shallow() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
-        fail "initial depth mismatch expected=$expected_depth actual=$depth"
+        fail "initial: expected depth $expected_depth, got $depth"
     fi
 
     # Move forward
@@ -1194,9 +1219,9 @@ function e2e::sync_branch_depth_shallow() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
-        fail "forward depth mismatch expected=$expected_depth actual=$depth"
+        fail "forward: expected depth $expected_depth, got $depth"
     fi
 
     # Move backward
@@ -1206,59 +1231,85 @@ function e2e::sync_branch_depth_shallow() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
-        fail "backward depth mismatch expected=$expected_depth actual=$depth"
+        fail "backward: expected depth $expected_depth, got $depth"
     fi
 }
 
 ##############################################
-# Test depth syncing with a tag not within depth
+# Test depth switching on back-to-back runs
 ##############################################
-function e2e::sync_tag_depth_shallow_out_of_range() {
-    TAG="e2e-tag"
-    expected_depth="1"
-
-    # First commits, tag is not within --depth
+function e2e::sync_depth_change_on_restart() {
     echo "$FUNCNAME 1" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 1" >/dev/null
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-
-    GIT_SYNC \
-        --period=100ms \
-        --repo="file://$REPO" \
-        --ref="$TAG" \
-        --depth="$expected_depth" \
-        --root="$ROOT" \
-        --link="link" \
-        >> "$1" 2>&1 &
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-    if [[ $expected_depth != $depth ]]; then
-        fail "initial depth mismatch expected=$expected_depth actual=$depth"
-    fi
-
-    # Make 2 new commits, and tag the older one, so it's not within --depth
     echo "$FUNCNAME 3" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 3"
-    SHA=$(git -C "$REPO" rev-parse HEAD)
-    echo "$FUNCNAME 4" > "$REPO"/file
-    git -C "$REPO" commit -qam "$FUNCNAME 4"
-    git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 3" "$SHA" >/dev/null
+
+    # Sync depth=1
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --depth=1 \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 3"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
-    if [[ $expected_depth != $depth ]]; then
-        fail "forward depth mismatch expected=$expected_depth actual=$depth"
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
+    if [[ $depth != 1 ]]; then
+        fail "expected depth 1, got $depth"
+    fi
+
+    # Sync depth=2
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --depth=2 \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
+    if [[ $depth != 2 ]]; then
+        fail "expected depth 2, got $depth"
+    fi
+
+    # Sync depth=1
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --depth=1 \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
+    if [[ $depth != 1 ]]; then
+        fail "expected depth 1, got $depth"
+    fi
+
+    # Sync depth=0 (full)
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --depth=0 \
+        --root="$ROOT" \
+        --link="link" \
+        >> "$1" 2>&1
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
+    if [[ $depth != 4 ]]; then
+        fail "expected depth 4, got $depth"
     fi
 }
 
@@ -2060,11 +2111,11 @@ function e2e::submodule_sync_depth() {
     assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
     assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "initial depth mismatch expected=$expected_depth actual=$depth"
     fi
-    submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
+    submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
     if [[ $expected_depth != $submodule_depth ]]; then
         fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi
@@ -2079,11 +2130,11 @@ function e2e::submodule_sync_depth() {
     assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
     assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "forward depth mismatch expected=$expected_depth actual=$depth"
     fi
-    submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
+    submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
     if [[ $expected_depth != $submodule_depth ]]; then
         fail "forward submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi
@@ -2097,11 +2148,11 @@ function e2e::submodule_sync_depth() {
     assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
     assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
-    depth=$(GIT_DIR="$ROOT"/link/.git git log | grep commit | wc -l)
+    depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "initial depth mismatch expected=$expected_depth actual=$depth"
     fi
-    submodule_depth=$(GIT_DIR="$ROOT"/link/$SUBMODULE_REPO_NAME/.git git log | grep commit | wc -l)
+    submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
     if [[ $expected_depth != $submodule_depth ]]; then
         fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi

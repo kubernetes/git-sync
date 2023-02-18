@@ -144,8 +144,9 @@ OPTIONS
 
     --depth <int>, $GIT_SYNC_DEPTH
             Create a shallow clone with history truncated to the specified
-            number of commits.  If not specified, this defaults to cloning the
-            full history of the repo.
+            number of commits.  If not specified, this defaults to syncing a
+            single commit.  Setting this to 0 will sync the full history of the
+            repo.
 
     --error-file <string>, $GIT_SYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
