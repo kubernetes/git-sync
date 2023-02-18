@@ -613,7 +613,7 @@ function e2e::readlink() {
 ##############################################
 # Test branch syncing
 ##############################################
-function e2e::sync_named_branch() {
+function e2e::sync_branch() {
     OTHER_BRANCH="other-branch"
 
     # First sync
