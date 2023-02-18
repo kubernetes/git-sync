@@ -60,7 +60,7 @@ var flRepo = pflag.String("repo", envString("GIT_SYNC_REPO", ""),
 	"the git repository to sync (required)")
 var flRef = pflag.String("ref", envString("GIT_SYNC_REF", "HEAD"),
 	"the git revision (branch, tag, or hash) to sync")
-var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 0),
+var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 1),
 	"create a shallow clone with history truncated to the specified number of commits")
 var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
@@ -1993,8 +1993,9 @@ OPTIONS
 
     --depth <int>, $GIT_SYNC_DEPTH
             Create a shallow clone with history truncated to the specified
-            number of commits.  If not specified, this defaults to cloning the
-            full history of the repo.
+            number of commits.  If not specified, this defaults to syncing a
+            single commit.  Setting this to 0 will sync the full history of the
+            repo.
 
     --error-file <string>, $GIT_SYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
