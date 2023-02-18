@@ -399,11 +399,11 @@ func main() {
 
 	if *flBranch != "" && (*flRev == "" || *flRev == "HEAD") {
 		// Back-compat
-		log.V(1).Info("setting --ref from deprecated --branch")
+		log.V(0).Info("setting --ref from deprecated --branch")
 		*flRef = *flBranch
 	} else if *flRev != "" {
 		// Back-compat
-		log.V(1).Info("setting --ref from deprecated --rev")
+		log.V(0).Info("setting --ref from deprecated --rev")
 		*flRef = *flRev
 	} else if *flBranch != "" && *flRev != "" {
 		handleConfigError(log, true, "ERROR: can't set --ref from deprecated --branch and --rev")
@@ -434,7 +434,7 @@ func main() {
 
 	if *flDest != "" {
 		// Back-compat
-		log.V(1).Info("setting --link from deprecated --dest")
+		log.V(0).Info("setting --link from deprecated --dest")
 		*flLink = *flDest
 	}
 	if *flLink == "" {
@@ -447,7 +447,7 @@ func main() {
 
 	if *flWait != 0 {
 		// Back-compat
-		log.V(1).Info("setting --period from deprecated --wait")
+		log.V(0).Info("setting --period from deprecated --wait")
 		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
@@ -474,7 +474,7 @@ func main() {
 
 	if *flTimeout != 0 {
 		// Back-compat
-		log.V(1).Info("setting --sync-timeout from deprecated --timeout")
+		log.V(0).Info("setting --sync-timeout from deprecated --timeout")
 		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
@@ -483,7 +483,7 @@ func main() {
 
 	if *flMaxSyncFailures != 0 {
 		// Back-compat
-		log.V(1).Info("setting --max-failures from deprecated --max-sync-failures")
+		log.V(0).Info("setting --max-failures from deprecated --max-sync-failures")
 		*flMaxFailures = *flMaxSyncFailures
 	}
 
@@ -496,7 +496,7 @@ func main() {
 
 	if *flSyncHookCommand != "" {
 		// Back-compat
-		log.V(1).Info("setting --exechook-command from deprecated --sync-hook-command")
+		log.V(0).Info("setting --exechook-command from deprecated --sync-hook-command")
 		*flExechookCommand = *flSyncHookCommand
 	}
 	if *flExechookCommand != "" {
@@ -804,7 +804,7 @@ func main() {
 			if changed {
 				if absTouchFile != "" {
 					if err := touch(absTouchFile); err != nil {
-						log.Error(err, "failed to touch-file", "path", absTouchFile)
+						log.Error(err, "failed to touch touch-file", "path", absTouchFile)
 					} else {
 						log.V(4).Info("touched touch-file", "path", absTouchFile)
 					}
@@ -838,7 +838,7 @@ func main() {
 					}
 				}
 				log.DeleteErrorFile()
-				log.V(2).Info("exiting after one sync", "status", exitCode)
+				log.V(0).Info("exiting after one sync", "status", exitCode)
 				os.Exit(exitCode)
 			}
 
@@ -1005,7 +1005,7 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 			// the contents rather than the dir itself, because a common use-case
 			// is to have a volume mounted at git.root, which makes removing it
 			// impossible.
-			git.log.V(0).Info("repo directory failed checks, cleaning up", "path", git.root)
+			git.log.V(0).Info("repo directory failed checks or was empty", "path", git.root)
 			if err := removeDirContents(git.root, git.log); err != nil {
 				return fmt.Errorf("can't wipe unusable root directory: %w", err)
 			}
@@ -1013,23 +1013,26 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	}
 
 	// Running `git init` in an existing repo is safe (according to git docs).
-	git.log.V(2).Info("initializing repo directory", "path", git.root)
+	git.log.V(0).Info("initializing repo directory", "path", git.root)
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "init", "-b", "git-sync"); err != nil {
 		return err
 	}
+	if !git.sanityCheckRepo(ctx) {
+		return fmt.Errorf("can't initialize git repo directory")
+	}
+	git.log.V(2).Info("repo directory is valid", "path", git.root)
 	return nil
 }
 
 // sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
 func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
-	git.log.V(0).Info("sanity-checking git repo", "repo", git.root)
-
+	git.log.V(3).Info("sanity-checking git repo", "repo", git.root)
 	// If it is empty, we are done.
 	if empty, err := dirIsEmpty(git.root); err != nil {
 		git.log.Error(err, "can't list repo directory", "path", git.root)
 		return false
 	} else if empty {
-		git.log.V(0).Info("repo directory is empty", "path", git.root)
+		git.log.V(3).Info("repo directory is empty", "path", git.root)
 		return false
 	}
 
@@ -1040,7 +1043,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	} else {
 		root = strings.TrimSpace(root)
 		if root != git.root {
-			git.log.V(0).Info("repo directory is under another repo", "path", git.root, "parent", root)
+			git.log.Error(nil, "repo directory is under another repo", "path", git.root, "parent", root)
 			return false
 		}
 	}
@@ -1059,7 +1062,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 // files checked out - git could have died halfway through and the repo will
 // still pass this check.
 func (git *repoSync) sanityCheckWorktree(ctx context.Context, sha string) bool {
-	git.log.V(0).Info("sanity-checking worktree", "repo", git.root, "sha", sha)
+	git.log.V(3).Info("sanity-checking worktree", "repo", git.root, "sha", sha)
 
 	worktreePath := filepath.Join(git.root, sha)
 
@@ -1098,7 +1101,7 @@ func removeDirContents(dir string, log *logging.Logger) error {
 	for _, fi := range dirents {
 		p := filepath.Join(dir, fi.Name())
 		if log != nil {
-			log.V(2).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
+			log.V(3).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
 		}
 		if err := os.RemoveAll(p); err != nil {
 			return err
@@ -1188,12 +1191,12 @@ func (git *repoSync) publishSymlink(ctx context.Context, linkPath, targetPath st
 	}
 
 	const tmplink = "tmp-link"
-	git.log.V(1).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
+	git.log.V(2).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
 	if err := os.Symlink(targetRelative, filepath.Join(linkDir, tmplink)); err != nil {
 		return "", fmt.Errorf("error creating symlink: %v", err)
 	}
 
-	git.log.V(1).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
+	git.log.V(2).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
 	if err := os.Rename(filepath.Join(linkDir, tmplink), linkPath); err != nil {
 		return "", fmt.Errorf("error replacing symlink: %v", err)
 	}
@@ -1284,7 +1287,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 	} else {
 		// This is required due to the undocumented behavior outlined here:
 		// https://public-inbox.org/git/CAPig+cSP0UiEBXSCi7Ua099eOdpMk8R=JtAjPuUavRF4z0R0Vg@mail.gmail.com/t/
-		git.log.V(0).Info("configuring worktree sparse checkout")
+		git.log.V(1).Info("configuring worktree sparse checkout")
 		checkoutFile := git.sparseFile
 
 		source, err := os.Open(checkoutFile)
@@ -1319,6 +1322,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 	}
 
 	// Reset the worktree's working copy to the specific ref.
+	git.log.V(1).Info("setting worktree HEAD", "hash", hash)
 	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--"); err != nil {
 		return err
 	}
@@ -1326,7 +1330,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 	// Update submodules
 	// NOTE: this works for repo with or without submodules.
 	if git.submodules != submodulesOff {
-		git.log.V(0).Info("updating submodules")
+		git.log.V(1).Info("updating submodules")
 		submodulesArgs := []string{"submodule", "update", "--init"}
 		if git.submodules == submodulesRecursive {
 			submodulesArgs = append(submodulesArgs, "--recursive")
@@ -1342,7 +1346,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 	// Change the file permissions, if requested.
 	if git.chmod != 0 {
 		mode := fmt.Sprintf("%#o", git.chmod)
-		git.log.V(0).Info("changing file permissions", "mode", mode)
+		git.log.V(1).Info("changing file permissions", "mode", mode)
 		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath); err != nil {
 			return err
 		}
@@ -1553,7 +1557,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 // fetch retrieves the specified ref from the upstream repo.
 func (git *repoSync) fetch(ctx context.Context, ref string) error {
-	git.log.V(0).Info("fetching ref", "ref", ref, "repo", git.repo)
+	git.log.V(1).Info("fetching", "ref", ref, "repo", git.repo)
 
 	// Fetch the ref and do some cleanup, setting or un-setting the repo's
 	// shallow flag as appropriate.
@@ -1601,7 +1605,7 @@ func md5sum(s string) string {
 
 // StoreCredentials stores the username and password for later use.
 func (git *repoSync) StoreCredentials(ctx context.Context, username, password string) error {
-	git.log.V(3).Info("storing git credentials")
+	git.log.V(2).Info("storing git credentials")
 	git.log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
@@ -1614,7 +1618,7 @@ func (git *repoSync) StoreCredentials(ctx context.Context, username, password st
 }
 
 func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSSHKnownHosts string) error {
-	git.log.V(1).Info("setting up git SSH credentials")
+	git.log.V(2).Info("setting up git SSH credentials")
 
 	// If the user sets GIT_SSH_COMMAND we try to respect it.
 	sshCmd := os.Getenv("GIT_SSH_COMMAND")
@@ -1645,7 +1649,7 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSS
 }
 
 func (git *repoSync) SetupCookieFile(ctx context.Context) error {
-	git.log.V(1).Info("configuring git cookie file")
+	git.log.V(2).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
 
@@ -1670,7 +1674,7 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 //	username=xxx@example.com
 //	password=xxxyyyzzz
 func (git *repoSync) CallAskPassURL(ctx context.Context) error {
-	git.log.V(2).Info("calling auth URL to get credentials")
+	git.log.V(3).Info("calling auth URL to get credentials")
 
 	var netClient = &http.Client{
 		Timeout: time.Second * 1,
@@ -1746,7 +1750,7 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 }
 
 func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
-	git.log.V(1).Info("setting additional git configs")
+	git.log.V(2).Info("setting additional git configs")
 
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
