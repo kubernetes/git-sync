@@ -1045,7 +1045,8 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 		}
 	}
 
-	// Consistency-check the repo.
+	// Consistency-check the repo.  Don't use --verbose because it can be
+	// REALLY verbose.
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "repo fsck failed", "path", git.root)
 		return false
@@ -1072,7 +1073,8 @@ func (git *repoSync) sanityCheckWorktree(ctx context.Context, sha string) bool {
 		return false
 	}
 
-	// Consistency-check the worktree.
+	// Consistency-check the worktree.  Don't use --verbose because it can be
+	// REALLY verbose.
 	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "worktree fsck failed", "path", worktreePath)
 		return false
@@ -1231,7 +1233,7 @@ func (git *repoSync) cleanupWorktree(ctx context.Context, worktree string) error
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
 	}
-	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune"); err != nil {
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune", "--verbose"); err != nil {
 		return err
 	}
 	return nil
@@ -1557,7 +1559,7 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 
 	// Fetch the ref and do some cleanup, setting or un-setting the repo's
 	// shallow flag as appropriate.
-	args := []string{"fetch", git.repo, ref, "--prune", "--no-auto-gc"}
+	args := []string{"fetch", git.repo, ref, "--verbose", "--no-progress", "--prune", "--no-auto-gc"}
 	if git.depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(git.depth))
 	} else {
