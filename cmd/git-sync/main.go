@@ -978,6 +978,76 @@ func normalizePath(path string) (string, error) {
 	return abs, nil
 }
 
+func updateSyncMetrics(key string, start time.Time) {
+	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
+	syncCount.WithLabelValues(key).Inc()
+}
+
+// repoReady indicates that the repo has been synced.
+var readyLock sync.Mutex
+var repoReady = false
+
+func getRepoReady() bool {
+	readyLock.Lock()
+	defer readyLock.Unlock()
+	return repoReady
+}
+
+func setRepoReady() {
+	readyLock.Lock()
+	defer readyLock.Unlock()
+	repoReady = true
+}
+
+// Do no work, but don't do something that triggers go's runtime into thinking
+// it is deadlocked.
+func sleepForever() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+	<-c
+	os.Exit(0)
+}
+
+// handleConfigError prints the error to the standard error, prints the usage
+// if the `printUsage` flag is true, exports the error to the error file and
+// exits the process with the exit code.
+func handleConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
+	s := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, s)
+	if printUsage {
+		pflag.Usage()
+	}
+	log.ExportError(s)
+	os.Exit(1)
+}
+
+// Put the current UID/GID into /etc/passwd so SSH can look it up.  This
+// assumes that we have the permissions to write to it.
+func addUser() error {
+	// Skip if the UID already exists. The Dockerfile already adds the default UID/GID.
+	if _, err := user.LookupId(strconv.Itoa(os.Getuid())); err == nil {
+		return nil
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("can't get working directory and $HOME is not set: %w", err)
+		}
+		home = cwd
+	}
+
+	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	str := fmt.Sprintf("git-sync:x:%d:%d::%s:/sbin/nologin\n", os.Getuid(), os.Getgid(), home)
+	_, err = f.WriteString(str)
+	return err
+}
+
 // initRepo examines the git repo and determines if it is usable or not.  If
 // not, it will (re)initialize it.  After running this function, callers can
 // assume the repo is valid, though maybe empty.
@@ -1108,60 +1178,6 @@ func removeDirContents(dir string, log *logging.Logger) error {
 	return nil
 }
 
-func updateSyncMetrics(key string, start time.Time) {
-	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
-	syncCount.WithLabelValues(key).Inc()
-}
-
-// Do no work, but don't do something that triggers go's runtime into thinking
-// it is deadlocked.
-func sleepForever() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	<-c
-	os.Exit(0)
-}
-
-// handleConfigError prints the error to the standard error, prints the usage
-// if the `printUsage` flag is true, exports the error to the error file and
-// exits the process with the exit code.
-func handleConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
-	s := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stderr, s)
-	if printUsage {
-		pflag.Usage()
-	}
-	log.ExportError(s)
-	os.Exit(1)
-}
-
-// Put the current UID/GID into /etc/passwd so SSH can look it up.  This
-// assumes that we have the permissions to write to it.
-func addUser() error {
-	// Skip if the UID already exists. The Dockerfile already adds the default UID/GID.
-	if _, err := user.LookupId(strconv.Itoa(os.Getuid())); err == nil {
-		return nil
-	}
-	home := os.Getenv("HOME")
-	if home == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("can't get working directory and $HOME is not set: %w", err)
-		}
-		home = cwd
-	}
-
-	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	str := fmt.Sprintf("git-sync:x:%d:%d::%s:/sbin/nologin\n", os.Getuid(), os.Getgid(), home)
-	_, err = f.WriteString(str)
-	return err
-}
-
 // publishSymlink atomically sets link to point at the specified target.  If the
 // link existed, this returns the previous target.
 func (git *repoSync) publishSymlink(ctx context.Context, linkPath, targetPath string) (string, error) {
@@ -1199,22 +1215,6 @@ func (git *repoSync) publishSymlink(ctx context.Context, linkPath, targetPath st
 	}
 
 	return oldHash, nil
-}
-
-// repoReady indicates that the repo has been synced.
-var readyLock sync.Mutex
-var repoReady = false
-
-func getRepoReady() bool {
-	readyLock.Lock()
-	defer readyLock.Unlock()
-	return repoReady
-}
-
-func setRepoReady() {
-	readyLock.Lock()
-	defer readyLock.Unlock()
-	repoReady = true
 }
 
 // cleanupWorktree is used to remove a worktree and its folder
@@ -1723,6 +1723,8 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	return nil
 }
 
+// SetupDefaultGitConfigs configures the global git environment with some
+// default settings that we need.
 func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 	configs := []keyVal{{
 		// Never auto-detach GC runs.
@@ -1745,6 +1747,8 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 	return nil
 }
 
+// SetupExtraGitConfigs configures the global git environment with user-provided
+// override settings.
 func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 	git.log.V(1).Info("setting additional git configs")
 
