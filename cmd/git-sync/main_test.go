@@ -34,24 +34,31 @@ func TestEnvBool(t *testing.T) {
 		value string
 		def   bool
 		exp   bool
+		err   bool
 	}{
-		{"true", true, true},
-		{"true", false, true},
-		{"", true, true},
-		{"", false, false},
-		{"false", true, false},
-		{"false", false, false},
-		{"", true, true},
-		{"", false, false},
-		{"no true", true, true},
-		{"no false", true, true},
+		{"true", true, true, false},
+		{"true", false, true, false},
+		{"", true, true, false},
+		{"", false, false, false},
+		{"false", true, false, false},
+		{"false", false, false, false},
+		{"", true, true, false},
+		{"", false, false, false},
+		{"no true", false, false, true},
+		{"no false", false, false, true},
 	}
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val := envBool(testKey, testCase.def)
+		val, err := envBoolOrError(testKey, testCase.def)
+		if err != nil && !testCase.err {
+			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
+		}
+		if err == nil && testCase.err {
+			t.Fatalf("%q: unexpected success", testCase.value)
+		}
 		if val != testCase.exp {
-			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
 	}
 }
@@ -76,7 +83,7 @@ func TestEnvString(t *testing.T) {
 		os.Setenv(testKey, testCase.value)
 		val := envString(testKey, testCase.def)
 		if val != testCase.exp {
-			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
 	}
 }
@@ -86,19 +93,26 @@ func TestEnvInt(t *testing.T) {
 		value string
 		def   int
 		exp   int
+		err   bool
 	}{
-		{"0", 1, 0},
-		{"", 0, 0},
-		{"-1", 0, -1},
-		{"abcd", 0, 0},
-		{"abcd", 1, 1},
+		{"0", 1, 0, false},
+		{"", 0, 0, false},
+		{"-1", 0, -1, false},
+		{"abcd", 0, 0, true},
+		{"abcd", 0, 0, true},
 	}
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val := envInt(testKey, testCase.def)
+		val, err := envIntOrError(testKey, testCase.def)
+		if err != nil && !testCase.err {
+			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
+		}
+		if err == nil && testCase.err {
+			t.Fatalf("%q: unexpected success", testCase.value)
+		}
 		if val != testCase.exp {
-			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
 	}
 }
@@ -108,19 +122,25 @@ func TestEnvFloat(t *testing.T) {
 		value string
 		def   float64
 		exp   float64
+		err   bool
 	}{
-		{"0.5", 0, 0.5},
-		{"", 0.5, 0.5},
-		{"-0.5", 0, -0.5},
-		{"abcd", 0.5, 0.5},
-		{"abcd", 1.5, 1.5},
+		{"0.5", 0, 0.5, false},
+		{"", 0.5, 0.5, false},
+		{"-0.5", 0, -0.5, false},
+		{"abcd", 0, 0, true},
 	}
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val := envFloat(testKey, testCase.def)
+		val, err := envFloatOrError(testKey, testCase.def)
+		if err != nil && !testCase.err {
+			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
+		}
+		if err == nil && testCase.err {
+			t.Fatalf("%q: unexpected success", testCase.value)
+		}
 		if val != testCase.exp {
-			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
 	}
 }
@@ -130,19 +150,25 @@ func TestEnvDuration(t *testing.T) {
 		value string
 		def   time.Duration
 		exp   time.Duration
+		err   bool
 	}{
-		{"1s", 0, time.Second},
-		{"", time.Minute, time.Minute},
-		{"1h", 0, time.Hour},
-		{"abcd", time.Second, time.Second},
-		{"abcd", time.Minute, time.Minute},
+		{"1s", 0, time.Second, false},
+		{"", time.Minute, time.Minute, false},
+		{"1h", 0, time.Hour, false},
+		{"abcd", 0, 0, true},
 	}
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val := envDuration(testKey, testCase.def)
+		val, err := envDurationOrError(testKey, testCase.def)
+		if err != nil && !testCase.err {
+			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
+		}
+		if err == nil && testCase.err {
+			t.Fatalf("%q: unexpected success", testCase.value)
+		}
 		if val != testCase.exp {
-			t.Fatalf("expected %v but %v returned", testCase.exp, val)
+			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
 	}
 }

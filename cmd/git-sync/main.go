@@ -235,15 +235,23 @@ func envMultiString(keys []string, def string) string {
 	return def
 }
 
-func envBool(key string, def bool) bool {
+func envBoolOrError(key string, def bool) (bool, error) {
 	if val := os.Getenv(key); val != "" {
 		parsed, err := strconv.ParseBool(val)
 		if err == nil {
-			return parsed
+			return parsed, nil
 		}
-		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid bool env %s=%s: %v\n", key, val, err)
+		return false, fmt.Errorf("ERROR: invalid bool env %s=%q: %v\n", key, val, err)
 	}
-	return def
+	return def, nil
+}
+func envBool(key string, def bool) bool {
+	val, err := envBoolOrError(key, def)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return val
 }
 
 func envMultiBool(keys []string, def bool) bool {
@@ -256,43 +264,68 @@ func envMultiBool(keys []string, def bool) bool {
 				}
 				return parsed
 			}
-			fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid bool env %s=%s: %v\n", key, val, err)
+			fmt.Fprintf(os.Stderr, "ERROR: invalid bool env %s=%q: %v\n", key, val, err)
+			os.Exit(1)
 		}
 	}
 	return def
 }
 
-func envInt(key string, def int) int {
+func envIntOrError(key string, def int) (int, error) {
 	if val := os.Getenv(key); val != "" {
 		parsed, err := strconv.ParseInt(val, 0, 0)
 		if err == nil {
-			return int(parsed)
+			return int(parsed), nil
 		}
-		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid int env %s=%s: %v\n", key, val, err)
+		return 0, fmt.Errorf("ERROR: invalid int env %s=%q: %v\n", key, val, err)
 	}
-	return def
+	return def, nil
+}
+func envInt(key string, def int) int {
+	val, err := envIntOrError(key, def)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return val
 }
 
-func envFloat(key string, def float64) float64 {
+func envFloatOrError(key string, def float64) (float64, error) {
 	if val := os.Getenv(key); val != "" {
 		parsed, err := strconv.ParseFloat(val, 64)
 		if err == nil {
-			return parsed
+			return parsed, nil
 		}
-		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid float env %s=%s: %v\n", key, val, err)
+		return 0, fmt.Errorf("ERROR: invalid float env %s=%q: %v\n", key, val, err)
 	}
-	return def
+	return def, nil
+}
+func envFloat(key string, def float64) float64 {
+	val, err := envFloatOrError(key, def)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return val
 }
 
-func envDuration(key string, def time.Duration) time.Duration {
+func envDurationOrError(key string, def time.Duration) (time.Duration, error) {
 	if val := os.Getenv(key); val != "" {
 		parsed, err := time.ParseDuration(val)
 		if err == nil {
-			return parsed
+			return parsed, nil
 		}
-		fmt.Fprintf(os.Stderr, "WARNING: ignoring invalid duration env %s=%s: %v\n", key, val, err)
+		return 0, fmt.Errorf("ERROR: invalid duration env %s=%q: %v\n", key, val, err)
 	}
-	return def
+	return def, nil
+}
+func envDuration(key string, def time.Duration) time.Duration {
+	val, err := envDurationOrError(key, def)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return val
 }
 
 // repoSync represents the remote repo and the local sync of it.
