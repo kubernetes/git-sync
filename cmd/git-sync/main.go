@@ -136,7 +136,7 @@ var flGitCmd = pflag.String("git", envString("GIT_SYNC_GIT", "git"),
 	"the git command to run (subject to PATH search, mostly for testing)")
 var flGitConfig = pflag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
 	"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
-var flGitGC = pflag.String("git-gc", envString("GIT_SYNC_GIT_GC", "auto"),
+var flGitGC = pflag.String("git-gc", envString("GIT_SYNC_GIT_GC", "always"),
 	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
 
 var flHTTPBind = pflag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
@@ -1365,6 +1365,11 @@ func (git *repoSync) cleanup(ctx context.Context, oldHash string) error {
 		}
 	}
 
+	// Expire old refs.
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
+		cleanupErrs = append(cleanupErrs, err)
+	}
+
 	// Run GC if needed.
 	if git.gc != gcOff {
 		args := []string{"gc"}
@@ -1541,11 +1546,9 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// Mark ourselves as "ready".
 	setRepoReady()
 
-	if oldHash != "" {
-		// Clean up the old worktree(s).
-		if err := git.cleanup(ctx, oldHash); err != nil {
-			git.log.Error(err, "git cleanup failed", "oldHash", oldHash)
-		}
+	// Clean up the old worktree(s) and run GC.
+	if err := git.cleanup(ctx, oldHash); err != nil {
+		git.log.Error(err, "git cleanup failed", "oldHash", oldHash)
 	}
 
 	return changed, remote, nil
