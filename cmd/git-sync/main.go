@@ -555,6 +555,18 @@ func main() {
 		}
 	}
 
+	// Don't pollute the user's .gitconfig if this is being run directly.
+	if f, err := os.CreateTemp("", "git-sync.gitconfig.*"); err != nil {
+		log.Error(err, "ERROR: can't create gitconfig file")
+		os.Exit(1)
+	} else {
+		gitConfig := f.Name()
+		f.Close()
+		os.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
+		os.Setenv("GIT_CONFIG_NOSYSTEM", "true")
+		log.V(2).Info("created private gitconfig file", "path", gitConfig)
+	}
+
 	// Capture the various git parameters.
 	git := &repoSync{
 		cmd:        *flGitCmd,
