@@ -2572,6 +2572,93 @@ function e2e::github_https() {
 }
 
 ##############################################
+# Test git-gc default
+##############################################
+function e2e::gc_default() {
+    SHA1=$(git -C "$REPO" rev-parse HEAD)
+    dd if=/dev/urandom of="$REPO"/big1 bs=1024 count=4096 >/dev/null
+    git -C "$REPO" add .
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+    SHA2=$(git -C "$REPO" rev-parse HEAD)
+    dd if=/dev/urandom of="$REPO"/big2 bs=1024 count=4096 >/dev/null
+    git -C "$REPO" add .
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    SHA3=$(git -C "$REPO" rev-parse HEAD)
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --ref="$SHA3" \
+        --depth=0
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/big1
+    assert_file_exists "$ROOT"/link/big2
+    SIZE=$(du -s "$ROOT" | cut -f1)
+    if [ "$SIZE" -lt 14000 ]; then
+        fail "repo is impossibly small: $SIZE"
+    fi
+    if [ "$SIZE" -gt 18000 ]; then
+        fail "repo is too big: $SIZE"
+    fi
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --ref="$SHA3" \
+        --depth=1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/big1
+    assert_file_exists "$ROOT"/link/big2
+    SIZE=$(du -s "$ROOT" | cut -f1)
+    if [ "$SIZE" -lt 14000 ]; then
+        fail "repo is impossibly small: $SIZE"
+    fi
+    if [ "$SIZE" -gt 18000 ]; then
+        fail "repo is too big: $SIZE"
+    fi
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --ref="$SHA2" \
+        --depth=1
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/big1
+    assert_file_absent "$ROOT"/link/big2
+    SIZE=$(du -s "$ROOT" | cut -f1)
+    if [ "$SIZE" -lt 7000 ]; then
+        fail "repo is impossibly small: $SIZE"
+    fi
+    if [ "$SIZE" -gt 9000 ]; then
+        fail "repo is too big: $SIZE"
+    fi
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --ref="$SHA1" \
+        --depth=1
+    assert_link_exists "$ROOT"/link
+    assert_file_absent "$ROOT"/link/big1
+    assert_file_absent "$ROOT"/link/big2
+    SIZE=$(du -s "$ROOT" | cut -f1)
+    if [ "$SIZE" -lt 100 ]; then
+        fail "repo is impossibly small: $SIZE"
+    fi
+    if [ "$SIZE" -gt 1000 ]; then
+        fail "repo is too big: $SIZE"
+    fi
+}
+
+##############################################
 # Test git-gc=auto
 ##############################################
 function e2e::gc_auto() {
