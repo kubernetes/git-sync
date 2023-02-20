@@ -753,7 +753,9 @@ func main() {
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
-			*flRoot,
+			func(hash string) string {
+				return string(git.worktreeFor(hash))
+			},
 			[]string{},
 			*flExechookTimeout,
 			log,
@@ -1143,24 +1145,22 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 // repository.  Note that this does not guarantee that the worktree has all the
 // files checked out - git could have died halfway through and the repo will
 // still pass this check.
-func (git *repoSync) sanityCheckWorktree(ctx context.Context, sha string) bool {
-	git.log.V(3).Info("sanity-checking worktree", "repo", git.root, "sha", sha)
-
-	worktreePath := filepath.Join(git.root, sha)
+func (git *repoSync) sanityCheckWorktree(ctx context.Context, worktree worktree) bool {
+	git.log.V(3).Info("sanity-checking worktree", "repo", git.root, "worktree", worktree)
 
 	// If it is empty, we are done.
-	if empty, err := dirIsEmpty(worktreePath); err != nil {
-		git.log.Error(err, "can't list worktree directory", "path", worktreePath)
+	if empty, err := dirIsEmpty(worktree.Path()); err != nil {
+		git.log.Error(err, "can't list worktree directory", "path", worktree.Path())
 		return false
 	} else if empty {
-		git.log.V(0).Info("worktree is empty", "path", worktreePath)
+		git.log.V(0).Info("worktree is empty", "path", worktree.Path())
 		return false
 	}
 
 	// Consistency-check the worktree.  Don't use --verbose because it can be
 	// REALLY verbose.
-	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
-		git.log.Error(err, "worktree fsck failed", "path", worktreePath)
+	if _, err := git.run.Run(ctx, worktree.Path(), nil, git.cmd, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+		git.log.Error(err, "worktree fsck failed", "path", worktree.Path())
 		return false
 	}
 
@@ -1196,55 +1196,48 @@ func removeDirContents(dir string, log *logging.Logger) error {
 
 // publishSymlink atomically sets link to point at the specified target.  If the
 // link existed, this returns the previous target.
-func (git *repoSync) publishSymlink(ctx context.Context, linkPath, targetPath string) (string, error) {
-	linkDir, linkFile := filepath.Split(linkPath)
+func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) error {
+	targetPath := worktree.Path()
+	linkDir, linkFile := filepath.Split(git.link)
 
 	// Make sure the link directory exists.
 	if err := os.MkdirAll(linkDir, os.FileMode(int(0755))); err != nil {
-		return "", fmt.Errorf("error making symlink dir: %v", err)
-	}
-
-	// Get the current hash from the link target, if it exists.
-	oldHash := ""
-	if oldTarget, err := os.Readlink(linkPath); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("error accessing current worktree: %v", err)
-	} else if oldTarget != "" {
-		oldHash = filepath.Base(oldTarget)
+		return fmt.Errorf("error making symlink dir: %v", err)
 	}
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
 	targetRelative, err := filepath.Rel(linkDir, targetPath)
 	if err != nil {
-		return "", fmt.Errorf("error converting to relative path: %v", err)
+		return fmt.Errorf("error converting to relative path: %v", err)
 	}
 
 	const tmplink = "tmp-link"
 	git.log.V(2).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
 	if err := os.Symlink(targetRelative, filepath.Join(linkDir, tmplink)); err != nil {
-		return "", fmt.Errorf("error creating symlink: %v", err)
+		return fmt.Errorf("error creating symlink: %v", err)
 	}
 
 	git.log.V(2).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if err := os.Rename(filepath.Join(linkDir, tmplink), linkPath); err != nil {
-		return "", fmt.Errorf("error replacing symlink: %v", err)
+	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link); err != nil {
+		return fmt.Errorf("error replacing symlink: %v", err)
 	}
 
-	return oldHash, nil
+	return nil
 }
 
 // cleanupWorktree is used to remove a worktree and its folder
-func (git *repoSync) cleanupWorktree(ctx context.Context, worktree string) error {
+func (git *repoSync) cleanupWorktree(ctx context.Context, worktree worktree) error {
 	// Clean up worktree, if needed.
-	_, err := os.Stat(worktree)
+	_, err := os.Stat(worktree.Path())
 	switch {
 	case os.IsNotExist(err):
 		return nil
 	case err != nil:
 		return err
 	}
-	git.log.V(1).Info("removing worktree", "path", worktree)
-	if err := os.RemoveAll(worktree); err != nil {
+	git.log.V(1).Info("removing worktree", "path", worktree.Path())
+	if err := os.RemoveAll(worktree.Path()); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
 	}
 	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune", "--verbose"); err != nil {
@@ -1255,45 +1248,50 @@ func (git *repoSync) cleanupWorktree(ctx context.Context, worktree string) error
 
 // createWorktree creates a new worktree and checks out the given hash.  This
 // returns the path to the new worktree.
-func (git *repoSync) createWorktree(ctx context.Context, hash string) error {
+func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree, error) {
 	// Make a worktree for this exact git hash.
-	worktreePath := filepath.Join(git.root, hash)
+	worktree := git.worktreeFor(hash)
 
 	// Avoid wedge cases where the worktree was created but this function
 	// error'd without cleaning up.  The next time thru the sync loop fails to
 	// create the worktree and bails out. This manifests as:
 	//     "fatal: '/repo/root/nnnn' already exists"
-	if err := git.cleanupWorktree(ctx, worktreePath); err != nil {
-		return err
+	if err := git.cleanupWorktree(ctx, worktree); err != nil {
+		return "", err
 	}
 
-	git.log.V(0).Info("adding worktree", "path", worktreePath, "hash", hash)
-	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
+	git.log.V(0).Info("adding worktree", "path", worktree.Path(), "hash", hash)
+	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktree.Path(), hash, "--no-checkout")
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return worktree, nil
 }
 
 // configureWorktree applies some configuration (e.g. sparse checkout) to
 // the specified worktree and checks out the specified hash and submodules.
-func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
-	// Make a worktree for this exact git hash.
-	worktreePath := filepath.Join(git.root, hash)
+func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) error {
+	hash := worktree.Hash()
 
 	// The .git file in the worktree directory holds a reference to
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
-	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", hash) + "\n")
-	if err := os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+	rootDotGit := ""
+	if rel, err := filepath.Rel(worktree.Path(), git.root); err != nil {
+		return err
+	} else {
+		rootDotGit = filepath.Join(rel, ".git")
+	}
+	gitDirRef := []byte("gitdir: " + filepath.Join(rootDotGit, "worktrees", hash) + "\n")
+	if err := os.WriteFile(filepath.Join(worktree.Path(), ".git"), gitDirRef, 0644); err != nil {
 		return err
 	}
 
 	// If sparse checkout is requested, configure git for it, otherwise
 	// unconfigure it.
-	gitInfoPath := filepath.Join(git.root, fmt.Sprintf(".git/worktrees/%s/info", hash))
+	gitInfoPath := filepath.Join(git.root, ".git/worktrees", hash, "info")
 	gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
 	if git.sparseFile == "" {
 		os.RemoveAll(gitSparseConfigPath)
@@ -1329,14 +1327,14 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		if _, err = git.run.Run(ctx, worktreePath, nil, git.cmd, args...); err != nil {
+		if _, err = git.run.Run(ctx, worktree.Path(), nil, git.cmd, args...); err != nil {
 			return err
 		}
 	}
 
 	// Reset the worktree's working copy to the specific ref.
 	git.log.V(1).Info("setting worktree HEAD", "hash", hash)
-	if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, "reset", "--hard", hash, "--"); err != nil {
+	if _, err := git.run.Run(ctx, worktree.Path(), nil, git.cmd, "reset", "--hard", hash, "--"); err != nil {
 		return err
 	}
 
@@ -1351,7 +1349,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 		if git.depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(git.depth))
 		}
-		if _, err := git.run.Run(ctx, worktreePath, nil, git.cmd, submodulesArgs...); err != nil {
+		if _, err := git.run.Run(ctx, worktree.Path(), nil, git.cmd, submodulesArgs...); err != nil {
 			return err
 		}
 	}
@@ -1360,7 +1358,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 	if git.chmod != 0 {
 		mode := fmt.Sprintf("%#o", git.chmod)
 		git.log.V(1).Info("changing file permissions", "mode", mode)
-		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktreePath); err != nil {
+		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktree.Path()); err != nil {
 			return err
 		}
 	}
@@ -1369,15 +1367,14 @@ func (git *repoSync) configureWorktree(ctx context.Context, hash string) error {
 }
 
 // cleanup removes old worktrees and runs git's garbage collection.
-func (git *repoSync) cleanup(ctx context.Context, oldHash string) error {
+func (git *repoSync) cleanup(ctx context.Context, worktree worktree) error {
 	// Save errors until the end.
 	var cleanupErrs multiError
 
 	// Clean up previous worktree.
 	// TODO: list and clean up all old worktrees
-	if oldHash != "" {
-		oldWorktree := filepath.Join(git.root, oldHash)
-		if err := git.cleanupWorktree(ctx, oldWorktree); err != nil {
+	if worktree != "" {
+		if err := git.cleanupWorktree(ctx, worktree); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -1468,6 +1465,43 @@ func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) 
 	return strings.HasPrefix(line, ref), nil
 }
 
+// worktree represents a git worktree (which may or may not exisat on disk).
+type worktree string
+
+// Hash returns the intended commit hash for this worktree.
+func (wt worktree) Hash() string {
+	if wt == "" {
+		return ""
+	}
+	return filepath.Base(string(wt))
+}
+
+// path returns the absolute path to this worktree (which may not actually
+// exist on disk).
+func (wt worktree) Path() string {
+	return string(wt)
+}
+
+// worktreeFor returns a worktree value for the given hash, which can be used
+// to find the on-disk path of that worktree.  Caller should not make
+// assumptions about the on-disk location where worktrees are stored.  If hash
+// is "", this returns the base worktree directory.
+func (git *repoSync) worktreeFor(hash string) worktree {
+	return worktree(filepath.Join(git.root, ".worktrees", hash))
+}
+
+// currentWorktree reads the repo's link and returns a worktree value for it.
+func (git *repoSync) currentWorktree() (worktree, error) {
+	target, err := os.Readlink(git.link)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if target == "" {
+		return "", nil
+	}
+	return worktree(filepath.Join(git.root, target)), nil
+}
+
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
@@ -1482,13 +1516,13 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	}
 
 	// Figure out what hash the remote resolves to.
-	remote, err := git.remoteHashForRef(ctx, git.ref)
+	remoteHash, err := git.remoteHashForRef(ctx, git.ref)
 	if err != nil {
 		return false, "", err
 	}
 
 	// If we couldn't find a remote commit, it might have been a hash literal.
-	if remote == "" {
+	if remoteHash == "" {
 		// If git thinks it tastes like a hash, we just use that and if it
 		// is wrong, we will fail later.
 		output, err := git.run.Run(ctx, git.root, nil, git.cmd, "rev-parse", git.ref)
@@ -1497,35 +1531,41 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		}
 		result := strings.Trim(string(output), "\n")
 		if result == git.ref {
-			remote = git.ref
+			remoteHash = git.ref
 		}
 	}
 
 	// Find out what we currently have synced, if anything.
-	current, err := os.Readlink(git.link)
-	if err != nil && !os.IsNotExist(err) {
+	var currentWorktree worktree
+	if wt, err := git.currentWorktree(); err != nil {
 		return false, "", err
+	} else {
+		currentWorktree = wt
 	}
-	if current == remote {
+	currentHash := currentWorktree.Hash()
+	git.log.V(3).Info("current hash", "hash", currentHash)
+
+	if currentHash == remoteHash {
 		// We seem to have the right hash already.  Let's be sure it's good.
-		if !git.sanityCheckWorktree(ctx, current) {
+		git.log.V(3).Info("current hash is same as remote", "hash", currentHash)
+		if !git.sanityCheckWorktree(ctx, currentWorktree) {
 			// Sanity check failed, nuke it and start over.
-			worktreePath := filepath.Join(git.root, current)
-			if err := git.cleanupWorktree(ctx, worktreePath); err != nil {
+			git.log.V(0).Info("worktree failed checks or was empty", "path", currentWorktree)
+			if err := git.cleanupWorktree(ctx, currentWorktree); err != nil {
 				return false, "", err
 			}
-			current = ""
+			currentHash = ""
 		}
 	}
 	changed := false
-	if current != remote {
-		git.log.V(0).Info("update required", "ref", git.ref, "local", current, "remote", remote)
+	if currentHash != remoteHash {
+		git.log.V(0).Info("update required", "ref", git.ref, "local", currentHash, "remote", remoteHash)
 		changed = true
 	}
 
 	// We always do a fetch, to ensure that parameters like depth are set
 	// properly.  This is cheap when we already have the target hash.
-	if err := git.fetch(ctx, remote); err != nil {
+	if err := git.fetch(ctx, remoteHash); err != nil {
 		return false, "", err
 	}
 
@@ -1536,39 +1576,43 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		return false, "", err
 	}
 
-	if current != remote {
+	newWorktree := currentWorktree
+	if currentHash != remoteHash {
 		// Create a worktree for this hash in git.root.
-		if err := git.createWorktree(ctx, remote); err != nil {
+		if wt, err := git.createWorktree(ctx, remoteHash); err != nil {
 			return false, "", err
+		} else {
+			newWorktree = wt
 		}
 	}
 
 	// Even if this worktree exists and passes sanity, it might not have all
 	// the correct settings (e.g. sparse checkout).  The best way to get
 	// it all set is just to re-run the configuration,
-	if err := git.configureWorktree(ctx, remote); err != nil {
+	if err := git.configureWorktree(ctx, newWorktree); err != nil {
 		return false, "", err
 	}
 
-	oldHash := ""
-	if current != remote {
+	if currentHash != remoteHash {
 		// Point the symlink to the new hash.
-		old, err := git.publishSymlink(ctx, git.link, filepath.Join(git.root, remote))
+		err := git.publishSymlink(ctx, newWorktree)
 		if err != nil {
 			return false, "", err
 		}
-		oldHash = old
 	}
 
 	// Mark ourselves as "ready".
 	setRepoReady()
 
 	// Clean up the old worktree(s) and run GC.
-	if err := git.cleanup(ctx, oldHash); err != nil {
-		git.log.Error(err, "git cleanup failed", "oldHash", oldHash)
+	if currentHash == remoteHash {
+		currentWorktree = ""
+	}
+	if err := git.cleanup(ctx, currentWorktree); err != nil {
+		git.log.Error(err, "git cleanup failed", "oldWorktree", currentWorktree)
 	}
 
-	return changed, remote, nil
+	return changed, remoteHash, nil
 }
 
 // fetch retrieves the specified ref from the upstream repo.
@@ -2034,8 +2078,8 @@ OPTIONS
     --exechook-command <string>, $GIT_SYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory.  The
-            environment variable $GITSYNC_HASH will be set to the git hash that
+            executes with the synced repo as its working directory.  The following
+            environment variables $GITSYNC_HASH will be set to the git hash that
             was synced.  The execution is subject to the overall --sync-timeout
             flag and will extend the effective period between sync attempts.
             This flag obsoletes --sync-hook-command, but if sync-hook-command

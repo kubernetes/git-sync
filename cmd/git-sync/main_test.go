@@ -200,6 +200,60 @@ func TestMakeAbsPath(t *testing.T) {
 	}
 }
 
+func TestWorktreePath(t *testing.T) {
+	testCases := []string{
+		"",
+		"/",
+		"//",
+		"/dir",
+		"/dir/",
+		"/dir//",
+		"/dir/sub",
+		"/dir/sub/",
+		"/dir//sub",
+		"/dir//sub/",
+		"dir",
+		"dir/sub",
+	}
+
+	for _, tc := range testCases {
+		if want, got := tc, worktree(tc).Path(); want != got {
+			t.Errorf("expected %q, got %q", want, got)
+		}
+	}
+}
+
+func TestWorktreeHash(t *testing.T) {
+	testCases := []struct {
+		in  worktree
+		exp string
+	}{{
+		in:  "",
+		exp: "",
+	}, {
+		in:  "/",
+		exp: "/",
+	}, {
+		in:  "/one",
+		exp: "one",
+	}, {
+		in:  "/one/two",
+		exp: "two",
+	}, {
+		in:  "/one/two/",
+		exp: "two",
+	}, {
+		in:  "/one//two",
+		exp: "two",
+	}}
+
+	for _, tc := range testCases {
+		if want, got := tc.exp, tc.in.Hash(); want != got {
+			t.Errorf("%q: expected %q, got %q", tc.in, want, got)
+		}
+	}
+}
+
 func TestManualHasNoTabs(t *testing.T) {
 	if strings.Contains(manual, "\t") {
 		t.Fatal("the manual text contains a tab")

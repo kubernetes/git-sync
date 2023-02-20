@@ -31,7 +31,7 @@ func TestNotZeroReturnExechookDo(t *testing.T) {
 		ch := NewExechook(
 			cmd.NewRunner(l),
 			"false",
-			"/tmp",
+			func(string) string { return "/tmp" },
 			[]string{},
 			time.Second,
 			l,
@@ -49,7 +49,7 @@ func TestZeroReturnExechookDo(t *testing.T) {
 		ch := NewExechook(
 			cmd.NewRunner(l),
 			"true",
-			"/tmp",
+			func(string) string { return "/tmp" },
 			[]string{},
 			time.Second,
 			l,
@@ -67,7 +67,7 @@ func TestTimeoutExechookDo(t *testing.T) {
 		ch := NewExechook(
 			cmd.NewRunner(l),
 			"/bin/sh",
-			"/tmp",
+			func(string) string { return "/tmp" },
 			[]string{"-c", "sleep 2"},
 			time.Second,
 			l,
