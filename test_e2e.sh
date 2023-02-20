@@ -564,7 +564,7 @@ function e2e::worktree_cleanup() {
 
     # make a worktree to collide with git-sync
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
-    git -C "$REPO" worktree add -q "$ROOT"/"$SHA" -b e2e --no-checkout
+    git -C "$REPO" worktree add -q "$ROOT/.worktrees/$SHA" -b e2e --no-checkout
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
@@ -1542,10 +1542,8 @@ function e2e::exechook_success() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
-    assert_file_exists "$ROOT"/link/link-exechook
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 
     # Move forward
@@ -1555,10 +1553,8 @@ function e2e::exechook_success() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
-    assert_file_exists "$ROOT"/link/link-exechook
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 2"
-    assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 2"
     assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
@@ -1610,10 +1606,8 @@ function e2e::exechook_success_once() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_exists "$ROOT"/link/exechook
-    assert_file_exists "$ROOT"/link/link-exechook
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/link-exechook "$FUNCNAME 1"
     assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
