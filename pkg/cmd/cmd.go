@@ -50,7 +50,7 @@ func (r *Runner) Run(ctx context.Context, cwd string, env []string, command stri
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, "", command, args...)
 }
 
-// RunWithStdin runs given command with stardart input
+// RunWithStdin runs given command with standard input
 func (r *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
 	// call depth = 2 to erase the runWithStdin frame and this one
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, stdin, command, args...)
