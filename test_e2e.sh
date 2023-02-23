@@ -327,16 +327,17 @@ function e2e::init_root_flag_is_weird() {
 function e2e::init_root_flag_has_symlink() {
     echo "$FUNCNAME" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME"
-    ln -s "$ROOT" "$ROOT/rootlink" # symlink to test
+    mkdir -p "$ROOT/subdir"
+    ln -s "$ROOT/subdir" "$ROOT/rootlink" # symlink to test
 
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT/rootlink" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT"/subdir/link
+    assert_file_exists "$ROOT"/subdir/link/file
+    assert_file_eq "$ROOT"/subdir/link/file "$FUNCNAME"
 }
 
 ##############################################

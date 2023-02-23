@@ -193,7 +193,7 @@ func TestMakeAbsPath(t *testing.T) {
 	}}
 
 	for _, tc := range cases {
-		res := makeAbsPath(tc.path, tc.root)
+		res := makeAbsPath(tc.path, absPath(tc.root))
 		if res != tc.exp {
 			t.Errorf("expected: %q, got: %q", tc.exp, res)
 		}
@@ -201,7 +201,7 @@ func TestMakeAbsPath(t *testing.T) {
 }
 
 func TestWorktreePath(t *testing.T) {
-	testCases := []string{
+	testCases := []absPath{
 		"",
 		"/",
 		"//",
@@ -392,8 +392,115 @@ func TestParseGitConfigs(t *testing.T) {
 	}
 }
 
+func TestAbsPathString(t *testing.T) {
+	testCases := []string{
+		"",
+		"/",
+		"//",
+		"/dir",
+		"/dir/",
+		"/dir//",
+		"/dir/sub",
+		"/dir/sub/",
+		"/dir//sub",
+		"/dir//sub/",
+		"dir",
+		"dir/sub",
+	}
+
+	for _, tc := range testCases {
+		if want, got := tc, absPath(tc).String(); want != got {
+			t.Errorf("expected %q, got %q", want, got)
+		}
+	}
+}
+
+func TestAbsPathCanonical(t *testing.T) {
+	testCases := []struct {
+		in  absPath
+		exp absPath
+	}{{
+		in:  "",
+		exp: "",
+	}, {
+		in:  "/",
+		exp: "/",
+	}, {
+		in:  "/one",
+		exp: "/one",
+	}, {
+		in:  "/one/two",
+		exp: "/one/two",
+	}, {
+		in:  "/one/two/",
+		exp: "/one/two",
+	}, {
+		in:  "/one//two",
+		exp: "/one/two",
+	}, {
+		in:  "/one/two/../three",
+		exp: "/one/three",
+	}}
+
+	for _, tc := range testCases {
+		want := tc.exp
+		got, err := tc.in.Canonical()
+		if err != nil {
+			t.Errorf("%q: unexpected error: %v", tc.in, err)
+		} else if want != got {
+			t.Errorf("%q: expected %q, got %q", tc.in, want, got)
+		}
+	}
+}
+
+func TestAbsPathJoin(t *testing.T) {
+	testCases := []struct {
+		base   absPath
+		more   []string
+		expect absPath
+	}{{
+		base:   "/dir",
+		more:   nil,
+		expect: "/dir",
+	}, {
+		base:   "/dir",
+		more:   []string{"one"},
+		expect: "/dir/one",
+	}, {
+		base:   "/dir",
+		more:   []string{"one", "two"},
+		expect: "/dir/one/two",
+	}, {
+		base:   "/dir",
+		more:   []string{"one", "two", "three"},
+		expect: "/dir/one/two/three",
+	}, {
+		base:   "/dir",
+		more:   []string{"with/slash"},
+		expect: "/dir/with/slash",
+	}, {
+		base:   "/dir",
+		more:   []string{"with/trailingslash/"},
+		expect: "/dir/with/trailingslash",
+	}, {
+		base:   "/dir",
+		more:   []string{"with//twoslash"},
+		expect: "/dir/with/twoslash",
+	}, {
+		base:   "/dir",
+		more:   []string{"one/1", "two/2", "three/3"},
+		expect: "/dir/one/1/two/2/three/3",
+	}}
+
+	for _, tc := range testCases {
+		if want, got := tc.expect, tc.base.Join(tc.more...); want != got {
+			t.Errorf("expected %q, got %q", want, got)
+		}
+	}
+}
+
 func TestDirIsEmpty(t *testing.T) {
-	root := t.TempDir()
+	root := absPath(t.TempDir())
 
 	// Brand new should be empty.
 	if empty, err := dirIsEmpty(root); err != nil {
@@ -403,12 +510,12 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 
 	// Holding normal files should not be empty.
-	dir := filepath.Join(root, "files")
-	if err := os.Mkdir(dir, 0755); err != nil {
+	dir := root.Join("files")
+	if err := os.Mkdir(dir.String(), 0755); err != nil {
 		t.Fatalf("failed to make a temp subdir: %v", err)
 	}
 	for _, file := range []string{"a", "b", "c"} {
-		path := filepath.Join(dir, file)
+		path := filepath.Join(dir.String(), file)
 		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
@@ -420,13 +527,13 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 
 	// Holding dot-files should not be empty.
-	dir = filepath.Join(root, "dot-files")
-	if err := os.Mkdir(dir, 0755); err != nil {
+	dir = root.Join("dot-files")
+	if err := os.Mkdir(dir.String(), 0755); err != nil {
 		t.Fatalf("failed to make a temp subdir: %v", err)
 	}
 	for _, file := range []string{".a", ".b", ".c"} {
-		path := filepath.Join(dir, file)
-		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
+		path := dir.Join(file)
+		if err := os.WriteFile(path.String(), []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
 		if empty, err := dirIsEmpty(dir); err != nil {
@@ -437,12 +544,12 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 
 	// Holding dirs should not be empty.
-	dir = filepath.Join(root, "dirs")
-	if err := os.Mkdir(dir, 0755); err != nil {
+	dir = root.Join("dirs")
+	if err := os.Mkdir(dir.String(), 0755); err != nil {
 		t.Fatalf("failed to make a temp subdir: %v", err)
 	}
 	for _, subdir := range []string{"a", "b", "c"} {
-		path := filepath.Join(dir, subdir)
+		path := filepath.Join(dir.String(), subdir)
 		if err := os.Mkdir(path, 0755); err != nil {
 			t.Fatalf("failed to make a subdir: %v", err)
 		}
@@ -454,13 +561,13 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 
 	// Test error path.
-	if _, err := dirIsEmpty(filepath.Join(root, "does-not-exist")); err == nil {
+	if _, err := dirIsEmpty(root.Join("does-not-exist")); err == nil {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
 
 func TestRemoveDirContents(t *testing.T) {
-	root := t.TempDir()
+	root := absPath(t.TempDir())
 
 	// Brand new should be empty.
 	if empty, err := dirIsEmpty(root); err != nil {
@@ -476,14 +583,14 @@ func TestRemoveDirContents(t *testing.T) {
 
 	// Populate the dir.
 	for _, file := range []string{"f1", "f2", ".f3", ".f4"} {
-		path := filepath.Join(root, file)
-		if err := os.WriteFile(path, []byte{}, 0755); err != nil {
+		path := root.Join(file)
+		if err := os.WriteFile(path.String(), []byte{}, 0755); err != nil {
 			t.Fatalf("failed to write a file: %v", err)
 		}
 	}
 	for _, subdir := range []string{"d1", "d2", "d3"} {
-		path := filepath.Join(root, subdir)
-		if err := os.Mkdir(path, 0755); err != nil {
+		path := root.Join(subdir)
+		if err := os.Mkdir(path.String(), 0755); err != nil {
 			t.Fatalf("failed to make a subdir: %v", err)
 		}
 	}
@@ -501,7 +608,7 @@ func TestRemoveDirContents(t *testing.T) {
 	}
 
 	// Test error path.
-	if err := removeDirContents(filepath.Join(root, "does-not-exist"), nil); err == nil {
+	if err := removeDirContents(root.Join("does-not-exist"), nil); err == nil {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
