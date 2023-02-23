@@ -28,7 +28,7 @@ import (
 // Exechook structure, implements Hook
 type Exechook struct {
 	// Runner
-	cmdrunner *cmd.Runner
+	cmdrunner cmd.Runner
 	// Command to run
 	command string
 	// Command args
@@ -42,7 +42,7 @@ type Exechook struct {
 }
 
 // NewExechook returns a new Exechook
-func NewExechook(cmdrunner *cmd.Runner, command string, getWorktree func(string) string, args []string, timeout time.Duration, log logintf) *Exechook {
+func NewExechook(cmdrunner cmd.Runner, command string, getWorktree func(string) string, args []string, timeout time.Duration, log logintf) *Exechook {
 	return &Exechook{
 		cmdrunner:   cmdrunner,
 		command:     command,

@@ -41,18 +41,18 @@ type logintf interface {
 }
 
 // NewRunner returns a new CommandRunner
-func NewRunner(log logintf) *Runner {
-	return &Runner{log: log}
+func NewRunner(log logintf) Runner {
+	return Runner{log: log}
 }
 
 // Run runs given command
-func (r *Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, error) {
+func (r Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, error) {
 	// call depth = 2 to erase the runWithStdin frame and this one
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, "", command, args...)
 }
 
 // RunWithStdin runs given command with standard input
-func (r *Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
+func (r Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
 	// call depth = 2 to erase the runWithStdin frame and this one
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, stdin, command, args...)
 }
@@ -102,4 +102,10 @@ func cmdForLog(command string, args ...string) string {
 		}
 	}
 	return command + " " + strings.Join(argsCopy, " ")
+}
+
+func (r Runner) WithCallDepth(depth int) Runner {
+	return Runner{
+		log: r.log.WithCallDepth(depth),
+	}
 }
