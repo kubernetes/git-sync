@@ -557,6 +557,10 @@ function e2e::worktree_cleanup() {
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
     git -C "$REPO" worktree add -q "$ROOT/.worktrees/$SHA" -b e2e --no-checkout
 
+    # add some garbage
+    mkdir -p "$ROOT/.worktrees/not_a_hash/subdir"
+    touch "$ROOT/.worktrees/not_a_directory"
+
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
         | while read CTR; do
@@ -567,6 +571,9 @@ function e2e::worktree_cleanup() {
     assert_file_exists "$ROOT"/link/file2
     assert_file_eq "$ROOT"/link/file2 "$FUNCNAME-ok"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_file_absent "$ROOT/.worktrees/$SHA"
+    assert_file_absent "$ROOT/.worktrees/not_a_hash"
+    assert_file_absent "$ROOT/.worktrees/not_a_directory"
 }
 
 ##############################################

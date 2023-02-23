@@ -1175,22 +1175,38 @@ func dirIsEmpty(dir string) (bool, error) {
 	return len(dirents) == 0, nil
 }
 
-func removeDirContents(dir string, log *logging.Logger) error {
+// removeDirContents iterated the specified dir and removes all contents,
+// except entries which are specifically excepted.
+func removeDirContents(dir string, log *logging.Logger, except ...string) error {
 	dirents, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 
+	exceptMap := map[string]bool{}
+	for _, x := range except {
+		exceptMap[x] = true
+	}
+
+	// Save errors until the end.
+	var errs multiError
 	for _, fi := range dirents {
-		p := filepath.Join(dir, fi.Name())
+		name := fi.Name()
+		if exceptMap[name] {
+			continue
+		}
+		p := filepath.Join(dir, name)
 		if log != nil {
 			log.V(3).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
 		}
 		if err := os.RemoveAll(p); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 
+	if len(errs) != 0 {
+		return errs
+	}
 	return nil
 }
 
@@ -1261,7 +1277,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 	}
 
 	git.log.V(0).Info("adding worktree", "path", worktree.Path(), "hash", hash)
-	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--detach", worktree.Path(), hash, "--no-checkout")
+	_, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "add", "--force", "--detach", worktree.Path(), hash, "--no-checkout")
 	if err != nil {
 		return "", err
 	}
@@ -1366,17 +1382,18 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 	return nil
 }
 
-// cleanup removes old worktrees and runs git's garbage collection.
+// cleanup removes old worktrees and runs git's garbage collection.  The
+// specified worktree is preserved.
 func (git *repoSync) cleanup(ctx context.Context, worktree worktree) error {
 	// Save errors until the end.
 	var cleanupErrs multiError
 
-	// Clean up previous worktree.
-	// TODO: list and clean up all old worktrees
-	if worktree != "" {
-		if err := git.cleanupWorktree(ctx, worktree); err != nil {
-			cleanupErrs = append(cleanupErrs, err)
-		}
+	// Clean up previous worktree(s).
+	if err := removeDirContents(git.worktreeFor("").path(), git.log, worktree.hash()); err != nil {
+		cleanupErrs = append(cleanupErrs, err)
+	}
+	if _, err := git.run.Run(ctx, git.root, nil, git.cmd, "worktree", "prune", "--verbose"); err != nil {
+		cleanupErrs = append(cleanupErrs, err)
 	}
 
 	// Expire old refs.
@@ -1608,8 +1625,8 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	if currentHash == remoteHash {
 		currentWorktree = ""
 	}
-	if err := git.cleanup(ctx, currentWorktree); err != nil {
-		git.log.Error(err, "git cleanup failed", "oldWorktree", currentWorktree)
+	if err := git.cleanup(ctx, newWorktree); err != nil {
+		git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
 	}
 
 	return changed, remoteHash, nil
