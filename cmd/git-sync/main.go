@@ -395,10 +395,44 @@ func envDuration(def time.Duration, key string, alts ...string) time.Duration {
 	return val
 }
 
+// absPath is an absolute path string.  This type is intended to make it clear
+// when strings are absolute paths vs something else.  This does not verify or
+// mutate the input, so careless callers could make instances of this type that
+// are not actually absolute paths, or even "".
+type absPath string
+
+// String returns abs as a string.
+func (abs absPath) String() string {
+	return string(abs)
+}
+
+// Canonical returns a canonicalized form of abs, similar to filepath.Abs
+// (including filepath.Clean).  Unlike filepath.Clean, this preserves "" as a
+// special case.
+func (abs absPath) Canonical() (absPath, error) {
+	if abs == "" {
+		return abs, nil
+	}
+
+	result, err := filepath.Abs(abs.String())
+	if err != nil {
+		return "", err
+	}
+	return absPath(result), nil
+}
+
+// Join appends more path elements to abs, like filepath.Join.
+func (abs absPath) Join(elems ...string) absPath {
+	all := make([]string, 0, 1+len(elems))
+	all = append(all, abs.String())
+	all = append(all, elems...)
+	return absPath(filepath.Join(all...))
+}
+
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
 	cmd        string         // the git command to run
-	root       string         // absolute path to the root directory
+	root       absPath        // absolute path to the root directory
 	repo       string         // remote repo to sync
 	ref        string         // the ref to sync
 	depth      int            // for shallow sync
@@ -445,6 +479,19 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Make sure we have a root dir in which to work.
+	if *flRoot == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: --root must be specified\n")
+		os.Exit(1)
+	}
+	var absRoot absPath
+	if abs, err := absPath(*flRoot).Canonical(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: can't absolutize --root: %v\n", err)
+		os.Exit(1)
+	} else {
+		absRoot = abs
+	}
+
 	// Init logging very early, so most errors can be written to a file.
 	if *flOldSkoolVerbose >= 0 {
 		// Back-compat
@@ -452,10 +499,10 @@ func main() {
 	}
 	log := func() *logging.Logger {
 		if strings.HasPrefix(*flErrorFile, ".") {
-			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'")
+			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'\n")
 			os.Exit(1)
 		}
-		dir, file := filepath.Split(makeAbsPath(*flErrorFile, *flRoot))
+		dir, file := filepath.Split(makeAbsPath(*flErrorFile, absRoot))
 		return logging.New(dir, file, *flVerbose)
 	}()
 	cmdRunner := cmd.NewRunner(log)
@@ -493,10 +540,6 @@ func main() {
 	case gcAuto, gcAlways, gcAggressive, gcOff:
 	default:
 		handleConfigError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
-	}
-
-	if *flRoot == "" {
-		handleConfigError(log, true, "ERROR: --root must be specified")
 	}
 
 	if *flDest != "" {
@@ -559,7 +602,6 @@ func main() {
 			handleConfigError(log, true, "ERROR: --touch-file may not start with '.'")
 		}
 	}
-	absTouchFile := makeAbsPath(*flTouchFile, *flRoot)
 
 	if *flSyncHookCommand != "" {
 		// Back-compat
@@ -652,21 +694,25 @@ func main() {
 	// Make sure the root exists.  0755 ensures that this is usable as a volume
 	// when the consumer isn't running as the same UID.  We do this very early
 	// so that we can normalize the path even when there are symlinks in play.
-	if err := os.MkdirAll(*flRoot, 0755); err != nil {
-		log.Error(err, "ERROR: can't make root dir", "path", *flRoot)
+	if err := os.MkdirAll(absRoot.String(), 0755); err != nil {
+		log.Error(err, "ERROR: can't make root dir", "path", absRoot)
 		os.Exit(1)
 	}
-	absRoot, err := normalizePath(*flRoot)
-	if err != nil {
-		log.Error(err, "ERROR: can't normalize root path", "path", *flRoot)
+	// Get rid of symlinks in the root path to avoid getting confused about
+	// them later.  The path must exist for EvalSymlinks to work.
+	if delinked, err := filepath.EvalSymlinks(absRoot.String()); err != nil {
+		log.Error(err, "ERROR: can't normalize root path", "path", absRoot)
 		os.Exit(1)
+	} else {
+		absRoot = absPath(delinked)
 	}
-	if absRoot != *flRoot {
+	if absRoot.String() != *flRoot {
 		log.V(0).Info("normalized root path", "root", *flRoot, "result", absRoot)
 	}
 
-	// Convert the link into an absolute path.
+	// Convert files into an absolute paths.
 	absLink := makeAbsPath(*flLink, absRoot)
+	absTouchFile := makeAbsPath(*flTouchFile, absRoot)
 
 	if *flAddUser {
 		if err := addUser(); err != nil {
@@ -814,7 +860,7 @@ func main() {
 			cmd.NewRunner(log),
 			*flExechookCommand,
 			func(hash string) string {
-				return string(git.worktreeFor(hash))
+				return git.worktreeFor(hash).Path().String()
 			},
 			[]string{},
 			*flExechookTimeout,
@@ -950,14 +996,14 @@ func main() {
 // or relative.  If the path is already absolute, it will be used.  If it is
 // not absolute, it will be joined with the provided root. If the path is
 // empty, the result will be empty.
-func makeAbsPath(path, root string) string {
+func makeAbsPath(path string, root absPath) string {
 	if path == "" {
 		return ""
 	}
 	if filepath.IsAbs(path) {
 		return path
 	}
-	return filepath.Join(root, path)
+	return root.Join(path).String()
 }
 
 // touch will try to ensure that the file at the specified path exists and that
@@ -1045,18 +1091,6 @@ func logSafeEnv(env []string) []string {
 	return ret
 }
 
-func normalizePath(path string) (string, error) {
-	delinked, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", err
-	}
-	abs, err := filepath.Abs(delinked)
-	if err != nil {
-		return "", err
-	}
-	return abs, nil
-}
-
 func updateSyncMetrics(key string, start time.Time) {
 	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
 	syncCount.WithLabelValues(key).Inc()
@@ -1128,13 +1162,13 @@ func addUser() error {
 }
 
 // Run runs `git` with the specified args.
-func (git *repoSync) Run(ctx context.Context, cwd string, args ...string) (string, error) {
-	return git.run.WithCallDepth(1).Run(ctx, cwd, nil, git.cmd, args...)
+func (git *repoSync) Run(ctx context.Context, cwd absPath, args ...string) (string, error) {
+	return git.run.WithCallDepth(1).Run(ctx, cwd.String(), nil, git.cmd, args...)
 }
 
 // Run runs `git` with the specified args and stdin.
-func (git *repoSync) RunWithStdin(ctx context.Context, cwd string, stdin string, args ...string) (string, error) {
-	return git.run.WithCallDepth(1).RunWithStdin(ctx, cwd, nil, stdin, git.cmd, args...)
+func (git *repoSync) RunWithStdin(ctx context.Context, cwd absPath, stdin string, args ...string) (string, error) {
+	return git.run.WithCallDepth(1).RunWithStdin(ctx, cwd.String(), nil, stdin, git.cmd, args...)
 }
 
 // initRepo examines the git repo and determines if it is usable or not.  If
@@ -1142,13 +1176,13 @@ func (git *repoSync) RunWithStdin(ctx context.Context, cwd string, stdin string,
 // assume the repo is valid, though maybe empty.
 func (git *repoSync) initRepo(ctx context.Context) error {
 	// Check out the git root, and see if it is already usable.
-	_, err := os.Stat(git.root)
+	_, err := os.Stat(git.root.String())
 	switch {
 	case os.IsNotExist(err):
 		// Probably the first sync.  0755 ensures that this is usable as a
 		// volume when the consumer isn't running as the same UID.
 		git.log.V(2).Info("repo directory does not exist, creating it", "path", git.root)
-		if err := os.MkdirAll(git.root, 0755); err != nil {
+		if err := os.MkdirAll(git.root.String(), 0755); err != nil {
 			return err
 		}
 	case err != nil:
@@ -1201,7 +1235,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 		return false
 	} else {
 		root = strings.TrimSpace(root)
-		if root != git.root {
+		if root != git.root.String() {
 			git.log.Error(nil, "repo directory is under another repo", "path", git.root, "parent", root)
 			return false
 		}
@@ -1243,8 +1277,8 @@ func (git *repoSync) sanityCheckWorktree(ctx context.Context, worktree worktree)
 	return true
 }
 
-func dirIsEmpty(dir string) (bool, error) {
-	dirents, err := os.ReadDir(dir)
+func dirIsEmpty(dir absPath) (bool, error) {
+	dirents, err := os.ReadDir(dir.String())
 	if err != nil {
 		return false, err
 	}
@@ -1253,8 +1287,8 @@ func dirIsEmpty(dir string) (bool, error) {
 
 // removeDirContents iterated the specified dir and removes all contents,
 // except entries which are specifically excepted.
-func removeDirContents(dir string, log *logging.Logger, except ...string) error {
-	dirents, err := os.ReadDir(dir)
+func removeDirContents(dir absPath, log *logging.Logger, except ...string) error {
+	dirents, err := os.ReadDir(dir.String())
 	if err != nil {
 		return err
 	}
@@ -1271,7 +1305,7 @@ func removeDirContents(dir string, log *logging.Logger, except ...string) error 
 		if exceptMap[name] {
 			continue
 		}
-		p := filepath.Join(dir, name)
+		p := filepath.Join(dir.String(), name)
 		if log != nil {
 			log.V(3).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
 		}
@@ -1299,7 +1333,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
-	targetRelative, err := filepath.Rel(linkDir, targetPath)
+	targetRelative, err := filepath.Rel(linkDir, targetPath.String())
 	if err != nil {
 		return fmt.Errorf("error converting to relative path: %v", err)
 	}
@@ -1321,7 +1355,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 // cleanupWorktree is used to remove a worktree and its folder
 func (git *repoSync) cleanupWorktree(ctx context.Context, worktree worktree) error {
 	// Clean up worktree, if needed.
-	_, err := os.Stat(worktree.Path())
+	_, err := os.Stat(worktree.Path().String())
 	switch {
 	case os.IsNotExist(err):
 		return nil
@@ -1329,7 +1363,7 @@ func (git *repoSync) cleanupWorktree(ctx context.Context, worktree worktree) err
 		return err
 	}
 	git.log.V(1).Info("removing worktree", "path", worktree.Path())
-	if err := os.RemoveAll(worktree.Path()); err != nil {
+	if err := os.RemoveAll(worktree.Path().String()); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
 	}
 	if _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
@@ -1353,7 +1387,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 	}
 
 	git.log.V(0).Info("adding worktree", "path", worktree.Path(), "hash", hash)
-	_, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path(), hash, "--no-checkout")
+	_, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
 	if err != nil {
 		return "", err
 	}
@@ -1371,19 +1405,19 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
 	rootDotGit := ""
-	if rel, err := filepath.Rel(worktree.Path(), git.root); err != nil {
+	if rel, err := filepath.Rel(worktree.Path().String(), git.root.String()); err != nil {
 		return err
 	} else {
 		rootDotGit = filepath.Join(rel, ".git")
 	}
 	gitDirRef := []byte("gitdir: " + filepath.Join(rootDotGit, "worktrees", hash) + "\n")
-	if err := os.WriteFile(filepath.Join(worktree.Path(), ".git"), gitDirRef, 0644); err != nil {
+	if err := os.WriteFile(worktree.Path().Join(".git").String(), gitDirRef, 0644); err != nil {
 		return err
 	}
 
 	// If sparse checkout is requested, configure git for it, otherwise
 	// unconfigure it.
-	gitInfoPath := filepath.Join(git.root, ".git/worktrees", hash, "info")
+	gitInfoPath := filepath.Join(git.root.String(), ".git/worktrees", hash, "info")
 	gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
 	if git.sparseFile == "" {
 		os.RemoveAll(gitSparseConfigPath)
@@ -1450,7 +1484,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 	if git.chmod != 0 {
 		mode := fmt.Sprintf("%#o", git.chmod)
 		git.log.V(1).Info("changing file permissions", "mode", mode)
-		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktree.Path()); err != nil {
+		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktree.Path().String()); err != nil {
 			return err
 		}
 	}
@@ -1465,7 +1499,7 @@ func (git *repoSync) cleanup(ctx context.Context, worktree worktree) error {
 	var cleanupErrs multiError
 
 	// Clean up previous worktree(s).
-	if err := removeDirContents(git.worktreeFor("").path(), git.log, worktree.hash()); err != nil {
+	if err := removeDirContents(git.worktreeFor("").Path(), git.log, worktree.Hash()); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 	if _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
@@ -1559,20 +1593,20 @@ func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) 
 }
 
 // worktree represents a git worktree (which may or may not exisat on disk).
-type worktree string
+type worktree absPath
 
 // Hash returns the intended commit hash for this worktree.
 func (wt worktree) Hash() string {
 	if wt == "" {
 		return ""
 	}
-	return filepath.Base(string(wt))
+	return filepath.Base(absPath(wt).String())
 }
 
 // path returns the absolute path to this worktree (which may not actually
 // exist on disk).
-func (wt worktree) Path() string {
-	return string(wt)
+func (wt worktree) Path() absPath {
+	return absPath(wt)
 }
 
 // worktreeFor returns a worktree value for the given hash, which can be used
@@ -1580,7 +1614,7 @@ func (wt worktree) Path() string {
 // assumptions about the on-disk location where worktrees are stored.  If hash
 // is "", this returns the base worktree directory.
 func (git *repoSync) worktreeFor(hash string) worktree {
-	return worktree(filepath.Join(git.root, ".worktrees", hash))
+	return worktree(git.root.Join(".worktrees", hash))
 }
 
 // currentWorktree reads the repo's link and returns a worktree value for it.
@@ -1592,7 +1626,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 	if target == "" {
 		return "", nil
 	}
-	return worktree(filepath.Join(git.root, target)), nil
+	return worktree(git.root.Join(target)), nil
 }
 
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,
@@ -1622,7 +1656,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		if err != nil {
 			return false, "", err
 		}
-		result := strings.Trim(string(output), "\n")
+		result := strings.Trim(output, "\n")
 		if result == git.ref {
 			remoteHash = git.ref
 		}
