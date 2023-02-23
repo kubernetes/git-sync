@@ -194,7 +194,7 @@ func TestMakeAbsPath(t *testing.T) {
 
 	for _, tc := range cases {
 		res := makeAbsPath(tc.path, absPath(tc.root))
-		if res != tc.exp {
+		if res.String() != tc.exp {
 			t.Errorf("expected: %q, got: %q", tc.exp, res)
 		}
 	}
@@ -232,7 +232,7 @@ func TestWorktreeHash(t *testing.T) {
 		exp: "",
 	}, {
 		in:  "/",
-		exp: "/",
+		exp: "",
 	}, {
 		in:  "/one",
 		exp: "one",
@@ -494,7 +494,112 @@ func TestAbsPathJoin(t *testing.T) {
 
 	for _, tc := range testCases {
 		if want, got := tc.expect, tc.base.Join(tc.more...); want != got {
-			t.Errorf("expected %q, got %q", want, got)
+			t.Errorf("(%q, %q): expected %q, got %q", tc.base, tc.more, want, got)
+		}
+	}
+}
+
+func TestAbsPathSplit(t *testing.T) {
+	testCases := []struct {
+		in      absPath
+		expDir  string
+		expBase string
+	}{{
+		in:      "",
+		expDir:  "",
+		expBase: "",
+	}, {
+		in:      "/",
+		expDir:  "/",
+		expBase: "",
+	}, {
+		in:      "//",
+		expDir:  "/",
+		expBase: "",
+	}, {
+		in:      "/one",
+		expDir:  "/",
+		expBase: "one",
+	}, {
+		in:      "/one/two",
+		expDir:  "/one",
+		expBase: "two",
+	}, {
+		in:      "/one/two/",
+		expDir:  "/one",
+		expBase: "two",
+	}, {
+		in:      "/one//two",
+		expDir:  "/one",
+		expBase: "two",
+	}}
+
+	for _, tc := range testCases {
+		wantDir, wantBase := tc.expDir, tc.expBase
+		if gotDir, gotBase := tc.in.Split(); wantDir != gotDir || wantBase != gotBase {
+			t.Errorf("%q: expected (%q, %q), got (%q, %q)", tc.in, wantDir, wantBase, gotDir, gotBase)
+		}
+	}
+}
+
+func TestAbsPathDir(t *testing.T) {
+	testCases := []struct {
+		in  absPath
+		exp string
+	}{{
+		in:  "",
+		exp: "",
+	}, {
+		in:  "/",
+		exp: "/",
+	}, {
+		in:  "/one",
+		exp: "/",
+	}, {
+		in:  "/one/two",
+		exp: "/one",
+	}, {
+		in:  "/one/two/",
+		exp: "/one",
+	}, {
+		in:  "/one//two",
+		exp: "/one",
+	}}
+
+	for _, tc := range testCases {
+		if want, got := tc.exp, tc.in.Dir(); want != got {
+			t.Errorf("%q: expected %q, got %q", tc.in, want, got)
+		}
+	}
+}
+
+func TestAbsPathBase(t *testing.T) {
+	testCases := []struct {
+		in  absPath
+		exp string
+	}{{
+		in:  "",
+		exp: "",
+	}, {
+		in:  "/",
+		exp: "",
+	}, {
+		in:  "/one",
+		exp: "one",
+	}, {
+		in:  "/one/two",
+		exp: "two",
+	}, {
+		in:  "/one/two/",
+		exp: "two",
+	}, {
+		in:  "/one//two",
+		exp: "two",
+	}}
+
+	for _, tc := range testCases {
+		if want, got := tc.exp, tc.in.Base(); want != got {
+			t.Errorf("%q: expected %q, got %q", tc.in, want, got)
 		}
 	}
 }

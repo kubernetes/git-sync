@@ -429,6 +429,38 @@ func (abs absPath) Join(elems ...string) absPath {
 	return absPath(filepath.Join(all...))
 }
 
+// Split breaks abs into stem and leaf parts (often directory and file, but not
+// necessarily), similar to filepath.Split.  Unlike filepath.Split, the
+// resulting stem part does not have any trailing path separators.
+func (abs absPath) Split() (string, string) {
+	if abs == "" {
+		return "", ""
+	}
+
+	// filepath.Split promises that dir+base == input, but trailing slashes on
+	// the dir is confusing and ugly.
+	pathSep := string(os.PathSeparator)
+	dir, base := filepath.Split(strings.TrimRight(abs.String(), pathSep))
+	dir = strings.TrimRight(dir, pathSep)
+	if len(dir) == 0 {
+		dir = string(os.PathSeparator)
+	}
+
+	return dir, base
+}
+
+// Dir returns the stem part of abs without the leaf, like filepath.Dir.
+func (abs absPath) Dir() string {
+	dir, _ := abs.Split()
+	return dir
+}
+
+// Base returns the leaf part of abs without the stem, like filepath.Base.
+func (abs absPath) Base() string {
+	_, base := abs.Split()
+	return base
+}
+
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
 	cmd        string         // the git command to run
@@ -439,7 +471,7 @@ type repoSync struct {
 	submodules submodulesMode // how to handle submodules
 	gc         gcMode         // garbage collection
 	chmod      int            // mode to change repo to, or 0
-	link       string         // the name of the symlink to publish under `root`
+	link       absPath        // absolute path to the symlink to publish
 	authURL    string         // a URL to re-fetch credentials, or ""
 	sparseFile string         // path to a sparse-checkout file
 	log        *logging.Logger
@@ -502,7 +534,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'\n")
 			os.Exit(1)
 		}
-		dir, file := filepath.Split(makeAbsPath(*flErrorFile, absRoot))
+		dir, file := makeAbsPath(*flErrorFile, absRoot).Split()
 		return logging.New(dir, file, *flVerbose)
 	}()
 	cmdRunner := cmd.NewRunner(log)
@@ -996,24 +1028,24 @@ func main() {
 // or relative.  If the path is already absolute, it will be used.  If it is
 // not absolute, it will be joined with the provided root. If the path is
 // empty, the result will be empty.
-func makeAbsPath(path string, root absPath) string {
+func makeAbsPath(path string, root absPath) absPath {
 	if path == "" {
 		return ""
 	}
 	if filepath.IsAbs(path) {
-		return path
+		return absPath(path)
 	}
-	return root.Join(path).String()
+	return root.Join(path)
 }
 
 // touch will try to ensure that the file at the specified path exists and that
 // its timestamps are updated.
-func touch(path string) error {
-	dir := filepath.Dir(path)
+func touch(path absPath) error {
+	dir := path.Dir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	file, err := os.Create(path)
+	file, err := os.Create(path.String())
 	if err != nil {
 		return err
 	}
@@ -1324,7 +1356,7 @@ func removeDirContents(dir absPath, log *logging.Logger, except ...string) error
 // link existed, this returns the previous target.
 func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) error {
 	targetPath := worktree.Path()
-	linkDir, linkFile := filepath.Split(git.link)
+	linkDir, linkFile := git.link.Split()
 
 	// Make sure the link directory exists.
 	if err := os.MkdirAll(linkDir, os.FileMode(int(0755))); err != nil {
@@ -1345,7 +1377,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 	}
 
 	git.log.V(2).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link); err != nil {
+	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link.String()); err != nil {
 		return fmt.Errorf("error replacing symlink: %v", err)
 	}
 
@@ -1600,7 +1632,7 @@ func (wt worktree) Hash() string {
 	if wt == "" {
 		return ""
 	}
-	return filepath.Base(absPath(wt).String())
+	return absPath(wt).Base()
 }
 
 // path returns the absolute path to this worktree (which may not actually
@@ -1619,7 +1651,7 @@ func (git *repoSync) worktreeFor(hash string) worktree {
 
 // currentWorktree reads the repo's link and returns a worktree value for it.
 func (git *repoSync) currentWorktree() (worktree, error) {
-	target, err := os.Readlink(git.link)
+	target, err := os.Readlink(git.link.String())
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
