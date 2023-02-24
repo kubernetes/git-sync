@@ -343,7 +343,7 @@ OPTIONS
 
     --webhook-success-status <int>, $GIT_SYNC_WEBHOOK_SUCCESS_STATUS
             The HTTP status code indicating a successful --webhook-url.  Setting
-            this to -1 disables success checks to make webhooks
+            this to 0 disables success checks, which makes webhooks
             "fire-and-forget".  If not specified, this defaults to 200.
 
     --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT

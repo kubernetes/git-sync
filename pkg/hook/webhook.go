@@ -74,7 +74,7 @@ func (w *Webhook) Do(ctx context.Context, hash string) error {
 	resp.Body.Close()
 
 	// If the webhook has a success statusCode, check against it
-	if w.success != -1 && resp.StatusCode != w.success {
+	if w.success > 0 && resp.StatusCode != w.success {
 		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, w.success)
 	}
 
