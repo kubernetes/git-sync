@@ -227,6 +227,11 @@ var (
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
 
+	fetchCount = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "git_fetch_count_total",
+		Help: "How many git fetches were run",
+	})
+
 	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",
@@ -259,6 +264,7 @@ const (
 func init() {
 	prometheus.MustRegister(syncDuration)
 	prometheus.MustRegister(syncCount)
+	prometheus.MustRegister(fetchCount)
 	prometheus.MustRegister(askpassCount)
 }
 
@@ -408,6 +414,7 @@ type repoSync struct {
 	link       string         // the name of the symlink to publish under `root`
 	authURL    string         // a URL to re-fetch credentials, or ""
 	sparseFile string         // path to a sparse-checkout file
+	syncCount  int            // how many times have we synced?
 	log        *logging.Logger
 	run        cmd.Runner
 }
@@ -1650,59 +1657,58 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 			currentHash = ""
 		}
 	}
-	changed := false
-	if currentHash != remoteHash {
+	changed := (currentHash != remoteHash)
+	if changed || git.syncCount == 0 {
 		git.log.V(0).Info("update required", "ref", git.ref, "local", currentHash, "remote", remoteHash)
-		changed = true
-	}
 
-	// We always do a fetch, to ensure that parameters like depth are set
-	// properly.  This is cheap when we already have the target hash.
-	if err := git.fetch(ctx, remoteHash); err != nil {
-		return false, "", err
-	}
-
-	// Reset the repo (note: not the worktree - that happens later) to the new
-	// ref.  This makes subsequent fetches much less expensive.  It uses --soft
-	// so no files are checked out.
-	if _, err := git.Run(ctx, git.root, "reset", "--soft", "FETCH_HEAD"); err != nil {
-		return false, "", err
-	}
-
-	newWorktree := currentWorktree
-	if currentHash != remoteHash {
-		// Create a worktree for this hash in git.root.
-		if wt, err := git.createWorktree(ctx, remoteHash); err != nil {
-			return false, "", err
-		} else {
-			newWorktree = wt
-		}
-	}
-
-	// Even if this worktree exists and passes sanity, it might not have all
-	// the correct settings (e.g. sparse checkout).  The best way to get
-	// it all set is just to re-run the configuration,
-	if err := git.configureWorktree(ctx, newWorktree); err != nil {
-		return false, "", err
-	}
-
-	if currentHash != remoteHash {
-		// Point the symlink to the new hash.
-		err := git.publishSymlink(ctx, newWorktree)
-		if err != nil {
+		// We have to do at least one fetch, to ensure that parameters like depth
+		// are set properly.  This is cheap when we already have the target hash.
+		if err := git.fetch(ctx, remoteHash); err != nil {
 			return false, "", err
 		}
-	}
+		fetchCount.Inc()
 
-	// Mark ourselves as "ready".
-	setRepoReady()
+		// Reset the repo (note: not the worktree - that happens later) to the new
+		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
+		// so no files are checked out.
+		if _, err := git.Run(ctx, git.root, "reset", "--soft", "FETCH_HEAD"); err != nil {
+			return false, "", err
+		}
 
-	// Clean up the old worktree(s) and run GC.
-	if currentHash == remoteHash {
-		currentWorktree = ""
-	}
-	if err := git.cleanup(ctx, newWorktree); err != nil {
-		git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
+		// If we have a new hash, make a new worktree
+		newWorktree := currentWorktree
+		if changed {
+			// Create a worktree for this hash in git.root.
+			if wt, err := git.createWorktree(ctx, remoteHash); err != nil {
+				return false, "", err
+			} else {
+				newWorktree = wt
+			}
+		}
+
+		// Even if this worktree existed and passes sanity, it might not have all
+		// the correct settings (e.g. sparse checkout).  The best way to get
+		// it all set is just to re-run the configuration,
+		if err := git.configureWorktree(ctx, newWorktree); err != nil {
+			return false, "", err
+		}
+
+		// If we have a new hash, update the symlink to point to the new worktree.
+		if changed {
+			err := git.publishSymlink(ctx, newWorktree)
+			if err != nil {
+				return false, "", err
+			}
+		}
+
+		// Mark ourselves as "ready".
+		setRepoReady()
+		git.syncCount++
+
+		// Clean up old worktree(s) and run GC.
+		if err := git.cleanup(ctx, newWorktree); err != nil {
+			git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
+		}
 	}
 
 	return changed, remoteHash, nil
