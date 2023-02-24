@@ -102,7 +102,7 @@ var flWebhookURL = pflag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL",
 var flWebhookMethod = pflag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
 	"the HTTP method for the webhook")
 var flWebhookStatusSuccess = pflag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
-	"the HTTP status code indicating a successful webhook (-1 disables success checks")
+	"the HTTP status code indicating a successful webhook (0 disables success checks")
 var flWebhookTimeout = pflag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
 	"the timeout for the webhook")
 var flWebhookBackoff = pflag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
@@ -509,8 +509,12 @@ func main() {
 	}
 
 	if *flWebhookURL != "" {
-		if *flWebhookStatusSuccess < -1 {
-			handleConfigError(log, true, "ERROR: --webhook-success-status must be a valid HTTP code or -1")
+		if *flWebhookStatusSuccess == -1 {
+			// Back-compat: -1 and 0 mean the same things
+			*flWebhookStatusSuccess = 0
+		}
+		if *flWebhookStatusSuccess < 0 {
+			handleConfigError(log, true, "ERROR: --webhook-success-status must be a valid HTTP code or 0")
 		}
 		if *flWebhookTimeout < time.Second {
 			handleConfigError(log, true, "ERROR: --webhook-timeout must be at least 1s")
@@ -2205,7 +2209,7 @@ OPTIONS
 
     --webhook-success-status <int>, $GIT_SYNC_WEBHOOK_SUCCESS_STATUS
             The HTTP status code indicating a successful --webhook-url.  Setting
-            this to -1 disables success checks to make webhooks
+            this to 0 disables success checks, which makes webhooks
             "fire-and-forget".  If not specified, this defaults to 200.
 
     --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT

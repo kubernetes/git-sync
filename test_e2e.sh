@@ -1865,7 +1865,7 @@ function e2e::webhook_fire_and_forget() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --webhook-url="http://$IP" \
-        --webhook-success-status=-1 \
+        --webhook-success-status=0 \
         --link="link" \
         >> "$1" 2>&1 &
 
