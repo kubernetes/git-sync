@@ -22,6 +22,11 @@ git-sync can pull over HTTP(S) (with authentication or not) or SSH.
 git-sync can also be configured to make a webhook call upon successful git repo
 synchronization. The call is made after the symlink is updated.
 
+## Major update: v3.x -> v4.x
+
+git-sync has undergone many significant changes between v3.x and v4.x.  [See
+here](v3-to-v4.md) for more details.
+
 ## Building it
 
 We use [docker buildx](https://github.com/docker/buildx) to build images.
