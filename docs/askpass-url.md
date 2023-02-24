@@ -24,8 +24,8 @@ See the askpass e2e test as an example.
 name: "git-sync"
 ...
 env:
-  - name: "GIT_SYNC_REPO",
+  - name: "GITSYNC_REPO",
     value: "https://source.developers.google.com/p/[GCP PROJECT ID]/r/[REPO NAME]"
-  - name: "GIT_SYNC_ASKPASS_URL",
+  - name: "GITSYNC_ASKPASS_URL",
     value: "http://localhost:9102/git_askpass",
 ```

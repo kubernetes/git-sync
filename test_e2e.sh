@@ -1561,7 +1561,7 @@ function e2e::exechook_fail_retry() {
 }
 
 ##############################################
-# Test exechook-success with GIT_SYNC_ONE_TIME
+# Test exechook-success with --one-time
 ##############################################
 function e2e::exechook_success_once() {
     # First sync
@@ -1569,7 +1569,6 @@ function e2e::exechook_success_once() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --period=100ms \
         --one-time \
         --repo="file://$REPO" \
         --root="$ROOT" \
@@ -1586,7 +1585,7 @@ function e2e::exechook_success_once() {
 }
 
 ##############################################
-# Test exechook-fail with GIT_SYNC_ONE_TIME
+# Test exechook-fail with --one-time
 ##############################################
 function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
@@ -1598,7 +1597,6 @@ function e2e::exechook_fail_once() {
     (
         set +o errexit
         GIT_SYNC \
-            --period=100ms \
             --one-time \
             --repo="file://$REPO" \
             --root="$ROOT" \

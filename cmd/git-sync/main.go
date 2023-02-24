@@ -56,110 +56,110 @@ var flManual = pflag.Bool("man", false, "print the full manual and exit")
 var flVerbose = pflag.IntP("verbose", "v", 0,
 	"logs at this V level and lower will be printed")
 
-var flRepo = pflag.String("repo", envString("GIT_SYNC_REPO", ""),
+var flRepo = pflag.String("repo", envString("", "GITSYNC_REPO", "GIT_SYNC_REPO"),
 	"the git repository to sync (required)")
-var flRef = pflag.String("ref", envString("GIT_SYNC_REF", "HEAD"),
+var flRef = pflag.String("ref", envString("HEAD", "GITSYNC_REF"),
 	"the git revision (branch, tag, or hash) to sync")
-var flDepth = pflag.Int("depth", envInt("GIT_SYNC_DEPTH", 1),
+var flDepth = pflag.Int("depth", envInt(1, "GITSYNC_DEPTH", "GIT_SYNC_DEPTH"),
 	"create a shallow clone with history truncated to the specified number of commits")
-var flSubmodules = pflag.String("submodules", envString("GIT_SYNC_SUBMODULES", "recursive"),
+var flSubmodules = pflag.String("submodules", envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
 
-var flRoot = pflag.String("root", envString("GIT_SYNC_ROOT", ""),
+var flRoot = pflag.String("root", envString("", "GITSYNC_ROOT", "GIT_SYNC_ROOT"),
 	"the root directory for git-sync operations (required)")
-var flLink = pflag.String("link", envString("GIT_SYNC_LINK", ""),
+var flLink = pflag.String("link", envString("", "GITSYNC_LINK", "GIT_SYNC_LINK"),
 	"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
-var flErrorFile = pflag.String("error-file", envString("GIT_SYNC_ERROR_FILE", ""),
+var flErrorFile = pflag.String("error-file", envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
 	"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
-var flPeriod = pflag.Duration("period", envDuration("GIT_SYNC_PERIOD", 10*time.Second),
+var flPeriod = pflag.Duration("period", envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
 	"how long to wait between syncs, must be >= 10ms; --wait overrides this")
-var flSyncTimeout = pflag.Duration("sync-timeout", envDuration("GIT_SYNC_SYNC_TIMEOUT", 120*time.Second),
+var flSyncTimeout = pflag.Duration("sync-timeout", envDuration(120*time.Second, "GITSYNC_SYNC_TIMEOUT", "GIT_SYNC_SYNC_TIMEOUT"),
 	"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
-var flOneTime = pflag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
+var flOneTime = pflag.Bool("one-time", envBool(false, "GITSYNC_ONE_TIME", "GIT_SYNC_ONE_TIME"),
 	"exit after the first sync")
-var flSyncOnSignal = pflag.String("sync-on-signal", envString("GIT_SYNC_SYNC_ON_SIGNAL", ""),
+var flSyncOnSignal = pflag.String("sync-on-signal", envString("", "GITSYNC_SYNC_ON_SIGNAL", "GIT_SYNC_SYNC_ON_SIGNAL"),
 	"sync on receipt of the specified signal (e.g. SIGHUP)")
-var flMaxFailures = pflag.Int("max-failures", envInt("GIT_SYNC_MAX_FAILURES", 0),
+var flMaxFailures = pflag.Int("max-failures", envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
-var flChmod = pflag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
+var flChmod = pflag.Int("change-permissions", envInt(0, "GITSYNC_PERMISSIONS", "GIT_SYNC_PERMISSIONS"),
 	"optionally change permissions on the checked-out files to the specified mode")
 
-var flTouchFile = pflag.String("touch-file", envString("GIT_SYNC_TOUCH_FILE", ""),
+var flTouchFile = pflag.String("touch-file", envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
 	"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
 
-var flSparseCheckoutFile = pflag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
+var flSparseCheckoutFile = pflag.String("sparse-checkout-file", envString("", "GITSYNC_SPARSE_CHECKOUT_FILE", "GIT_SYNC_SPARSE_CHECKOUT_FILE"),
 	"the path to a sparse-checkout file")
 
-var flExechookCommand = pflag.String("exechook-command", envString("GIT_SYNC_EXECHOOK_COMMAND", ""),
+var flExechookCommand = pflag.String("exechook-command", envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
 	"an optional command to be run when syncs complete")
-var flExechookTimeout = pflag.Duration("exechook-timeout", envDuration("GIT_SYNC_EXECHOOK_TIMEOUT", time.Second*30),
+var flExechookTimeout = pflag.Duration("exechook-timeout", envDuration(30*time.Second, "GITSYNC_EXECHOOK_TIMEOUT", "GIT_SYNC_EXECHOOK_TIMEOUT"),
 	"the timeout for the exechook")
-var flExechookBackoff = pflag.Duration("exechook-backoff", envDuration("GIT_SYNC_EXECHOOK_BACKOFF", time.Second*3),
+var flExechookBackoff = pflag.Duration("exechook-backoff", envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
 	"the time to wait before retrying a failed exechook")
 
-var flWebhookURL = pflag.String("webhook-url", envString("GIT_SYNC_WEBHOOK_URL", ""),
+var flWebhookURL = pflag.String("webhook-url", envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
 	"a URL for optional webhook notifications when syncs complete")
-var flWebhookMethod = pflag.String("webhook-method", envString("GIT_SYNC_WEBHOOK_METHOD", "POST"),
+var flWebhookMethod = pflag.String("webhook-method", envString("POST", "GITSYNC_WEBHOOK_METHOD", "GIT_SYNC_WEBHOOK_METHOD"),
 	"the HTTP method for the webhook")
-var flWebhookStatusSuccess = pflag.Int("webhook-success-status", envInt("GIT_SYNC_WEBHOOK_SUCCESS_STATUS", 200),
+var flWebhookStatusSuccess = pflag.Int("webhook-success-status", envInt(200, "GITSYNC_WEBHOOK_SUCCESS_STATUS", "GIT_SYNC_WEBHOOK_SUCCESS_STATUS"),
 	"the HTTP status code indicating a successful webhook (0 disables success checks")
-var flWebhookTimeout = pflag.Duration("webhook-timeout", envDuration("GIT_SYNC_WEBHOOK_TIMEOUT", time.Second),
+var flWebhookTimeout = pflag.Duration("webhook-timeout", envDuration(1*time.Second, "GITSYNC_WEBHOOK_TIMEOUT", "GIT_SYNC_WEBHOOK_TIMEOUT"),
 	"the timeout for the webhook")
-var flWebhookBackoff = pflag.Duration("webhook-backoff", envDuration("GIT_SYNC_WEBHOOK_BACKOFF", time.Second*3),
+var flWebhookBackoff = pflag.Duration("webhook-backoff", envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
 	"the time to wait before retrying a failed webhook")
 
-var flUsername = pflag.String("username", envString("GIT_SYNC_USERNAME", ""),
+var flUsername = pflag.String("username", envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
 	"the username to use for git auth")
-var flPassword = pflag.String("password", envString("GIT_SYNC_PASSWORD", ""),
+var flPassword = pflag.String("password", envString("", "GITSYNC_PASSWORD", "GIT_SYNC_PASSWORD"),
 	"the password or personal access token to use for git auth (prefer --password-file or this env var)")
-var flPasswordFile = pflag.String("password-file", envString("GIT_SYNC_PASSWORD_FILE", ""),
+var flPasswordFile = pflag.String("password-file", envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 	"the file from which the password or personal access token for git auth will be sourced")
 
-var flSSH = pflag.Bool("ssh", envBool("GIT_SYNC_SSH", false),
+var flSSH = pflag.Bool("ssh", envBool(false, "GITSYNC_SSH", "GIT_SYNC_SSH"),
 	"use SSH for git operations")
-var flSSHKeyFile = pflag.String("ssh-key-file", envMultiString([]string{"GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"}, "/etc/git-secret/ssh"),
+var flSSHKeyFile = pflag.String("ssh-key-file", envString("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
 	"the SSH key to use")
-var flSSHKnownHosts = pflag.Bool("ssh-known-hosts", envMultiBool([]string{"GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"}, true),
+var flSSHKnownHosts = pflag.Bool("ssh-known-hosts", envBool(true, "GITSYNC_SSH_KNOWN_HOSTS", "GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"),
 	"enable SSH known_hosts verification")
-var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file", envMultiString([]string{"GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"}, "/etc/git-secret/known_hosts"),
+var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file", envString("/etc/git-secret/known_hosts", "GITSYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"),
 	"the known_hosts file to use")
-var flAddUser = pflag.Bool("add-user", envBool("GIT_SYNC_ADD_USER", false),
+var flAddUser = pflag.Bool("add-user", envBool(false, "GITSYNC_ADD_USER", "GIT_SYNC_ADD_USER"),
 	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
 
-var flCookieFile = pflag.Bool("cookie-file", envMultiBool([]string{"GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"}, false),
+var flCookieFile = pflag.Bool("cookie-file", envBool(false, "GITSYNC_COOKIE_FILE", "GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"),
 	"use a git cookiefile (/etc/git-secret/cookie_file) for authentication")
 
-var flAskPassURL = pflag.String("askpass-url", envMultiString([]string{"GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"}, ""),
+var flAskPassURL = pflag.String("askpass-url", envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
 	"a URL to query for git credentials (username=<value> and password=<value>)")
 
-var flGitCmd = pflag.String("git", envString("GIT_SYNC_GIT", "git"),
+var flGitCmd = pflag.String("git", envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
 	"the git command to run (subject to PATH search, mostly for testing)")
-var flGitConfig = pflag.String("git-config", envString("GIT_SYNC_GIT_CONFIG", ""),
+var flGitConfig = pflag.String("git-config", envString("", "GITSYNC_GIT_CONFIG", "GIT_SYNC_GIT_CONFIG"),
 	"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
-var flGitGC = pflag.String("git-gc", envString("GIT_SYNC_GIT_GC", "always"),
+var flGitGC = pflag.String("git-gc", envString("always", "GITSYNC_GIT_GC", "GIT_SYNC_GIT_GC"),
 	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
 
-var flHTTPBind = pflag.String("http-bind", envString("GIT_SYNC_HTTP_BIND", ""),
+var flHTTPBind = pflag.String("http-bind", envString("", "GITSYNC_HTTP_BIND", "GIT_SYNC_HTTP_BIND"),
 	"the bind address (including port) for git-sync's HTTP endpoint")
-var flHTTPMetrics = pflag.Bool("http-metrics", envBool("GIT_SYNC_HTTP_METRICS", false),
+var flHTTPMetrics = pflag.Bool("http-metrics", envBool(false, "GITSYNC_HTTP_METRICS", "GIT_SYNC_HTTP_METRICS"),
 	"enable metrics on git-sync's HTTP endpoint")
-var flHTTPprof = pflag.Bool("http-pprof", envBool("GIT_SYNC_HTTP_PPROF", false),
+var flHTTPprof = pflag.Bool("http-pprof", envBool(false, "GITSYNC_HTTP_PPROF", "GIT_SYNC_HTTP_PPROF"),
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
 // Obsolete flags, kept for compat.
-var flBranch = pflag.String("branch", envString("GIT_SYNC_BRANCH", ""),
+var flBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 	"DEPRECATED: use --ref instead")
-var flRev = pflag.String("rev", envString("GIT_SYNC_REV", ""),
+var flRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
 	"DEPRECATED: use --ref instead")
-var flWait = pflag.Float64("wait", envFloat("GIT_SYNC_WAIT", 0),
+var flWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
 	"DEPRECATED: use --period instead")
-var flTimeout = pflag.Int("timeout", envInt("GIT_SYNC_TIMEOUT", 0),
+var flTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
 	"DEPRECATED: use --sync-timeout instead")
-var flDest = pflag.String("dest", envString("GIT_SYNC_DEST", ""),
+var flDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 	"DEPRECATED: use --link instead")
-var flSyncHookCommand = pflag.String("sync-hook-command", envString("GIT_SYNC_HOOK_COMMAND", ""),
+var flSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
 	"DEPRECATED: use --exechook-command instead")
-var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
+var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
 	"DEPRECATED: use --max-failures instead")
 var flOldSkoolVerbose = pflag.Int("v", -1,
 	"DEPRECATED: use -v or --verbose instead")
@@ -223,114 +223,135 @@ func init() {
 	prometheus.MustRegister(askpassCount)
 }
 
-func envString(key, def string) string {
+func envString(def string, key string, alts ...string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
 	}
-	return def
-}
-
-func envMultiString(keys []string, def string) string {
-	for i, key := range keys {
-		if val := os.Getenv(key); val != "" {
-			if i != 0 {
-				fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", key, keys[0])
-			}
+	for _, alt := range alts {
+		if val := os.Getenv(alt); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
 			return val
 		}
 	}
 	return def
 }
 
-func envBoolOrError(key string, def bool) (bool, error) {
-	if val := os.Getenv(key); val != "" {
+func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
+	parse := func(val string) (bool, error) {
 		parsed, err := strconv.ParseBool(val)
 		if err == nil {
 			return parsed, nil
 		}
 		return false, fmt.Errorf("ERROR: invalid bool env %s=%q: %v\n", key, val, err)
 	}
+
+	if val := os.Getenv(key); val != "" {
+		return parse(val)
+	}
+	for _, alt := range alts {
+		if val := os.Getenv(key); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			return parse(val)
+		}
+	}
 	return def, nil
 }
-func envBool(key string, def bool) bool {
-	val, err := envBoolOrError(key, def)
+func envBool(def bool, key string, alts ...string) bool {
+	val, err := envBoolOrError(def, key, alts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+		return false
 	}
 	return val
 }
 
-func envMultiBool(keys []string, def bool) bool {
-	for i, key := range keys {
-		if val := os.Getenv(key); val != "" {
-			parsed, err := strconv.ParseBool(val)
-			if err == nil {
-				if i != 0 {
-					fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", key, keys[0])
-				}
-				return parsed
-			}
-			fmt.Fprintf(os.Stderr, "ERROR: invalid bool env %s=%q: %v\n", key, val, err)
-			os.Exit(1)
-		}
-	}
-	return def
-}
-
-func envIntOrError(key string, def int) (int, error) {
-	if val := os.Getenv(key); val != "" {
+func envIntOrError(def int, key string, alts ...string) (int, error) {
+	parse := func(val string) (int, error) {
 		parsed, err := strconv.ParseInt(val, 0, 0)
 		if err == nil {
 			return int(parsed), nil
 		}
 		return 0, fmt.Errorf("ERROR: invalid int env %s=%q: %v\n", key, val, err)
 	}
+
+	if val := os.Getenv(key); val != "" {
+		return parse(val)
+	}
+	for _, alt := range alts {
+		if val := os.Getenv(key); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			return parse(val)
+		}
+	}
 	return def, nil
 }
-func envInt(key string, def int) int {
-	val, err := envIntOrError(key, def)
+func envInt(def int, key string, alts ...string) int {
+	val, err := envIntOrError(def, key, alts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+		return 0
 	}
 	return val
 }
 
-func envFloatOrError(key string, def float64) (float64, error) {
-	if val := os.Getenv(key); val != "" {
+func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
+	parse := func(val string) (float64, error) {
 		parsed, err := strconv.ParseFloat(val, 64)
 		if err == nil {
 			return parsed, nil
 		}
 		return 0, fmt.Errorf("ERROR: invalid float env %s=%q: %v\n", key, val, err)
 	}
+
+	if val := os.Getenv(key); val != "" {
+		return parse(val)
+	}
+	for _, alt := range alts {
+		if val := os.Getenv(key); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			return parse(val)
+		}
+	}
 	return def, nil
 }
-func envFloat(key string, def float64) float64 {
-	val, err := envFloatOrError(key, def)
+func envFloat(def float64, key string, alts ...string) float64 {
+	val, err := envFloatOrError(def, key, alts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+		return 0
 	}
 	return val
 }
 
-func envDurationOrError(key string, def time.Duration) (time.Duration, error) {
-	if val := os.Getenv(key); val != "" {
+func envDurationOrError(def time.Duration, key string, alts ...string) (time.Duration, error) {
+	parse := func(val string) (time.Duration, error) {
 		parsed, err := time.ParseDuration(val)
 		if err == nil {
 			return parsed, nil
 		}
 		return 0, fmt.Errorf("ERROR: invalid duration env %s=%q: %v\n", key, val, err)
 	}
+
+	if val := os.Getenv(key); val != "" {
+		return parse(val)
+	}
+	for _, alt := range alts {
+		if val := os.Getenv(key); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			return parse(val)
+		}
+	}
 	return def, nil
 }
-func envDuration(key string, def time.Duration) time.Duration {
-	val, err := envDurationOrError(key, def)
+func envDuration(def time.Duration, key string, alts ...string) time.Duration {
+	val, err := envDurationOrError(def, key, alts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+		return 0
 	}
 	return val
 }
@@ -968,8 +989,14 @@ func logSafeArgs(args []string) []string {
 func logSafeEnv(env []string) []string {
 	ret := make([]string, len(env))
 	for i, ev := range env {
+		if strings.HasPrefix(ev, "GITSYNC_PASSWORD=") {
+			ev = "GITSYNC_PASSWORD=" + redactedString
+		}
 		if strings.HasPrefix(ev, "GIT_SYNC_PASSWORD=") {
 			ev = "GIT_SYNC_PASSWORD=" + redactedString
+		}
+		if strings.HasPrefix(ev, "GITSYNC_REPO=") {
+			ev = "GITSYNC_REPO=" + redactURL(ev[14:])
 		}
 		if strings.HasPrefix(ev, "GIT_SYNC_REPO=") {
 			ev = "GIT_SYNC_REPO=" + redactURL(ev[14:])
@@ -2042,40 +2069,40 @@ OPTIONS
     Many options can be specified as either a commandline flag or an environment
     variable.
 
-    --add-user, $GIT_SYNC_ADD_USER
+    --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
             needed to use SSH with an arbitrary UID (see --ssh).  This assumes
             that /etc/passwd is writable by the current UID.
 
-    --askpass-url <string>, $GIT_SYNC_ASKPASS_URL
+    --askpass-url <string>, $GITSYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
-    --change-permissions <int>, $GIT_SYNC_PERMISSIONS
+    --change-permissions <int>, $GITSYNC_PERMISSIONS
             Change permissions on the checked-out files to the specified mode.
 
-    --cookie-file <string>, $GIT_SYNC_COOKIE_FILE
+    --cookie-file <string>, $GITSYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
-    --depth <int>, $GIT_SYNC_DEPTH
+    --depth <int>, $GITSYNC_DEPTH
             Create a shallow clone with history truncated to the specified
             number of commits.  If not specified, this defaults to syncing a
             single commit.  Setting this to 0 will sync the full history of the
             repo.
 
-    --error-file <string>, $GIT_SYNC_ERROR_FILE
+    --error-file <string>, $GITSYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
             This may be an absolute path or a relative path, in which case it
             is relative to --root.  If it is relative to --root, the first path
             element may not start with a period.
 
-    --exechook-backoff <duration>, $GIT_SYNC_EXECHOOK_BACKOFF
+    --exechook-backoff <duration>, $GITSYNC_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --exechook-command.  If
             not specified, this defaults to 3 seconds ("3s").
 
-    --exechook-command <string>, $GIT_SYNC_EXECHOOK_COMMAND
+    --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The following
@@ -2085,15 +2112,15 @@ OPTIONS
             This flag obsoletes --sync-hook-command, but if sync-hook-command
             is specified, it will take precedence.
 
-    --exechook-timeout <duration>, $GIT_SYNC_EXECHOOK_TIMEOUT
+    --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
-    --git <string>, $GIT_SYNC_GIT
+    --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
             testing).  This defaults to "git".
 
-    --git-config <string>, $GIT_SYNC_GIT_CONFIG
+    --git-config <string>, $GITSYNC_GIT_CONFIG
             Additional git config options in a comma-separated 'key:val'
             format.  The parsed keys and values are passed to 'git config' and
             must be valid syntax for that command.
@@ -2111,7 +2138,7 @@ OPTIONS
             quoted values commas may be escaped, but are not required to be.
             Any other escape sequence is an error.
 
-    --git-gc <string>, $GIT_SYNC_GIT_GC
+    --git-gc <string>, $GITSYNC_GIT_GC
             The git garbage collection behavior: one of "auto", "always",
             "aggressive", or "off".  If not specified, this defaults to
             "auto".
@@ -2127,7 +2154,7 @@ OPTIONS
     -h, --help
             Print help text and exit.
 
-    --http-bind <string>, $GIT_SYNC_HTTP_BIND
+    --http-bind <string>, $GITSYNC_HTTP_BIND
             The bind address (including port) for git-sync's HTTP endpoint.  If
             not specified, the HTTP endpoint is not enabled.
 
@@ -2135,15 +2162,15 @@ OPTIONS
               ":1234": listen on any IP, port 1234
               "127.0.0.1:1234": listen on localhost, port 1234
 
-    --http-metrics, $GIT_SYNC_HTTP_METRICS
+    --http-metrics, $GITSYNC_HTTP_METRICS
             Enable metrics on git-sync's HTTP endpoint.  Requires --http-bind
             to be specified.
 
-    --http-pprof, $GIT_SYNC_HTTP_PPROF
+    --http-pprof, $GITSYNC_HTTP_PPROF
             Enable the pprof debug endpoints on git-sync's HTTP endpoint.
             Requires --http-bind to be specified.
 
-    --link <string>, $GIT_SYNC_LINK
+    --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
             current git directory, at the currently synced hash.  This may be
             an absolute path or a relative path, in which case it is relative
@@ -2156,91 +2183,91 @@ OPTIONS
     --man
             Print this manual and exit.
 
-    --max-failures <int>, $GIT_SYNC_MAX_FAILURES
+    --max-failures <int>, $GITSYNC_MAX_FAILURES
             The number of consecutive failures allowed before aborting (the
             first sync must succeed), Setting this to a negative value will
             retry forever after the initial sync.  If not specified, this
             defaults to 0, meaning any sync failure will terminate git-sync.
 
-    --one-time, $GIT_SYNC_ONE_TIME
+    --one-time, $GITSYNC_ONE_TIME
             Exit after one sync.
 
-    --password <string>, $GIT_SYNC_PASSWORD
+    --password <string>, $GITSYNC_PASSWORD
             The password or personal access token (see github docs) to use for
             git authentication (see --username).  NOTE: for security reasons,
-            users should prefer --password-file or $GIT_SYNC_PASSWORD_FILE for
+            users should prefer --password-file or $GITSYNC_PASSWORD_FILE for
             specifying the password.
 
-    --password-file <string>, $GIT_SYNC_PASSWORD_FILE
+    --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
             read.
 
-    --period <duration>, $GIT_SYNC_PERIOD
+    --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
 
-    --ref <string>, $GIT_SYNC_REF
+    --ref <string>, $GITSYNC_REF
             The git revision (branch, tag, or hash) to check out.  If not
             specified, this defaults to "HEAD" (of the upstream repo's default
             branch).
 
-    --repo <string>, $GIT_SYNC_REPO
+    --repo <string>, $GITSYNC_REPO
             The git repository to sync.  This flag is required.
 
-    --root <string>, $GIT_SYNC_ROOT
+    --root <string>, $GITSYNC_ROOT
             The root directory for git-sync operations, under which --link will
             be created.  This must be a path that either a) does not exist (it
             will be created); b) is an empty directory; or c) is a directory
             which can be emptied by removing all of the contents.  This flag is
             required.
 
-    --sparse-checkout-file <string>, $GIT_SYNC_SPARSE_CHECKOUT_FILE
+    --sparse-checkout-file <string>, $GITSYNC_SPARSE_CHECKOUT_FILE
             The path to a git sparse-checkout file (see git documentation for
             details) which controls which files and directories will be checked
             out.  If not specified, the default is to check out the entire repo.
 
-    --ssh, $GIT_SYNC_SSH
+    --ssh, $GITSYNC_SSH
             Use SSH for git authentication and operations.
 
-    --ssh-key-file <string>, $GIT_SYNC_SSH_KEY_FILE
+    --ssh-key-file <string>, $GITSYNC_SSH_KEY_FILE
             The SSH key to use when using --ssh.  If not specified, this
             defaults to "/etc/git-secret/ssh".
 
-    --ssh-known-hosts, $GIT_SYNC_KNOWN_HOSTS
+    --ssh-known-hosts, $GITSYNC_SSH_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.  If not
             specified, this defaults to true.
 
-    --ssh-known-hosts-file <string>, $GIT_SYNC_SSH_KNOWN_HOSTS_FILE
+    --ssh-known-hosts-file <string>, $GITSYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
             If not specified, this defaults to "/etc/git-secret/known_hosts".
 
-    --submodules <string>, $GIT_SYNC_SUBMODULES
+    --submodules <string>, $GITSYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
 
-    --sync-on-signal <string>, $GIT_SYNC_SYNC_ON_SIGNAL
+    --sync-on-signal <string>, $GITSYNC_SYNC_ON_SIGNAL
             Indicates that a sync attempt should occur upon receipt of the
             specified signal name (e.g. SIGHUP) or number (e.g. 1). If a sync
             is already in progress, another sync will be triggered as soon as
             the current one completes. If not specified, signals will not
             trigger syncs.
 
-    --sync-timeout <duration>, $GIT_SYNC_SYNC_TIMEOUT
+    --sync-timeout <duration>, $GITSYNC_SYNC_TIMEOUT
             The total time allowed for one complete sync.  This must be at least
             10ms.  This flag obsoletes --timeout, but if --timeout is specified,
             it will take precedence.  If not specified, this defaults to 120
             seconds ("120s").
 
-    --touch-file <string>, $GIT_SYNC_TOUCH_FILE
+    --touch-file <string>, $GITSYNC_TOUCH_FILE
             The path to an optional file which will be touched whenever a sync
             completes.  This may be an absolute path or a relative path, in
             which case it is relative to --root.  If it is relative to --root,
             the first path element may not start with a period.
 
-    --username <string>, $GIT_SYNC_USERNAME
+    --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
             --password).
 
@@ -2251,23 +2278,23 @@ OPTIONS
     --version
             Print the version and exit.
 
-    --webhook-backoff <duration>, $GIT_SYNC_WEBHOOK_BACKOFF
+    --webhook-backoff <duration>, $GITSYNC_WEBHOOK_BACKOFF
             The time to wait before retrying a failed --webhook-url.  If not
             specified, this defaults to 3 seconds ("3s").
 
-    --webhook-method <string>, $GIT_SYNC_WEBHOOK_METHOD
+    --webhook-method <string>, $GITSYNC_WEBHOOK_METHOD
             The HTTP method for the --webhook-url.  If not specified, this defaults to "POST".
 
-    --webhook-success-status <int>, $GIT_SYNC_WEBHOOK_SUCCESS_STATUS
+    --webhook-success-status <int>, $GITSYNC_WEBHOOK_SUCCESS_STATUS
             The HTTP status code indicating a successful --webhook-url.  Setting
             this to 0 disables success checks, which makes webhooks
             "fire-and-forget".  If not specified, this defaults to 200.
 
-    --webhook-timeout <duration>, $GIT_SYNC_WEBHOOK_TIMEOUT
+    --webhook-timeout <duration>, $GITSYNC_WEBHOOK_TIMEOUT
             The timeout for the --webhook-url.  If not specified, this defaults
             to 1 second ("1s").
 
-    --webhook-url <string>, $GIT_SYNC_WEBHOOK_URL
+    --webhook-url <string>, $GITSYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
             header 'Gitsync-Hash' will be set to the git hash that was synced.
 
@@ -2287,25 +2314,25 @@ AUTHENTICATION
     and "git@example.com:repo" will try to use SSH.
 
     username/password
-            The --username (GIT_SYNC_USERNAME) and --password-file
-            (GIT_SYNC_PASSWORD_FILE) or --password (GIT_SYNC_PASSWORD) flags
+            The --username (GITSYNC_USERNAME) and --password-file
+            (GITSYNC_PASSWORD_FILE) or --password (GITSYNC_PASSWORD) flags
             will be used.  To prevent password leaks, the --password-file flag
-            or GIT_SYNC_PASSWORD environment variable is almost always
+            or GITSYNC_PASSWORD environment variable is almost always
             preferred to the --password flag.
 
-            A variant of this is --askpass-url (GIT_SYNC_ASKPASS_URL), which
+            A variant of this is --askpass-url (GITSYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
 
     SSH
-            When --ssh (GIT_SYNC_SSH) is specified, the --ssh-key-file
-            (GIT_SYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
-            to also use --ssh-known-hosts (GIT_SYNC_KNOWN_HOSTS) and
-            --ssh-known-hosts-file (GIT_SYNC_SSH_KNOWN_HOSTS_FILE) when using
+            When --ssh (GITSYNC_SSH) is specified, the --ssh-key-file
+            (GITSYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
+            to also use --ssh-known-hosts (GITSYNC_SSH_KNOWN_HOSTS) and
+            --ssh-known-hosts-file (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using
             SSH.
 
     cookies
-            When --cookie-file (GIT_SYNC_COOKIE_FILE) is specified, the
+            When --cookie-file (GITSYNC_COOKIE_FILE) is specified, the
             associated cookies can contain authentication information.
 
 HOOKS

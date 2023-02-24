@@ -15,7 +15,7 @@
 # HOW TO USE THIS CONTAINER:
 #
 # The only commandline argument (or env var) that is really required is
-# `--repo` ($GIT_SYNC_REPO).  Everything else is optional (run this with
+# `--repo` ($GITSYNC_REPO).  Everything else is optional (run this with
 # `--man` for details).
 #
 # This container will run as UID:GID 65533:65533 by default.  For most users,
@@ -23,7 +23,7 @@
 #   a) use the default UID/GID and mount a volume on /git writeable by those
 #   b) set your own UID/GID and mount a volume on /git writeable by those
 #
-# If you mount a volume anywhere else, you must set `--root` ($GIT_SYNC_ROOT).
+# If you mount a volume anywhere else, you must set `--root` ($GITSYNC_ROOT).
 # If you do not mount a volume, this will run but you can't access the results
 # (which might be useful for testing, but not much else).
 #
@@ -36,7 +36,7 @@
 # permissions.
 #
 # If you set any UID other than the default and want to use git over SSH, you
-# should set `--add-user` ($GIT_SYNC_ADD_USER).
+# should set `--add-user` ($GITSYNC_ADD_USER).
 
 #############################################################################
 # First we prepare the image that we want, regardless of build layers.
@@ -101,11 +101,11 @@ ENV HOME=/tmp
 WORKDIR /tmp
 
 # Default values for flags.
-# Git-sync itself does not default the `--root` ($GIT_SYNC_ROOT) flag, but we
+# Git-sync itself does not default the `--root` ($GITSYNC_ROOT) flag, but we
 # can set a default here, which makes the container image easier to use.  The
 # permissions were set for the default git-sync UID and GID.  If the user needs
-# a different group or sets `--root` ($GIT_SYNC_ROOT), their values will
+# a different group or sets `--root` ($GITSYNC_ROOT), their values will
 # override this, and we assume they are handling permissions themselves.
-ENV GIT_SYNC_ROOT=/git
+ENV GITSYNC_ROOT=/git
 
 ENTRYPOINT ["/{ARG_BIN}"]

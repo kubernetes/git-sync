@@ -34,17 +34,17 @@ volumes:
 
 In your git-sync container configuration, mount your volume at
 "/etc/git-secret". Make sure to pass the `--cookie-file` flag or set the
-environment variable `GIT_SYNC_COOKIE_FILE` to "true", and to use a git repo
-(`--repo` flag or `GIT_SYNC_REPO` env) is set to use a URL with the HTTP
+environment variable `GITSYNC_COOKIE_FILE` to "true", and to use a git repo
+(`--repo` flag or `GITSYNC_REPO` env) is set to use a URL with the HTTP
 protocol.
 
 ```yaml
 name: "git-sync"
 ...
 env:
-  - name: GIT_SYNC_REPO
+  - name: GITSYNC_REPO
     value: https://github.com/kubernetes/kubernetes.git
-  - name: GIT_SYNC_COOKIE_FILE
+  - name: GITSYNC_COOKIE_FILE
     value: true
 volumeMounts:
   - name: git-secret

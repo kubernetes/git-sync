@@ -95,6 +95,12 @@ specified.
 
 The new `--man` flag prints a man-page style help document and exits.
 
+## Env vars
+
+Most flags can also be configured by environment variables.  In v3 the
+variables all start with `GIT_SYNC_`.  In v4 they all start with `GITSYNC_`,
+though the old names are still accepted for compatibility.
+
 ## Defaults
 
 ### Depth
