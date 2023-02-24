@@ -221,22 +221,22 @@ func init() {
 // Total pull/error, summary on pull duration
 var (
 	// TODO: have a marker for "which" servergroup
-	syncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	metricSyncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "git_sync_duration_seconds",
 		Help: "Summary of git_sync durations",
 	}, []string{"status"})
 
-	syncCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+	metricSyncCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_count_total",
 		Help: "How many git syncs completed, partitioned by state (success, error, noop)",
 	}, []string{"status"})
 
-	fetchCount = prometheus.NewCounter(prometheus.CounterOpts{
+	metricFetchCount = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "git_fetch_count_total",
 		Help: "How many git fetches were run",
 	})
 
-	askpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+	metricAskpassCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "git_sync_askpass_calls",
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",
 	}, []string{"status"})
@@ -268,10 +268,10 @@ const (
 const defaultDirMode = os.FileMode(0775) // subject to umask
 
 func init() {
-	prometheus.MustRegister(syncDuration)
-	prometheus.MustRegister(syncCount)
-	prometheus.MustRegister(fetchCount)
-	prometheus.MustRegister(askpassCount)
+	prometheus.MustRegister(metricSyncDuration)
+	prometheus.MustRegister(metricSyncCount)
+	prometheus.MustRegister(metricFetchCount)
+	prometheus.MustRegister(metricAskpassCount)
 }
 
 func envString(def string, key string, alts ...string) string {
@@ -948,10 +948,10 @@ func main() {
 			// When using an auth URL, the credentials can be dynamic, it needs to be
 			// re-fetched each time.
 			if err := git.CallAskPassURL(ctx); err != nil {
-				askpassCount.WithLabelValues(metricKeyError).Inc()
+				metricAskpassCount.WithLabelValues(metricKeyError).Inc()
 				return err
 			}
-			askpassCount.WithLabelValues(metricKeySuccess).Inc()
+			metricAskpassCount.WithLabelValues(metricKeySuccess).Inc()
 		}
 		return nil
 	}
@@ -1145,8 +1145,8 @@ func logSafeEnv(env []string) []string {
 }
 
 func updateSyncMetrics(key string, start time.Time) {
-	syncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
-	syncCount.WithLabelValues(key).Inc()
+	metricSyncDuration.WithLabelValues(key).Observe(time.Since(start).Seconds())
+	metricSyncCount.WithLabelValues(key).Inc()
 }
 
 // repoReady indicates that the repo has been synced.
@@ -1745,7 +1745,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		if err := git.fetch(ctx, remoteHash); err != nil {
 			return false, "", err
 		}
-		fetchCount.Inc()
+		metricFetchCount.Inc()
 
 		// Reset the repo (note: not the worktree - that happens later) to the new
 		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
