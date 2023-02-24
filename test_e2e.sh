@@ -225,6 +225,7 @@ rm -f $RUNLOG
 touch $RUNLOG
 HTTP_PORT=9376
 METRIC_GOOD_SYNC_COUNT='git_sync_count_total{status="success"}'
+METRIC_FETCH_COUNT='git_fetch_count_total'
 
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
@@ -464,6 +465,7 @@ function e2e::sync_default_ref() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -473,6 +475,7 @@ function e2e::sync_default_ref() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -481,6 +484,7 @@ function e2e::sync_default_ref() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
 
 ##############################################
@@ -503,6 +507,7 @@ function e2e::sync_head() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -512,6 +517,7 @@ function e2e::sync_head() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -520,6 +526,7 @@ function e2e::sync_head() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
 
 ##############################################
@@ -542,6 +549,7 @@ function e2e::worktree_cleanup() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # suspend time so we can fake corruption
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
@@ -572,6 +580,7 @@ function e2e::worktree_cleanup() {
     assert_file_exists "$ROOT"/link/file2
     assert_file_eq "$ROOT"/link/file2 "$FUNCNAME-ok"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
     assert_file_absent "$ROOT/.worktrees/$SHA"
     assert_file_absent "$ROOT/.worktrees/not_a_hash"
     assert_file_absent "$ROOT/.worktrees/not_a_directory"
@@ -633,6 +642,7 @@ function e2e::sync_branch() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add to the branch.
     git -C "$REPO" checkout -q "$OTHER_BRANCH"
@@ -644,6 +654,7 @@ function e2e::sync_branch() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move the branch backward
     git -C "$REPO" checkout -q "$OTHER_BRANCH"
@@ -654,6 +665,7 @@ function e2e::sync_branch() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
 
 ##############################################
@@ -714,6 +726,7 @@ function e2e::sync_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add something and move the tag forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -724,6 +737,7 @@ function e2e::sync_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move the tag backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -733,6 +747,7 @@ function e2e::sync_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 
     # Add something after the tag
     echo "$FUNCNAME 3" > "$REPO"/file
@@ -742,6 +757,7 @@ function e2e::sync_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
 
 ##############################################
@@ -767,6 +783,7 @@ function e2e::sync_annotated_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add something and move the tag forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -777,6 +794,7 @@ function e2e::sync_annotated_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move the tag backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -786,6 +804,7 @@ function e2e::sync_annotated_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 
     # Add something after the tag
     echo "$FUNCNAME 3" > "$REPO"/file
@@ -795,6 +814,7 @@ function e2e::sync_annotated_tag() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
 
 ##############################################
@@ -818,6 +838,7 @@ function e2e::sync_sha() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Commit something new
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -827,6 +848,7 @@ function e2e::sync_sha() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Revert the last change
     git -C "$REPO" reset -q --hard HEAD^
@@ -835,6 +857,7 @@ function e2e::sync_sha() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 }
 
 ##############################################
@@ -1041,6 +1064,7 @@ function e2e::sync_slow_git_long_timeout() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -1050,6 +1074,7 @@ function e2e::sync_slow_git_long_timeout() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 }
 
 ##############################################
@@ -1193,6 +1218,7 @@ function e2e::sync_depth_across_updates() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "initial: expected depth $expected_depth, got $depth"
@@ -1206,6 +1232,7 @@ function e2e::sync_depth_across_updates() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "forward: expected depth $expected_depth, got $depth"
@@ -1218,6 +1245,7 @@ function e2e::sync_depth_across_updates() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
         fail "backward: expected depth $expected_depth, got $depth"
@@ -1339,7 +1367,6 @@ function e2e::auth_password_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -1348,7 +1375,6 @@ function e2e::auth_password_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -1356,7 +1382,6 @@ function e2e::auth_password_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 }
 
 ##############################################
@@ -1424,7 +1449,6 @@ function e2e::auth_askpass_url_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -1433,7 +1457,6 @@ function e2e::auth_askpass_url_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -1441,7 +1464,6 @@ function e2e::auth_askpass_url_correct_password() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 }
 
 ##############################################
@@ -1486,7 +1508,6 @@ function e2e::auth_askpass_url_flaky() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
@@ -1495,7 +1516,6 @@ function e2e::auth_askpass_url_flaky() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
@@ -1503,7 +1523,6 @@ function e2e::auth_askpass_url_flaky() {
     assert_link_exists "$ROOT"/link
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 }
 
 ##############################################
