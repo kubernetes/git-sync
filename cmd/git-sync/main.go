@@ -161,6 +161,8 @@ var flSyncHookCommand = pflag.String("sync-hook-command", envString("GIT_SYNC_HO
 	"DEPRECATED: use --exechook-command instead")
 var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"DEPRECATED: use --max-failures instead")
+var flOldSkoolVerbose = pflag.Int("v", -1,
+	"DEPRECATED: use -v or --verbose instead")
 
 func init() {
 	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
@@ -169,6 +171,7 @@ func init() {
 	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
 	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
 	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	pflag.CommandLine.MarkDeprecated("v", "use -v or --verbose instead")
 	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
 }
 
@@ -383,6 +386,10 @@ func main() {
 	}
 
 	// Init logging very early, so most errors can be written to a file.
+	if *flOldSkoolVerbose >= 0 {
+		// Back-compat
+		*flVerbose = *flOldSkoolVerbose
+	}
 	log := func() *logging.Logger {
 		if strings.HasPrefix(*flErrorFile, ".") {
 			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'")
