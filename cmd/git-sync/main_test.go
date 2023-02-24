@@ -50,7 +50,7 @@ func TestEnvBool(t *testing.T) {
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val, err := envBoolOrError(testKey, testCase.def)
+		val, err := envBoolOrError(testCase.def, testKey)
 		if err != nil && !testCase.err {
 			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
 		}
@@ -81,7 +81,7 @@ func TestEnvString(t *testing.T) {
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val := envString(testKey, testCase.def)
+		val := envString(testCase.def, testKey)
 		if val != testCase.exp {
 			t.Fatalf("%q: expected %v but %v returned", testCase.value, testCase.exp, val)
 		}
@@ -104,7 +104,7 @@ func TestEnvInt(t *testing.T) {
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val, err := envIntOrError(testKey, testCase.def)
+		val, err := envIntOrError(testCase.def, testKey)
 		if err != nil && !testCase.err {
 			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
 		}
@@ -132,7 +132,7 @@ func TestEnvFloat(t *testing.T) {
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val, err := envFloatOrError(testKey, testCase.def)
+		val, err := envFloatOrError(testCase.def, testKey)
 		if err != nil && !testCase.err {
 			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
 		}
@@ -160,7 +160,7 @@ func TestEnvDuration(t *testing.T) {
 
 	for _, testCase := range cases {
 		os.Setenv(testKey, testCase.value)
-		val, err := envDurationOrError(testKey, testCase.def)
+		val, err := envDurationOrError(testCase.def, testKey)
 		if err != nil && !testCase.err {
 			t.Fatalf("%q: unexpected error: %v", testCase.value, err)
 		}

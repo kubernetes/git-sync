@@ -19,9 +19,9 @@ spec:
         - name: markdown
           mountPath: /tmp/git
         env:
-        - name: GIT_SYNC_REPO
+        - name: GITSYNC_REPO
           value: https://github.com/kubernetes/git-sync.git
-        - name: GIT_SYNC_LINK
+        - name: GITSYNC_LINK
           value: git-sync
       - name: hugo
         image: registry.k8s.io/hugo
