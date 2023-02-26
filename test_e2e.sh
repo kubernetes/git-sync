@@ -175,7 +175,7 @@ function init_repo() {
     rm -rf "$REPO"
     mkdir -p "$REPO"
     git -C "$REPO" init -q -b "$MAIN_BRANCH"
-    touch "$REPO"/file
+    touch "$REPO/file"
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
 
@@ -279,7 +279,7 @@ function remove_containers() {
 # Test init when root doesn't exist
 ##############################################
 function e2e::init_root_doesnt_exist() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -287,16 +287,16 @@ function e2e::init_root_doesnt_exist() {
         --repo="file://$REPO" \
         --root="$ROOT/subdir" \
         --link="link"
-    assert_link_exists "$ROOT"/subdir/link
-    assert_file_exists "$ROOT"/subdir/link/file
-    assert_file_eq "$ROOT"/subdir/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/subdir/link"
+    assert_file_exists "$ROOT/subdir/link/file"
+    assert_file_eq "$ROOT/subdir/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init when root exists and is empty
 ##############################################
 function e2e::init_root_exists_empty() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -304,16 +304,16 @@ function e2e::init_root_exists_empty() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init with a weird --root flag
 ##############################################
 function e2e::init_root_flag_is_weird() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -321,16 +321,16 @@ function e2e::init_root_flag_is_weird() {
         --repo="file://$REPO" \
         --root="../../../../../$ROOT/../../../../../../$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init with a symlink in --root
 ##############################################
 function e2e::init_root_flag_has_symlink() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
     mkdir -p "$ROOT/subdir"
     ln -s "$ROOT/subdir" "$ROOT/rootlink" # symlink to test
@@ -340,16 +340,16 @@ function e2e::init_root_flag_has_symlink() {
         --repo="file://$REPO" \
         --root="$ROOT/rootlink" \
         --link="link"
-    assert_link_exists "$ROOT"/subdir/link
-    assert_file_exists "$ROOT"/subdir/link/file
-    assert_file_eq "$ROOT"/subdir/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/subdir/link"
+    assert_file_exists "$ROOT/subdir/link/file"
+    assert_file_eq "$ROOT/subdir/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init when root is under a git repo
 ##############################################
 function e2e::init_root_is_under_another_repo() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     # Make a parent dir that is a git repo.
@@ -362,16 +362,16 @@ function e2e::init_root_is_under_another_repo() {
         --repo="file://$REPO" \
         --root="$ROOT/subdir/root" \
         --link="link"
-    assert_link_exists "$ROOT"/subdir/root/link
-    assert_file_exists "$ROOT"/subdir/root/link/file
-    assert_file_eq "$ROOT"/subdir/root/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/subdir/root/link"
+    assert_file_exists "$ROOT/subdir/root/link/file"
+    assert_file_eq "$ROOT/subdir/root/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init when root fails sanity
 ##############################################
 function e2e::init_root_fails_sanity() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
     SHA=$(git -C "$REPO" rev-parse HEAD)
 
@@ -384,16 +384,16 @@ function e2e::init_root_fails_sanity() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init with an absolute-path link
 ##############################################
 function e2e::sync_absolute_link() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -401,17 +401,17 @@ function e2e::sync_absolute_link() {
         --repo="file://$REPO" \
         --root="$ROOT/root" \
         --link="$ROOT/other/dir/link"
-    assert_file_absent "$ROOT"/root/link
-    assert_link_exists "$ROOT"/other/dir/link
-    assert_file_exists "$ROOT"/other/dir/link/file
-    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+    assert_file_absent "$ROOT/root/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test init with a subdir-path link
 ##############################################
 function e2e::sync_subdir_link() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -419,17 +419,17 @@ function e2e::sync_subdir_link() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="other/dir/link"
-    assert_file_absent "$ROOT"/link
-    assert_link_exists "$ROOT"/other/dir/link
-    assert_file_exists "$ROOT"/other/dir/link/file
-    assert_file_eq "$ROOT"/other/dir/link/file "$FUNCNAME"
+    assert_file_absent "$ROOT/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test non-zero exit with a bad ref
 ##############################################
 function e2e::bad_ref_non_zero_exit() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     (
@@ -444,8 +444,8 @@ function e2e::bad_ref_non_zero_exit() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
+        assert_file_absent "$ROOT/link"
+        assert_file_absent "$ROOT/link/file"
     )
 }
 
@@ -454,7 +454,7 @@ function e2e::bad_ref_non_zero_exit() {
 ##############################################
 function e2e::sync_default_ref() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" checkout -q -b weird-name
 
@@ -465,28 +465,28 @@ function e2e::sync_default_ref() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
@@ -496,7 +496,7 @@ function e2e::sync_default_ref() {
 ##############################################
 function e2e::sync_head() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -507,28 +507,28 @@ function e2e::sync_head() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
@@ -537,7 +537,7 @@ function e2e::sync_head() {
 # Test worktree-cleanup
 ##############################################
 function e2e::worktree_cleanup() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -549,9 +549,9 @@ function e2e::worktree_cleanup() {
 
     # wait for first sync
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
@@ -562,7 +562,7 @@ function e2e::worktree_cleanup() {
         done
 
     # make a second commit
-    echo "$FUNCNAME-ok" > "$REPO"/file2
+    echo "$FUNCNAME-ok" > "$REPO/file2"
     git -C "$REPO" add file2
     git -C "$REPO" commit -qam "$FUNCNAME new file"
 
@@ -582,8 +582,8 @@ function e2e::worktree_cleanup() {
         done
 
     wait_for_sync "${MAXWAIT}"
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME-ok"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_eq "$ROOT/link/file2" "$FUNCNAME-ok"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
     assert_file_absent "$ROOT/.worktrees/$SHA"
@@ -595,7 +595,7 @@ function e2e::worktree_cleanup() {
 # Test v3->v4 upgrade
 ##############################################
 function e2e::v3_v4_upgrade_in_place() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     # sync once
@@ -605,9 +605,9 @@ function e2e::v3_v4_upgrade_in_place() {
         --root="$ROOT" \
         --link="link"
 
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # simulate v3's worktrees
     WT="$(readlink "$ROOT/link")"
@@ -616,7 +616,7 @@ function e2e::v3_v4_upgrade_in_place() {
     ln -sf "$SHA" "$ROOT/link"
 
     # make a second commit
-    echo "$FUNCNAME 2" > "$REPO"/file2
+    echo "$FUNCNAME 2" > "$REPO/file2"
     git -C "$REPO" add file2
     git -C "$REPO" commit -qam "$FUNCNAME new file"
 
@@ -627,11 +627,11 @@ function e2e::v3_v4_upgrade_in_place() {
         --root="$ROOT" \
         --link="link"
 
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_eq "$ROOT/link/file2" "$FUNCNAME 2"
     assert_file_absent "$ROOT/$SHA"
 }
 
@@ -640,7 +640,7 @@ function e2e::v3_v4_upgrade_in_place() {
 ##############################################
 function e2e::readlink() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -650,21 +650,21 @@ function e2e::readlink() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_exists "$ROOT/link"
+    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_exists "$ROOT/link"
+    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_link_basename_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_exists "$ROOT/link"
+    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
 }
 
 ##############################################
@@ -675,7 +675,7 @@ function e2e::sync_branch() {
 
     # First sync
     git -C "$REPO" checkout -q -b "$OTHER_BRANCH"
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" checkout -q "$MAIN_BRANCH"
 
@@ -687,21 +687,21 @@ function e2e::sync_branch() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add to the branch.
     git -C "$REPO" checkout -q "$OTHER_BRANCH"
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     git -C "$REPO" checkout -q "$MAIN_BRANCH"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
@@ -710,9 +710,9 @@ function e2e::sync_branch() {
     git -C "$REPO" reset -q --hard HEAD^
     git -C "$REPO" checkout -q "$MAIN_BRANCH"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
@@ -722,7 +722,7 @@ function e2e::sync_branch() {
 ##############################################
 function e2e::sync_branch_switch() {
     # First sync
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -732,13 +732,13 @@ function e2e::sync_branch_switch() {
         --depth=1 \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 
     OTHER_BRANCH="${MAIN_BRANCH}2"
     git -C "$REPO" checkout -q -b $OTHER_BRANCH
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
 
     GIT_SYNC \
@@ -747,9 +747,9 @@ function e2e::sync_branch_switch() {
         --ref=$OTHER_BRANCH \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
@@ -759,7 +759,7 @@ function e2e::sync_tag() {
     TAG="e2e-tag"
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" tag -f "$TAG" >/dev/null
 
@@ -771,20 +771,20 @@ function e2e::sync_tag() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add something and move the tag forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     git -C "$REPO" tag -f "$TAG" >/dev/null
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
@@ -792,19 +792,19 @@ function e2e::sync_tag() {
     git -C "$REPO" reset -q --hard HEAD^
     git -C "$REPO" tag -f "$TAG" >/dev/null
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 
     # Add something after the tag
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     sleep 1 # touch-file will not be touched
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
@@ -816,7 +816,7 @@ function e2e::sync_annotated_tag() {
     TAG="e2e-tag"
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 1" >/dev/null
 
@@ -828,20 +828,20 @@ function e2e::sync_annotated_tag() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Add something and move the tag forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 2" >/dev/null
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 
@@ -849,19 +849,19 @@ function e2e::sync_annotated_tag() {
     git -C "$REPO" reset -q --hard HEAD^
     git -C "$REPO" tag -af "$TAG" -m "$FUNCNAME 3" >/dev/null
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 
     # Add something after the tag
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     sleep 1 # touch-file will not be touched
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
@@ -871,7 +871,7 @@ function e2e::sync_annotated_tag() {
 ##############################################
 function e2e::sync_sha() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
 
@@ -883,28 +883,28 @@ function e2e::sync_sha() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Commit something new
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     sleep 1 # touch-file will not be touched
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Revert the last change
     git -C "$REPO" reset -q --hard HEAD^
     sleep 1 # touch-file will not be touched
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 }
@@ -914,7 +914,7 @@ function e2e::sync_sha() {
 ##############################################
 function e2e::sync_sha_once() {
     # First sync
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
 
@@ -924,9 +924,9 @@ function e2e::sync_sha_once() {
         --ref="$SHA" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
@@ -934,13 +934,13 @@ function e2e::sync_sha_once() {
 ##############################################
 function e2e::sync_sha_once_sync_different_sha_known() {
     # All revs will be known because we check out the branch
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     SHA1=$(git -C "$REPO" rev-list -n1 HEAD)
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     SHA2=$(git -C "$REPO" rev-list -n1 HEAD)
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
     # Sync SHA1
@@ -950,9 +950,9 @@ function e2e::sync_sha_once_sync_different_sha_known() {
         --ref="$SHA1" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Sync SHA2
     GIT_SYNC \
@@ -961,16 +961,16 @@ function e2e::sync_sha_once_sync_different_sha_known() {
         --ref="$SHA2" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
 # Test SHA-sync on a different SHA we do not have
 ##############################################
 function e2e::sync_sha_once_sync_different_sha_unknown() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     SHA1=$(git -C "$REPO" rev-list -n1 HEAD)
 
@@ -981,17 +981,17 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
         --ref="$SHA1" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # The locally synced repo does not know this new SHA.
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     SHA2=$(git -C "$REPO" rev-list -n1 HEAD)
     # Make sure the SHA is not at HEAD, to prevent things that only work in
     # that case.
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
     # Sync SHA2
@@ -1001,9 +1001,9 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
         --ref="$SHA2" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
@@ -1011,7 +1011,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
 ##############################################
 function e2e::sync_crash_cleanup_retry() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1019,12 +1019,12 @@ function e2e::sync_crash_cleanup_retry() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Corrupt it
-    rm -f "$ROOT"/link
+    rm -f "$ROOT/link"
 
     # Try again
     GIT_SYNC \
@@ -1032,9 +1032,9 @@ function e2e::sync_crash_cleanup_retry() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1042,7 +1042,7 @@ function e2e::sync_crash_cleanup_retry() {
 ##############################################
 function e2e::sync_repo_switch() {
     # Prepare first repo
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # First sync
@@ -1051,12 +1051,12 @@ function e2e::sync_repo_switch() {
         --root="$ROOT" \
         --link="link" \
         --one-time
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Prepare other repo
-    echo "$FUNCNAME 2" > "$REPO2"/file
+    echo "$FUNCNAME 2" > "$REPO2/file"
     git -C "$REPO2" commit -qam "$FUNCNAME 2"
 
     # Now sync the other repo
@@ -1065,9 +1065,9 @@ function e2e::sync_repo_switch() {
         --root="$ROOT" \
         --link="link" \
         --one-time
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
@@ -1075,7 +1075,7 @@ function e2e::sync_repo_switch() {
 ##############################################
 function e2e::error_slow_git_short_timeout() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1088,7 +1088,7 @@ function e2e::error_slow_git_short_timeout() {
         || true
 
     # check for failure
-    assert_file_absent "$ROOT"/link/file
+    assert_file_absent "$ROOT/link/file"
 }
 
 ##############################################
@@ -1096,7 +1096,7 @@ function e2e::error_slow_git_short_timeout() {
 ##############################################
 function e2e::sync_slow_git_long_timeout() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # run with slow_git_clone but without timing out
@@ -1109,19 +1109,19 @@ function e2e::sync_slow_git_long_timeout() {
         --link="link" \
         &
     wait_for_sync "$((MAXWAIT * 3))"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
 
     # Move forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "$((MAXWAIT * 3))"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
 }
@@ -1131,7 +1131,7 @@ function e2e::sync_slow_git_long_timeout() {
 ##############################################
 function e2e::sync_on_signal_sighup() {
      # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1142,20 +1142,20 @@ function e2e::sync_on_signal_sighup() {
         --link="link" \
         &
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     # Send signal (note --period is 100s, signal should trigger sync)
     CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
     docker_signal "$CTR" SIGHUP
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
@@ -1163,7 +1163,7 @@ function e2e::sync_on_signal_sighup() {
 ##############################################
 function e2e::sync_on_signal_hup() {
      # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1174,20 +1174,20 @@ function e2e::sync_on_signal_hup() {
         --link="link" \
         &
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     # Send signal (note --period is 100s, signal should trigger sync)
     CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
     docker_signal "$CTR" SIGHUP
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
@@ -1195,7 +1195,7 @@ function e2e::sync_on_signal_hup() {
 ##############################################
 function e2e::sync_on_signal_1() {
      # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1206,31 +1206,31 @@ function e2e::sync_on_signal_1() {
         --link="link" \
         &
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     # Send signal (note --period is 100s, signal should trigger sync)
     CTR=$(docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}")
     docker_signal "$CTR" SIGHUP
     wait_for_sync 3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 }
 
 ##############################################
 # Test depth default is shallow
 ##############################################
 function e2e::sync_depth_default_shallow() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
     GIT_SYNC \
@@ -1238,8 +1238,8 @@ function e2e::sync_depth_default_shallow() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $depth != 1 ]]; then
         fail "expected depth 1, got $depth"
@@ -1252,7 +1252,7 @@ function e2e::sync_depth_default_shallow() {
 function e2e::sync_depth_across_updates() {
     # First sync
     expected_depth="1"
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1263,9 +1263,9 @@ function e2e::sync_depth_across_updates() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
@@ -1274,12 +1274,12 @@ function e2e::sync_depth_across_updates() {
     fi
 
     # Move forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
@@ -1290,9 +1290,9 @@ function e2e::sync_depth_across_updates() {
     # Move backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
@@ -1305,11 +1305,11 @@ function e2e::sync_depth_across_updates() {
 # Test depth switching on back-to-back runs
 ##############################################
 function e2e::sync_depth_change_on_restart() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    echo "$FUNCNAME 3" > "$REPO"/file
+    echo "$FUNCNAME 3" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 3"
 
     # Sync depth=1
@@ -1320,8 +1320,8 @@ function e2e::sync_depth_change_on_restart() {
         --root="$ROOT" \
         --link="link"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $depth != 1 ]]; then
         fail "expected depth 1, got $depth"
@@ -1335,8 +1335,8 @@ function e2e::sync_depth_change_on_restart() {
         --root="$ROOT" \
         --link="link"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $depth != 2 ]]; then
         fail "expected depth 2, got $depth"
@@ -1350,8 +1350,8 @@ function e2e::sync_depth_change_on_restart() {
         --root="$ROOT" \
         --link="link"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $depth != 1 ]]; then
         fail "expected depth 1, got $depth"
@@ -1365,8 +1365,8 @@ function e2e::sync_depth_change_on_restart() {
         --root="$ROOT" \
         --link="link"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $depth != 4 ]]; then
         fail "expected depth 4, got $depth"
@@ -1377,7 +1377,7 @@ function e2e::sync_depth_change_on_restart() {
 # Test password auth with the wrong password
 ##############################################
 function e2e::auth_password_wrong_password() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # run with askpass_git but with wrong password
@@ -1392,14 +1392,14 @@ function e2e::auth_password_wrong_password() {
         || true
 
     # check for failure
-    assert_file_absent "$ROOT"/link/file
+    assert_file_absent "$ROOT/link/file"
 }
 
 ##############################################
 # Test password auth with the correct password
 ##############################################
 function e2e::auth_password_correct_password() {
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # run with askpass_git with correct password
@@ -1413,24 +1413,24 @@ function e2e::auth_password_correct_password() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1461,7 +1461,7 @@ function e2e::auth_askpass_url_wrong_password() {
         || true
 
     # check for failure
-    assert_file_absent "$ROOT"/link/file
+    assert_file_absent "$ROOT/link/file"
 }
 
 ##############################################
@@ -1483,7 +1483,7 @@ function e2e::auth_askpass_url_correct_password() {
     IP=$(docker_ip "$CTR")
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1495,24 +1495,24 @@ function e2e::auth_askpass_url_correct_password() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1541,7 +1541,7 @@ function e2e::auth_askpass_url_flaky() {
     IP=$(docker_ip "$CTR")
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1554,24 +1554,24 @@ function e2e::auth_askpass_url_flaky() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1579,7 +1579,7 @@ function e2e::auth_askpass_url_flaky() {
 ##############################################
 function e2e::exechook_success() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1590,23 +1590,23 @@ function e2e::exechook_success() {
         --exechook-command="/$EXECHOOK_COMMAND" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/exechook
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 
     # Move forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/exechook
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
-    assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 2"
-    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
+    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 2"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
 ##############################################
@@ -1616,7 +1616,7 @@ function e2e::exechook_fail_retry() {
     cat /dev/null > "$RUNLOG"
 
     # First sync - return a failure to ensure that we try again
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1641,7 +1641,7 @@ function e2e::exechook_fail_retry() {
 ##############################################
 function e2e::exechook_success_once() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1652,12 +1652,12 @@ function e2e::exechook_success_once() {
         --exechook-command="/$EXECHOOK_COMMAND_SLEEPY"
 
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/exechook
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/exechook "$FUNCNAME 1"
-    assert_file_eq "$ROOT"/link/exechook-env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
 ##############################################
@@ -1667,7 +1667,7 @@ function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
 
     # First sync - return a failure to ensure that we try again
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     (
@@ -1690,9 +1690,9 @@ function e2e::exechook_fail_once() {
     if [[ "$RUNS" != 1 ]]; then
         fail "exechook called $RUNS times, it should be at exactly 1"
     fi
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1711,7 +1711,7 @@ function e2e::webhook_success() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1733,7 +1733,7 @@ function e2e::webhook_success() {
 
     # Move forward
     cat /dev/null > "$HITLOG"
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
 
     # check that another call works
@@ -1761,7 +1761,7 @@ function e2e::webhook_fail_retry() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1815,7 +1815,7 @@ function e2e::webhook_success_once() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1850,7 +1850,7 @@ function e2e::webhook_fail_retry_once() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     (
@@ -1874,9 +1874,9 @@ function e2e::webhook_fail_retry_once() {
     if [[ "$HITS" != 1 ]]; then
         fail "webhook called $HITS times"
     fi
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 }
 
 ##############################################
@@ -1896,7 +1896,7 @@ function e2e::webhook_fire_and_forget() {
     IP=$(docker_ip "$CTR")
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1922,7 +1922,7 @@ function e2e::webhook_fire_and_forget() {
 ##############################################
 function e2e::expose_http() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -1970,7 +1970,7 @@ function e2e::expose_http() {
 # Test http handler after restart
 ##############################################
 function e2e::expose_http_after_restart() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     # Sync once to set up the repo
@@ -1979,9 +1979,9 @@ function e2e::expose_http_after_restart() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 
     # Sync again and prove readiness.
     GIT_SYNC \
@@ -2006,9 +2006,9 @@ function e2e::expose_http_after_restart() {
     if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 200 ]] ; then
         fail "health endpoint failed"
     fi
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
@@ -2021,7 +2021,7 @@ function e2e::submodule_sync_default() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    echo "submodule" > "$SUBMODULE"/submodule
+    echo "submodule" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" add submodule
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
@@ -2031,7 +2031,7 @@ function e2e::submodule_sync_default() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule"
     git -C "$NESTED_SUBMODULE" add nested-submodule
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
 
@@ -2046,22 +2046,22 @@ function e2e::submodule_sync_default() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "submodule"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Make change in submodule repo
-    echo "$FUNCNAME 2" > "$SUBMODULE"/submodule
+    echo "$FUNCNAME 2" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" commit -qam "$FUNCNAME 2"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move backward in submodule repo
@@ -2069,10 +2069,10 @@ function e2e::submodule_sync_default() {
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "submodule"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 
     # Add nested submodule to submodule repo
@@ -2081,36 +2081,36 @@ function e2e::submodule_sync_default() {
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 4"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule "nested-submodule"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule" "nested-submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 4
 
     # Remove nested submodule
     git -C "$SUBMODULE" submodule deinit -q $NESTED_SUBMODULE_REPO_NAME
-    rm -rf "$SUBMODULE"/.git/modules/$NESTED_SUBMODULE_REPO_NAME
+    rm -rf "$SUBMODULE/.git/modules/$NESTED_SUBMODULE_REPO_NAME"
     git -C "$SUBMODULE" rm -qf $NESTED_SUBMODULE_REPO_NAME
     git -C "$SUBMODULE" commit -aqm "delete nested submodule"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 5"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 5
 
     # Remove submodule
     git -C "$REPO" submodule deinit -q $SUBMODULE_REPO_NAME
-    rm -rf "$REPO"/.git/modules/$SUBMODULE_REPO_NAME
+    rm -rf "$REPO/.git/modules/$SUBMODULE_REPO_NAME"
     git -C "$REPO" rm -qf $SUBMODULE_REPO_NAME
     git -C "$REPO" commit -aqm "delete submodule"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 6
 
     rm -rf $SUBMODULE
@@ -2130,11 +2130,11 @@ function e2e::submodule_sync_depth() {
 
     # First sync
     expected_depth="1"
-    echo "$FUNCNAME 1" > "$SUBMODULE"/submodule
+    echo "$FUNCNAME 1" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" add submodule
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 1"
     git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
-    git -C "$REPO" config -f "$REPO"/.gitmodules submodule.$SUBMODULE_REPO_NAME.shallow true
+    git -C "$REPO" config -f "$REPO/.gitmodules" "submodule.$SUBMODULE_REPO_NAME.shallow" true
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -2145,9 +2145,9 @@ function e2e::submodule_sync_depth() {
         --link="link" \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2159,14 +2159,14 @@ function e2e::submodule_sync_depth() {
     fi
 
     # Move forward
-    echo "$FUNCNAME 2" > "$SUBMODULE"/submodule
+    echo "$FUNCNAME 2" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 2"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2182,9 +2182,9 @@ function e2e::submodule_sync_depth() {
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote  > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_eq "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2207,7 +2207,7 @@ function e2e::submodule_sync_off() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    echo "submodule" > "$SUBMODULE"/submodule
+    echo "submodule" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" add submodule
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
@@ -2223,7 +2223,7 @@ function e2e::submodule_sync_off() {
         --submodules=off \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
     rm -rf $SUBMODULE
 }
 
@@ -2237,7 +2237,7 @@ function e2e::submodule_sync_shallow() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    echo "submodule" > "$SUBMODULE"/submodule
+    echo "submodule" > "$SUBMODULE/submodule"
     git -C "$SUBMODULE" add submodule
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
@@ -2247,7 +2247,7 @@ function e2e::submodule_sync_shallow() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    echo "nested-submodule" > "$NESTED_SUBMODULE"/nested-submodule
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule"
     git -C "$NESTED_SUBMODULE" add nested-submodule
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
     git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE
@@ -2265,10 +2265,10 @@ function e2e::submodule_sync_shallow() {
         --submodules=shallow \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/$SUBMODULE_REPO_NAME/submodule
-    assert_file_absent "$ROOT"/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
     rm -rf $SUBMODULE
     rm -rf $NESTED_SUBMODULE
 }
@@ -2277,7 +2277,7 @@ function e2e::submodule_sync_shallow() {
 # Test SSH
 ##############################################
 function e2e::auth_ssh() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
 
     # Run a git-over-SSH server
     CTR=$(docker_run \
@@ -2288,7 +2288,7 @@ function e2e::auth_ssh() {
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -2300,26 +2300,26 @@ function e2e::auth_ssh() {
         --ssh-known-hosts=false \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 }
 
@@ -2327,13 +2327,13 @@ function e2e::auth_ssh() {
 # Test sparse-checkout files
 ##############################################
 function e2e::sparse_checkout() {
-    echo "!/*" > "$WORK"/sparseconfig
-    echo "!/*/" >> "$WORK"/sparseconfig
-    echo "file2" >> "$WORK"/sparseconfig
-    echo "$FUNCNAME" > "$REPO"/file
-    echo "$FUNCNAME" > "$REPO"/file2
-    mkdir "$REPO"/dir
-    echo "$FUNCNAME" > "$REPO"/dir/file3
+    echo "!/*" > "$WORK/sparseconfig"
+    echo "!/*/" >> "$WORK/sparseconfig"
+    echo "file2" >> "$WORK/sparseconfig"
+    echo "$FUNCNAME" > "$REPO/file"
+    echo "$FUNCNAME" > "$REPO/file2"
+    mkdir "$REPO/dir"
+    echo "$FUNCNAME" > "$REPO/dir/file3"
     git -C "$REPO" add file2
     git -C "$REPO" add dir
     git -C "$REPO" commit -qam "$FUNCNAME"
@@ -2344,19 +2344,19 @@ function e2e::sparse_checkout() {
         --root="$ROOT" \
         --link="link" \
         --sparse-checkout-file="$WORK/sparseconfig"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_absent "$ROOT"/link/file
-    assert_file_absent "$ROOT"/link/dir/file3
-    assert_file_absent "$ROOT"/link/dir
-    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_absent "$ROOT/link/file"
+    assert_file_absent "$ROOT/link/dir/file3"
+    assert_file_absent "$ROOT/link/dir"
+    assert_file_eq "$ROOT/link/file2" "$FUNCNAME"
 }
 
 ##############################################
 # Test additional git configs
 ##############################################
 function e2e::additional_git_configs() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -2365,16 +2365,16 @@ function e2e::additional_git_configs() {
         --root="$ROOT" \
         --link="link" \
         --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val'
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test export-error
 ##############################################
 function e2e::export_error() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     (
@@ -2389,9 +2389,9 @@ function e2e::export_error() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-        assert_file_contains "$ROOT"/error.json "unknown revision"
+        assert_file_absent "$ROOT/link"
+        assert_file_absent "$ROOT/link/file"
+        assert_file_contains "$ROOT/error.json" "unknown revision"
     )
 
     # the error.json file should be removed if sync succeeds.
@@ -2401,17 +2401,17 @@ function e2e::export_error() {
         --root="$ROOT" \
         --link="link" \
         --error-file="error.json"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
-    assert_file_absent "$ROOT"/error.json
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_file_absent "$ROOT/error.json"
 }
 
 ##############################################
 # Test export-error with an absolute path
 ##############################################
 function e2e::export_error_abs_path() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     (
@@ -2426,9 +2426,9 @@ function e2e::export_error_abs_path() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-        assert_file_contains "$ROOT"/dir/error.json "unknown revision"
+        assert_file_absent "$ROOT/link"
+        assert_file_absent "$ROOT/link/file"
+        assert_file_contains "$ROOT/dir/error.json" "unknown revision"
     )
 }
 
@@ -2436,7 +2436,7 @@ function e2e::export_error_abs_path() {
 # Test export-error with invalid path
 ##############################################
 function e2e::export_error_invalid_file() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     (
@@ -2450,9 +2450,9 @@ function e2e::export_error_invalid_file() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-        assert_file_absent "$ROOT"/.error.json
+        assert_file_absent "$ROOT/link"
+        assert_file_absent "$ROOT/link/file"
+        assert_file_absent "$ROOT/.error.json"
     )
 }
 
@@ -2461,7 +2461,7 @@ function e2e::export_error_invalid_file() {
 ##############################################
 function e2e::touch_file() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -2471,43 +2471,43 @@ function e2e::touch_file() {
         --link="link" \
         --touch-file="touch.file" \
         &
-    wait_for_file_exists "$ROOT"/touch.file 3
-    assert_file_exists "$ROOT"/touch.file
-    rm -f "$ROOT"/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    wait_for_file_exists "$ROOT/touch.file" 3
+    assert_file_exists "$ROOT/touch.file"
+    rm -f "$ROOT/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/touch.file
+    assert_file_absent "$ROOT/touch.file"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    wait_for_file_exists "$ROOT"/touch.file 3
-    assert_file_exists "$ROOT"/touch.file
-    rm -f "$ROOT"/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    wait_for_file_exists "$ROOT/touch.file" 3
+    assert_file_exists "$ROOT/touch.file"
+    rm -f "$ROOT/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/touch.file
+    assert_file_absent "$ROOT/touch.file"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
-    wait_for_file_exists "$ROOT"/touch.file 3
-    assert_file_exists "$ROOT"/touch.file
-    rm -f "$ROOT"/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    wait_for_file_exists "$ROOT/touch.file" 3
+    assert_file_exists "$ROOT/touch.file"
+    rm -f "$ROOT/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/touch.file
+    assert_file_absent "$ROOT/touch.file"
 }
 
 ##############################################
@@ -2515,7 +2515,7 @@ function e2e::touch_file() {
 ##############################################
 function e2e::touch_file_abs_path() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO"/file
+    echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
@@ -2525,50 +2525,50 @@ function e2e::touch_file_abs_path() {
         --link="link" \
         --touch-file="$ROOT/dir/touch.file" \
         &
-    wait_for_file_exists "$ROOT"/dir/touch.file 3
-    assert_file_exists "$ROOT"/dir/touch.file
-    rm -f "$ROOT"/dir/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    wait_for_file_exists "$ROOT/dir/touch.file" 3
+    assert_file_exists "$ROOT/dir/touch.file"
+    rm -f "$ROOT/dir/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/dir/touch.file
+    assert_file_absent "$ROOT/dir/touch.file"
 
     # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO"/file
+    echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
-    wait_for_file_exists "$ROOT"/dir/touch.file 3
-    assert_file_exists "$ROOT"/dir/touch.file
-    rm -f "$ROOT"/dir/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 2"
+    wait_for_file_exists "$ROOT/dir/touch.file" 3
+    assert_file_exists "$ROOT/dir/touch.file"
+    rm -f "$ROOT/dir/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/dir/touch.file
+    assert_file_absent "$ROOT/dir/touch.file"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
-    wait_for_file_exists "$ROOT"/dir/touch.file 3
-    assert_file_exists "$ROOT"/dir/touch.file
-    rm -f "$ROOT"/dir/touch.file
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    wait_for_file_exists "$ROOT/dir/touch.file" 3
+    assert_file_exists "$ROOT/dir/touch.file"
+    rm -f "$ROOT/dir/touch.file"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # It should not come back until we commit again.
     sleep 1
-    assert_file_absent "$ROOT"/dir/touch.file
+    assert_file_absent "$ROOT/dir/touch.file"
 }
 
 ##############################################
 # Test touch-file with invalid path
 ##############################################
 function e2e::touch_file_invalid_file() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     (
@@ -2582,9 +2582,9 @@ function e2e::touch_file_invalid_file() {
         if [[ "$RET" != 1 ]]; then
             fail "expected exit code 1, got $RET"
         fi
-        assert_file_absent "$ROOT"/link
-        assert_file_absent "$ROOT"/link/file
-        assert_file_absent "$ROOT"/.touch.file
+        assert_file_absent "$ROOT/link"
+        assert_file_absent "$ROOT/link/file"
+        assert_file_absent "$ROOT/.touch.file"
     )
 }
 
@@ -2598,7 +2598,7 @@ function e2e::github_https() {
         --repo="https://github.com/kubernetes/git-sync" \
         --root="$ROOT" \
         --link="link"
-    assert_file_exists "$ROOT"/link/LICENSE
+    assert_file_exists "$ROOT/link/LICENSE"
 }
 
 ##############################################
@@ -2606,11 +2606,11 @@ function e2e::github_https() {
 ##############################################
 function e2e::gc_default() {
     SHA1=$(git -C "$REPO" rev-parse HEAD)
-    dd if=/dev/urandom of="$REPO"/big1 bs=1024 count=4096 >/dev/null
+    dd if=/dev/urandom of="$REPO/big1" bs=1024 count=4096 >/dev/null
     git -C "$REPO" add .
     git -C "$REPO" commit -qam "$FUNCNAME 1"
     SHA2=$(git -C "$REPO" rev-parse HEAD)
-    dd if=/dev/urandom of="$REPO"/big2 bs=1024 count=4096 >/dev/null
+    dd if=/dev/urandom of="$REPO/big2" bs=1024 count=4096 >/dev/null
     git -C "$REPO" add .
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     SHA3=$(git -C "$REPO" rev-parse HEAD)
@@ -2622,9 +2622,9 @@ function e2e::gc_default() {
         --link="link" \
         --ref="$SHA3" \
         --depth=0
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/big1
-    assert_file_exists "$ROOT"/link/big2
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/big1"
+    assert_file_exists "$ROOT/link/big2"
     SIZE=$(du -s "$ROOT" | cut -f1)
     if [ "$SIZE" -lt 14000 ]; then
         fail "repo is impossibly small: $SIZE"
@@ -2640,9 +2640,9 @@ function e2e::gc_default() {
         --link="link" \
         --ref="$SHA3" \
         --depth=1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/big1
-    assert_file_exists "$ROOT"/link/big2
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/big1"
+    assert_file_exists "$ROOT/link/big2"
     SIZE=$(du -s "$ROOT" | cut -f1)
     if [ "$SIZE" -lt 14000 ]; then
         fail "repo is impossibly small: $SIZE"
@@ -2658,9 +2658,9 @@ function e2e::gc_default() {
         --link="link" \
         --ref="$SHA2" \
         --depth=1
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/big1
-    assert_file_absent "$ROOT"/link/big2
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/big1"
+    assert_file_absent "$ROOT/link/big2"
     SIZE=$(du -s "$ROOT" | cut -f1)
     if [ "$SIZE" -lt 7000 ]; then
         fail "repo is impossibly small: $SIZE"
@@ -2676,9 +2676,9 @@ function e2e::gc_default() {
         --link="link" \
         --ref="$SHA1" \
         --depth=1
-    assert_link_exists "$ROOT"/link
-    assert_file_absent "$ROOT"/link/big1
-    assert_file_absent "$ROOT"/link/big2
+    assert_link_exists "$ROOT/link"
+    assert_file_absent "$ROOT/link/big1"
+    assert_file_absent "$ROOT/link/big2"
     SIZE=$(du -s "$ROOT" | cut -f1)
     if [ "$SIZE" -lt 100 ]; then
         fail "repo is impossibly small: $SIZE"
@@ -2692,7 +2692,7 @@ function e2e::gc_default() {
 # Test git-gc=auto
 ##############################################
 function e2e::gc_auto() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -2701,16 +2701,16 @@ function e2e::gc_auto() {
         --root="$ROOT" \
         --link="link" \
         --git-gc="auto"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test git-gc=always
 ##############################################
 function e2e::gc_always() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -2719,16 +2719,16 @@ function e2e::gc_always() {
         --root="$ROOT" \
         --link="link" \
         --git-gc="always"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test git-gc=aggressive
 ##############################################
 function e2e::gc_aggressive() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -2737,16 +2737,16 @@ function e2e::gc_aggressive() {
         --root="$ROOT" \
         --link="link" \
         --git-gc="aggressive"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
 # Test git-gc=off
 ##############################################
 function e2e::gc_off() {
-    echo "$FUNCNAME" > "$REPO"/file
+    echo "$FUNCNAME" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
@@ -2755,9 +2755,9 @@ function e2e::gc_off() {
         --root="$ROOT" \
         --link="link" \
         --git-gc="off"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 #
