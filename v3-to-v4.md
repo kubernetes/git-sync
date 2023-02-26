@@ -4,6 +4,11 @@ Git-sync v4 is a significant change from v3.  It includes several flag changes
 (though many of the old flags are kept for backwards compatibility), but more
 importantly it fundamentally changes the way the internal sync-loop works.
 
+It should be possible to upgrade a synced repo (e.g. in a volume) from git-sync
+v3 to git-sync v4, but appropriate caution should be used for critical
+deployments.  We have a test which covers this, but there are many degrees of
+config which we simply can't predict.
+
 ## The v3 loop
 
 The way git-sync v3.x works is sort of like how a human might work:

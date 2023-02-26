@@ -592,6 +592,50 @@ function e2e::worktree_cleanup() {
 }
 
 ##############################################
+# Test v3->v4 upgrade
+##############################################
+function e2e::v3_v4_upgrade_in_place() {
+    echo "$FUNCNAME 1" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    # sync once
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+
+    # simulate v3's worktrees
+    WT="$(readlink "$ROOT/link")"
+    SHA="$(basename "$WT")"
+    mv -f "$ROOT/$WT" "$ROOT/$SHA"
+    ln -sf "$SHA" "$ROOT/link"
+
+    # make a second commit
+    echo "$FUNCNAME 2" > "$REPO"/file2
+    git -C "$REPO" add file2
+    git -C "$REPO" commit -qam "$FUNCNAME new file"
+
+    # sync again
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+
+    assert_link_exists "$ROOT"/link
+    assert_file_exists "$ROOT"/link/file
+    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_file_exists "$ROOT"/link/file2
+    assert_file_eq "$ROOT"/link/file2 "$FUNCNAME 2"
+    assert_file_absent "$ROOT/$SHA"
+}
+
+##############################################
 # Test readlink
 ##############################################
 function e2e::readlink() {
