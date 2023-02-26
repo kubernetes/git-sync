@@ -24,6 +24,10 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 # This version-strategy uses a manual value to set the version string
 #VERSION ?= 1.2.3
 
+# Set these to cross-compile.
+GOOS ?=
+GOARCH ?=
+
 # Set this to 1 to build a debugger-friendly binary.
 DBG ?=
 
