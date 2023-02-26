@@ -1554,6 +1554,8 @@ func (git *repoSync) cleanup(ctx context.Context, worktree worktree) error {
 	if err := removeDirContents(git.worktreeFor("").Path(), git.log, worktree.Hash()); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
+
+	// Let git know we don't need those old commits any more.
 	if _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
@@ -1678,6 +1680,9 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 	if target == "" {
 		return "", nil
 	}
+	if filepath.IsAbs(target) {
+		return worktree(target), nil
+	}
 	return worktree(git.root.Join(target)), nil
 }
 
@@ -1736,12 +1741,17 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 			currentHash = ""
 		}
 	}
-	changed := (currentHash != remoteHash)
-	if changed || git.syncCount == 0 {
-		git.log.V(0).Info("update required", "ref", git.ref, "local", currentHash, "remote", remoteHash)
 
-		// We have to do at least one fetch, to ensure that parameters like depth
-		// are set properly.  This is cheap when we already have the target hash.
+	// This catches in-place upgrades from older versions where the worktree
+	// path was different.
+	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
+
+	// We have to do at least one fetch, to ensure that parameters like depth
+	// are set properly.  This is cheap when we already have the target hash.
+	if changed || git.syncCount == 0 {
+		git.log.V(0).Info("update required", "ref", git.ref, "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+
+		// Parameters like depth are set at fetch time.
 		if err := git.fetch(ctx, remoteHash); err != nil {
 			return false, "", err
 		}
@@ -1785,6 +1795,11 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		git.syncCount++
 
 		// Clean up old worktree(s) and run GC.
+		if currentWorktree != git.worktreeFor(currentHash) {
+			// The old worktree might have come from a prior version, and so
+			// not get caught by the normal cleanup.
+			os.RemoveAll(currentWorktree.Path().String())
+		}
 		if err := git.cleanup(ctx, newWorktree); err != nil {
 			git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
 		}
