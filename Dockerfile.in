@@ -54,7 +54,8 @@ RUN apt-get -q -y install --no-install-recommends \
         coreutils \
         socat \
         openssh-client \
-        git
+        git \
+        git-lfs
 RUN apt-get -q -y autoremove
 RUN rm -rf /var/lib/apt/lists/*
 
