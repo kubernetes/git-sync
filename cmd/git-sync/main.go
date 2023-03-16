@@ -93,6 +93,10 @@ var flSyncOnSignal = pflag.String("sync-on-signal",
 var flMaxFailures = pflag.Int("max-failures",
 	envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
+
+var flGroupWrite = pflag.Bool("group-write",
+	envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
+	"ensure that all data (repo, worktrees, etc.) is group writable")
 var flChmod = pflag.Int("change-permissions",
 	envInt(0, "GITSYNC_PERMISSIONS", "GIT_SYNC_PERMISSIONS"),
 	"optionally change permissions on the checked-out files to the specified mode")
@@ -255,6 +259,8 @@ const (
 	gcAggressive = "aggressive"
 	gcOff        = "off"
 )
+
+const defaultDirMode = os.FileMode(0775) // subject to umask
 
 func init() {
 	prometheus.MustRegister(syncDuration)
@@ -723,10 +729,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Make sure the root exists.  0755 ensures that this is usable as a volume
-	// when the consumer isn't running as the same UID.  We do this very early
-	// so that we can normalize the path even when there are symlinks in play.
-	if err := os.MkdirAll(absRoot.String(), 0755); err != nil {
+	// If the user asked for group-writable data, make sure the umask allows it.
+	if *flGroupWrite {
+		syscall.Umask(0002)
+	} else {
+		syscall.Umask(0022)
+	}
+
+	// Make sure the root exists.  defaultDirMode ensures that this is usable
+	// as a volume when the consumer isn't running as the same UID.  We do this
+	// very early so that we can normalize the path even when there are
+	// symlinks in play.
+	if err := os.MkdirAll(absRoot.String(), defaultDirMode); err != nil {
 		log.Error(err, "ERROR: can't make root dir", "path", absRoot)
 		os.Exit(1)
 	}
@@ -1042,7 +1056,7 @@ func makeAbsPath(path string, root absPath) absPath {
 // its timestamps are updated.
 func touch(path absPath) error {
 	dir := path.Dir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, defaultDirMode); err != nil {
 		return err
 	}
 	file, err := os.Create(path.String())
@@ -1211,10 +1225,10 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	_, err := os.Stat(git.root.String())
 	switch {
 	case os.IsNotExist(err):
-		// Probably the first sync.  0755 ensures that this is usable as a
-		// volume when the consumer isn't running as the same UID.
+		// Probably the first sync.  defaultDirMode ensures that this is usable
+		// as a volume when the consumer isn't running as the same UID.
 		git.log.V(2).Info("repo directory does not exist, creating it", "path", git.root)
-		if err := os.MkdirAll(git.root.String(), 0755); err != nil {
+		if err := os.MkdirAll(git.root.String(), defaultDirMode); err != nil {
 			return err
 		}
 	case err != nil:
@@ -1359,7 +1373,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 	linkDir, linkFile := git.link.Split()
 
 	// Make sure the link directory exists.
-	if err := os.MkdirAll(linkDir, os.FileMode(int(0755))); err != nil {
+	if err := os.MkdirAll(linkDir, defaultDirMode); err != nil {
 		return fmt.Errorf("error making symlink dir: %v", err)
 	}
 
@@ -1466,8 +1480,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 		defer source.Close()
 
 		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
-			fileMode := os.FileMode(int(0755))
-			err := os.Mkdir(gitInfoPath, fileMode)
+			err := os.Mkdir(gitInfoPath, defaultDirMode)
 			if err != nil {
 				return err
 			}
@@ -1966,6 +1979,7 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 		key: "safe.directory",
 		val: "*",
 	}}
+
 	for _, kv := range configs {
 		if _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring git %q %q: %v", kv.key, kv.val, err)
@@ -2286,6 +2300,13 @@ OPTIONS
               This mode can be slow and may require a longer --sync-timeout value.
             - off: Disable explicit git garbage collection, which may be a good
               fit when also using --one-time.
+
+    --group-write, $GITSYNC_GROUP_WRITE
+            Ensure that data written to disk (including the git repo metadata,
+            checked out files, worktrees, and symlink) are all group writable.
+            This corresponds to git's notion of a "shared repository".  This is
+            useful in cases where data produced by git-sync is used by a
+            different UID.
 
     -h, --help
             Print help text and exit.
