@@ -1961,6 +1961,10 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 		// How to manage credentials (for those modes that need it).
 		key: "credential.helper",
 		val: "cache --timeout 3600",
+	}, {
+		// Mark repos as safe (avoid a "dubious ownership" error).
+		key: "safe.directory",
+		val: "*",
 	}}
 	for _, kv := range configs {
 		if _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
