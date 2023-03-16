@@ -104,7 +104,7 @@ func (l *Logger) DeleteErrorFile() {
 // writeContent writes the error content to the error file.
 func (l *Logger) writeContent(content []byte) {
 	if _, err := os.Stat(l.root); os.IsNotExist(err) {
-		fileMode := os.FileMode(0755)
+		fileMode := os.FileMode(0775) // umask applies
 		if err := os.Mkdir(l.root, fileMode); err != nil {
 			l.Logger.Error(err, "can't create the root directory", "root", l.root)
 			return

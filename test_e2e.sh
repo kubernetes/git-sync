@@ -188,6 +188,7 @@ ROOT="$DIR/root"
 function clean_root() {
     rm -rf "$ROOT"
     mkdir -p "$ROOT"
+    chmod g+rwx "$ROOT"
 }
 
 # How long we wait for sync operations to happen between test steps, in seconds
@@ -210,6 +211,7 @@ DOT_SSH="$DIR/dot_ssh"
 mkdir -p "$DOT_SSH"
 ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
+chmod -R g+r "$DOT_SSH"
 
 TEST_TOOLS="_test_tools"
 SLOW_GIT_FETCH="$TEST_TOOLS/git_slow_fetch.sh"
@@ -221,8 +223,9 @@ EXECHOOK_COMMAND_FAIL_SLEEPY="$TEST_TOOLS/exechook_command_fail_with_sleep.sh"
 EXECHOOK_ENVKEY=ENVKEY
 EXECHOOK_ENVVAL=envval
 RUNLOG="$DIR/runlog"
-rm -f $RUNLOG
-touch $RUNLOG
+rm -f "$RUNLOG"
+touch "$RUNLOG"
+chmod g+rw "$RUNLOG"
 HTTP_PORT=9376
 METRIC_GOOD_SYNC_COUNT='git_sync_count_total{status="success"}'
 METRIC_FETCH_COUNT='git_fetch_count_total'
@@ -238,7 +241,7 @@ function GIT_SYNC() {
         ${RM} \
         --label git-sync-e2e="$RUNID" \
         --network="host" \
-        -u $(id -u):$(id -g) \
+        -u git-sync:$(id -g) `# rely on GID, triggering "dubious ownership"` \
         -v "$ROOT":"$ROOT":rw \
         -v "$REPO":"$REPO":ro \
         -v "$REPO2":"$REPO2":ro \
@@ -250,6 +253,7 @@ function GIT_SYNC() {
         e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
             -v=6 \
             --add-user \
+            --group-write \
             --touch-file="$INTERLOCK" \
             --git-config='protocol.file.allow:always' \
             --http-bind=":$HTTP_PORT" \
@@ -565,6 +569,7 @@ function e2e::worktree_cleanup() {
     # make a worktree to collide with git-sync
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
     git -C "$REPO" worktree add -q "$ROOT/.worktrees/$SHA" -b e2e --no-checkout
+    chmod g+w "$ROOT/.worktrees/$SHA"
 
     # add some garbage
     mkdir -p "$ROOT/.worktrees/not_a_hash/subdir"
@@ -2828,8 +2833,14 @@ function run_test() {
 }
 
 # Override local configs for predictability in this test.
-export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_GLOBAL="$DIR/gitconfig"
 export GIT_CONFIG_SYSTEM=/dev/null
+
+# Make sure files we create can be group writable.
+umask 0002
+
+# Mark all repos as safe, to avoid "dubious ownership".
+git config --global --add safe.directory '*'
 
 # Iterate over the chosen tests and run them.
 FAILS=()
