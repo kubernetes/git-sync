@@ -139,6 +139,7 @@ ROOT="$DIR/root"
 function clean_root() {
     rm -rf "$ROOT"
     mkdir -p "$ROOT"
+    chmod g+rwx "$ROOT"
 }
 
 # Init SSH for test cases.
@@ -146,6 +147,7 @@ DOT_SSH="$DIR/dot_ssh"
 mkdir -p "$DOT_SSH"
 ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
 cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
+chmod -R g+r "$DOT_SSH"
 
 SLOW_GIT_CLONE=/slow_git_clone.sh
 SLOW_GIT_FETCH=/slow_git_fetch.sh
@@ -159,6 +161,7 @@ EXECHOOK_ENVVAL=envval
 RUNLOG="$DIR/runlog.exechook-fail-retry"
 rm -f $RUNLOG
 touch $RUNLOG
+chmod g+rw $RUNLOG
 
 function GIT_SYNC() {
     #./bin/linux_amd64/git-sync "$@"
@@ -171,7 +174,7 @@ function GIT_SYNC() {
         ${RM} \
         --label git-sync-e2e="$RUNID" \
         --network="host" \
-        -u $(id -u):$(id -g) \
+        -u git-sync:$(id -g) `# rely on GID, triggering "dubious ownership"` \
         -v "$ROOT":"$ROOT":rw \
         -v "$REPO":"$REPO":ro \
         -v "$REPO2":"$REPO2":ro \
@@ -189,6 +192,7 @@ function GIT_SYNC() {
         e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
             --v=6 \
             --add-user \
+            --group-write \
             --git-config='protocol.file.allow:always' \
             "$@"
 }
@@ -392,6 +396,7 @@ function e2e::worktree_cleanup() {
     git -C "$REPO" commit -qam "$FUNCNAME new file"
     REV=$(git -C "$REPO" rev-list -n1 HEAD)
     git -C "$REPO" worktree add -q "$ROOT"/"$REV" -b e2e --no-checkout
+    chmod g+w "$ROOT"/"$REV"
     sleep 10
     assert_file_exists "$ROOT"/link/file2
     assert_file_eq "$ROOT"/link/file2 "$FUNCNAME-ok"

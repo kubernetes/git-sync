@@ -36,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -74,6 +75,8 @@ var flOneTime = flag.Bool("one-time", envBool("GIT_SYNC_ONE_TIME", false),
 	"exit after the first sync")
 var flMaxSyncFailures = flag.Int("max-sync-failures", envInt("GIT_SYNC_MAX_SYNC_FAILURES", 0),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever after the initial sync)")
+var flGroupWrite = flag.Bool("group-write", envBool("GIT_SYNC_GROUP_WRITE", false),
+	"ensure that all data (repo, worktrees, etc.) is group writable")
 var flChmod = flag.Int("change-permissions", envInt("GIT_SYNC_PERMISSIONS", 0),
 	"the file permissions to apply to the checked-out files (0 will not change permissions at all)")
 var flSparseCheckoutFile = flag.String("sparse-checkout-file", envString("GIT_SYNC_SPARSE_CHECKOUT_FILE", ""),
@@ -178,6 +181,8 @@ const (
 	gcAlways     = "always"
 	gcAggressive = "aggressive"
 	gcOff        = "off"
+
+	defaultDirMode = os.FileMode(0775) // subject to umask
 )
 
 func init() {
@@ -377,6 +382,13 @@ func main() {
 				handleError(true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is specified")
 			}
 		}
+	}
+
+	// If the user asked for group-writable data, make sure the umask allows it.
+	if *flGroupWrite {
+		syscall.Umask(0002)
+	} else {
+		syscall.Umask(0022)
 	}
 
 	if *flAddUser {
@@ -684,7 +696,7 @@ func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, e
 	// Make sure the link directory exists. We do this here, rather than at
 	// startup because it might be under --root and that gets wiped in some
 	// circumstances.
-	if err := os.MkdirAll(filepath.Dir(linkDir), os.FileMode(int(0755))); err != nil {
+	if err := os.MkdirAll(filepath.Dir(linkDir), defaultDirMode); err != nil {
 		return "", fmt.Errorf("error making symlink dir: %v", err)
 	}
 
@@ -818,8 +830,7 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 		defer source.Close()
 
 		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
-			fileMode := os.FileMode(int(0755))
-			err := os.Mkdir(gitInfoPath, fileMode)
+			err := os.Mkdir(gitInfoPath, defaultDirMode)
 			if err != nil {
 				return err
 			}
@@ -974,7 +985,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		defer source.Close()
 
 		if _, err := os.Stat(gitInfoPath); os.IsNotExist(err) {
-			fileMode := os.FileMode(int(0755))
+			fileMode := os.FileMode(defaultDirMode)
 			err := os.Mkdir(gitInfoPath, fileMode)
 			if err != nil {
 				return err
@@ -1290,6 +1301,7 @@ func setupDefaultGitConfigs(ctx context.Context) error {
 		key: "safe.directory",
 		val: "*",
 	}}
+
 	for _, kv := range configs {
 		if _, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring git %q %q: %v", kv.key, kv.val, err)
