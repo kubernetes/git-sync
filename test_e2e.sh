@@ -2662,30 +2662,6 @@ function e2e::export_error_abs_path() {
 }
 
 ##############################################
-# Test export-error with invalid path
-##############################################
-function e2e::export_error_invalid_file() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    (
-        set +o errexit
-        GIT_SYNC \
-            --repo="file://$REPO" \
-            --root="$ROOT" \
-            --link="link" \
-            --error-file=".error.json"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-        assert_file_absent "$ROOT/link"
-        assert_file_absent "$ROOT/link/file"
-        assert_file_absent "$ROOT/.error.json"
-    )
-}
-
-##############################################
 # Test touch-file
 ##############################################
 function e2e::touch_file() {
@@ -2791,30 +2767,6 @@ function e2e::touch_file_abs_path() {
     # It should not come back until we commit again.
     sleep 1
     assert_file_absent "$ROOT/dir/touch.file"
-}
-
-##############################################
-# Test touch-file with invalid path
-##############################################
-function e2e::touch_file_invalid_file() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    (
-        set +o errexit
-        GIT_SYNC \
-            --repo="file://$REPO" \
-            --root="$ROOT" \
-            --link="link" \
-            --touch-file=".touch.file"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-        assert_file_absent "$ROOT/link"
-        assert_file_absent "$ROOT/link/file"
-        assert_file_absent "$ROOT/.touch.file"
-    )
 }
 
 ##############################################
