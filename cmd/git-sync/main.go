@@ -70,6 +70,9 @@ var flDepth = pflag.Int("depth",
 var flSubmodules = pflag.String("submodules",
 	envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
 	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
+var flSparseCheckoutFile = pflag.String("sparse-checkout-file",
+	envString("", "GITSYNC_SPARSE_CHECKOUT_FILE", "GIT_SYNC_SPARSE_CHECKOUT_FILE"),
+	"the path to a sparse-checkout file")
 
 var flRoot = pflag.String("root",
 	envString("", "GITSYNC_ROOT", "GIT_SYNC_ROOT"),
@@ -95,18 +98,17 @@ var flSyncOnSignal = pflag.String("sync-on-signal",
 var flMaxFailures = pflag.Int("max-failures",
 	envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
 	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
-
-var flGroupWrite = pflag.Bool("group-write",
-	envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
-	"ensure that all data (repo, worktrees, etc.) is group writable")
-
 var flTouchFile = pflag.String("touch-file",
 	envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
 	"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
-
-var flSparseCheckoutFile = pflag.String("sparse-checkout-file",
-	envString("", "GITSYNC_SPARSE_CHECKOUT_FILE", "GIT_SYNC_SPARSE_CHECKOUT_FILE"),
-	"the path to a sparse-checkout file")
+var flAddUser = pflag.Bool("add-user",
+	envBool(false, "GITSYNC_ADD_USER", "GIT_SYNC_ADD_USER"),
+	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
+var flGroupWrite = pflag.Bool("group-write",
+	envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
+	"ensure that all data (repo, worktrees, etc.) is group writable")
+var flStaleWorktreeTimeout = pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+	"how long to retain non-current worktrees")
 
 var flExechookCommand = pflag.String("exechook-command",
 	envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
@@ -156,9 +158,6 @@ var flSSHKnownHosts = pflag.Bool("ssh-known-hosts",
 var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file",
 	envString("/etc/git-secret/known_hosts", "GITSYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"),
 	"the known_hosts file to use")
-var flAddUser = pflag.Bool("add-user",
-	envBool(false, "GITSYNC_ADD_USER", "GIT_SYNC_ADD_USER"),
-	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
 
 var flCookieFile = pflag.Bool("cookie-file",
 	envBool(false, "GITSYNC_COOKIE_FILE", "GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"),
@@ -167,9 +166,6 @@ var flCookieFile = pflag.Bool("cookie-file",
 var flAskPassURL = pflag.String("askpass-url",
 	envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
 	"a URL to query for git credentials (username=<value> and password=<value>)")
-
-var flStaleWorktreeTimeout = pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
-	"how long to retain non-current worktrees")
 
 var flGitCmd = pflag.String("git",
 	envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
