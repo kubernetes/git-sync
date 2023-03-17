@@ -97,9 +97,6 @@ var flMaxFailures = pflag.Int("max-failures",
 var flGroupWrite = pflag.Bool("group-write",
 	envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
 	"ensure that all data (repo, worktrees, etc.) is group writable")
-var flChmod = pflag.Int("change-permissions",
-	envInt(0, "GITSYNC_PERMISSIONS", "GIT_SYNC_PERMISSIONS"),
-	"optionally change permissions on the checked-out files to the specified mode")
 
 var flTouchFile = pflag.String("touch-file",
 	envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
@@ -192,6 +189,8 @@ var flHTTPprof = pflag.Bool("http-pprof",
 // Obsolete flags, kept for compat.
 var flDeprecatedBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 	"DEPRECATED: use --ref instead")
+var flDeprecatedChmod = pflag.Int("change-permissions", envInt(0, "GIT_SYNC_PERMISSIONS"),
+	"DEPRECATED: use --group-write instead")
 var flDeprecatedDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 	"DEPRECATED: use --link instead")
 var flDeprecatedMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
@@ -209,6 +208,7 @@ var flDeprecatedWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
 
 func init() {
 	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
+	pflag.CommandLine.MarkDeprecated("change-permissions", "use --group-write instead")
 	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
 	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
 	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
@@ -482,7 +482,6 @@ type repoSync struct {
 	depth      int            // for shallow sync
 	submodules submodulesMode // how to handle submodules
 	gc         gcMode         // garbage collection
-	chmod      int            // mode to change repo to, or 0
 	link       absPath        // absolute path to the symlink to publish
 	authURL    string         // a URL to re-fetch credentials, or ""
 	sparseFile string         // path to a sparse-checkout file
@@ -607,6 +606,10 @@ func main() {
 	}
 	if *flPeriod < 10*time.Millisecond {
 		handleConfigError(log, true, "ERROR: --period must be at least 10ms")
+	}
+
+	if *flDeprecatedChmod != 0 {
+		handleConfigError(log, true, "ERROR: --change-permissions is no longer supported")
 	}
 
 	var syncSig syscall.Signal
@@ -795,7 +798,6 @@ func main() {
 		depth:      *flDepth,
 		submodules: submodulesMode(*flSubmodules),
 		gc:         gcMode(*flGitGC),
-		chmod:      *flChmod,
 		link:       absLink,
 		authURL:    *flAskPassURL,
 		sparseFile: *flSparseCheckoutFile,
@@ -1532,15 +1534,6 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 		}
 	}
 
-	// Change the file permissions, if requested.
-	if git.chmod != 0 {
-		mode := fmt.Sprintf("%#o", git.chmod)
-		git.log.V(1).Info("changing file permissions", "mode", mode)
-		if _, err := git.run.Run(ctx, "", nil, "chmod", "-R", mode, worktree.Path().String()); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -2250,9 +2243,6 @@ OPTIONS
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
-    --change-permissions <int>, $GITSYNC_PERMISSIONS
-            Change permissions on the checked-out files to the specified mode.
-
     --cookie-file <string>, $GITSYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
@@ -2327,7 +2317,7 @@ OPTIONS
             checked out files, worktrees, and symlink) are all group writable.
             This corresponds to git's notion of a "shared repository".  This is
             useful in cases where data produced by git-sync is used by a
-            different UID.
+            different UID.  This replaces the older --change-permissions flag.
 
     -h, --help
             Print help text and exit.

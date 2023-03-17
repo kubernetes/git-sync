@@ -96,6 +96,13 @@ new `--sync-timeout` flag takes a Go-style duration string (e.g. "30s" or
 "0.5m").  For backwards compatibility, `--timeout` will be used if it is
 specified.
 
+### Permissions: `--change-permissions` -> `--group-write`
+
+The old `--change-permissions` flag was poorly designed and not able to express
+the real intentions (e.g. "allow group write" does not mean "set everything to
+0775").  The new `--group-write` flag should cover what people ACTUALLY are
+trying to do.  The `--change-permissions` flag is no longer supported.
+
 ### Manual: `--man`
 
 The new `--man` flag prints a man-page style help document and exits.
