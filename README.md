@@ -156,8 +156,7 @@ OPTIONS
     --error-file <string>, $GITSYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
             This may be an absolute path or a relative path, in which case it
-            is relative to --root.  If it is relative to --root, the first path
-            element may not start with a period.
+            is relative to --root.
 
     --exechook-backoff <duration>, $GITSYNC_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --exechook-command.  If
@@ -235,11 +234,10 @@ OPTIONS
             The path to at which to create a symlink which points to the
             current git directory, at the currently synced hash.  This may be
             an absolute path or a relative path, in which case it is relative
-            to --root.  The last path element is the name of the link and must
-            not start with a period.  Consumers of the synced files should
-            always use this link - it is updated atomically and should always
-            be valid.  The basename of the target of the link is the current
-            hash.  If not specified, this defaults to the leaf dir of --repo.
+            to --root.  Consumers of the synced files should always use this
+            link - it is updated atomically and should always be valid.  The
+            basename of the target of the link is the current hash.  If not
+            specified, this defaults to the leaf dir of --repo.
 
     --man
             Print this manual and exit.
@@ -325,8 +323,7 @@ OPTIONS
     --touch-file <string>, $GITSYNC_TOUCH_FILE
             The path to an optional file which will be touched whenever a sync
             completes.  This may be an absolute path or a relative path, in
-            which case it is relative to --root.  If it is relative to --root,
-            the first path element may not start with a period.
+            which case it is relative to --root.
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or

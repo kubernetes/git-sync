@@ -542,10 +542,6 @@ func main() {
 		*flVerbose = *flDeprecatedV
 	}
 	log := func() *logging.Logger {
-		if strings.HasPrefix(*flErrorFile, ".") {
-			fmt.Fprintf(os.Stderr, "ERROR: --error-file may not start with '.'\n")
-			os.Exit(1)
-		}
 		dir, file := makeAbsPath(*flErrorFile, absRoot).Split()
 		return logging.New(dir, file, *flVerbose)
 	}()
@@ -595,9 +591,6 @@ func main() {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
 		*flLink = parts[len(parts)-1]
 	}
-	if strings.HasPrefix(filepath.Base(*flLink), ".") {
-		handleConfigError(log, true, "ERROR: --link must not start with '.'")
-	}
 
 	if *flDeprecatedWait != 0 {
 		// Back-compat
@@ -643,12 +636,6 @@ func main() {
 		// Back-compat
 		log.V(0).Info("setting --max-failures from deprecated --max-sync-failures")
 		*flMaxFailures = *flDeprecatedMaxSyncFailures
-	}
-
-	if *flTouchFile != "" {
-		if strings.HasPrefix(*flTouchFile, ".") {
-			handleConfigError(log, true, "ERROR: --touch-file may not start with '.'")
-		}
 	}
 
 	if *flDeprecatedSyncHookCommand != "" {
@@ -2256,8 +2243,7 @@ OPTIONS
     --error-file <string>, $GITSYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
             This may be an absolute path or a relative path, in which case it
-            is relative to --root.  If it is relative to --root, the first path
-            element may not start with a period.
+            is relative to --root.
 
     --exechook-backoff <duration>, $GITSYNC_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --exechook-command.  If
@@ -2342,11 +2328,10 @@ OPTIONS
             The path to at which to create a symlink which points to the
             current git directory, at the currently synced hash.  This may be
             an absolute path or a relative path, in which case it is relative
-            to --root.  The last path element is the name of the link and must
-            not start with a period.  Consumers of the synced files should
-            always use this link - it is updated atomically and should always
-            be valid.  The basename of the target of the link is the current
-            hash.  If not specified, this defaults to the leaf dir of --repo.
+            to --root.  Consumers of the synced files should always use this
+            link - it is updated atomically and should always be valid.  The
+            basename of the target of the link is the current hash.  If not
+            specified, this defaults to the leaf dir of --repo.
 
     --man
             Print this manual and exit.
@@ -2432,8 +2417,7 @@ OPTIONS
     --touch-file <string>, $GITSYNC_TOUCH_FILE
             The path to an optional file which will be touched whenever a sync
             completes.  This may be an absolute path or a relative path, in
-            which case it is relative to --root.  If it is relative to --root,
-            the first path element may not start with a period.
+            which case it is relative to --root.
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
