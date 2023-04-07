@@ -10,7 +10,7 @@ Lastly, [see similar issue for FluxCD](https://github.com/fluxcd/flux/pull/3152)
 
 ## Step 1: Create configuration
 
-Create a ConfigMap to store your configuration:
+Create a Kubernetes ConfigMap to store your configuration:
 
 ```bash
 cat << EOF >> /tmp/ssh-config
