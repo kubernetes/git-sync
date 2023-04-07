@@ -1,10 +1,10 @@
-# Using an Http Cookie File with git-sync
+# Using an HTTP cookie file with git-sync
 
-Git-sync supports use of an HTTP Cookie File for accessing git content.
+Git-sync supports use of an HTTP cookie file for accessing git content.
 
-## Step 1: Create Secret
+## Step 1: Create a Secret
 
-First, create a secret file from the git cookie file you wish to
+First, create a Kubernetes Secret from the git cookie file you wish to
 use.
 
 Example: if the cookie-file is `~/.gitcookies`:
@@ -16,9 +16,9 @@ kubectl create secret generic git-cookie-file --from-file=cookie_file=~/.gitcook
 Note that the key is `cookie_file`. This is the filename that git-sync will look
 for.
 
-## Step 2: Configure Pod/Deployment Volume
+## Step 2: Configure a Pod/Deployment volume
 
-In your Pod or Deployment configuration, specify a Volume for mounting the
+In your Pod or Deployment configuration, specify a volume for mounting the
 cookie-file Secret. Make sure to set `secretName` to the same name you used to
 create the secret (`git-cookie-file` in the example above).
 
@@ -30,13 +30,12 @@ volumes:
       defaultMode: 0440
 ```
 
-## Step 3: Configure git-sync container
+## Step 3: Configure a git-sync container
 
 In your git-sync container configuration, mount your volume at
 "/etc/git-secret". Make sure to pass the `--cookie-file` flag or set the
 environment variable `GITSYNC_COOKIE_FILE` to "true", and to use a git repo
-(`--repo` flag or `GITSYNC_REPO` env) is set to use a URL with the HTTP
-protocol.
+(`--repo` or `GITSYNC_REPO`) with an HTTP URL.
 
 ```yaml
 name: "git-sync"

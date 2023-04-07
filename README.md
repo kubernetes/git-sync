@@ -6,21 +6,24 @@ use the [v3.x branch](https://github.com/kubernetes/git-sync/tree/release-3.x).
 
 # git-sync
 
-git-sync is a simple command that pulls a git repository into a local directory.
-It is a perfect "sidecar" container in Kubernetes - it can periodically pull
-files down from a repository so that an application can consume them.
+git-sync is a simple command that pulls a git repository into a local
+directory, waits for a while, then repeats.  As the remote repository chan ges,
+those changes will be synced locally.  It is a perfect "sidecar" container in
+Kubernetes - it can pull files down from a repository so that an application
+can consume them.
 
 git-sync can pull one time, or on a regular interval.  It can pull from the
 HEAD of a branch, from a git tag, or from a specific git hash.  It will only
-re-pull if the target of the run has changed in the upstream repository.  When
-it re-pulls, it updates the destination directory atomically.  In order to do
-this, it uses a git worktree in a subdirectory of the `--root` and flips a
-symlink.
+re-pull if the referenced target has changed in the upstream repository (e.g. a
+new commit on a branch).  It "publishes" each sync through a worktree and a
+named symlink.  This ensures an atomic update - consumers will not see a
+partially constructed view of the local repository.
 
 git-sync can pull over HTTP(S) (with authentication or not) or SSH.
 
-git-sync can also be configured to make a webhook call upon successful git repo
-synchronization. The call is made after the symlink is updated.
+git-sync can also be configured to make a webhook call or exec a command upon
+successful git repo synchronization. The call is made after the symlink is
+updated.
 
 ## Major update: v3.x -> v4.x
 
@@ -75,23 +78,36 @@ docker run -d \
     nginx
 ```
 
+### Flags
+
+git-sync has many flags and optional features (see the manual below).  Most of
+those flags can be configured through environment variables, but in most cases
+(with the obvious exception of passwords) flags are preferred, because the
+program can abort if an invalid flag is specified, but a misspelled environment
+variable will just be ignored.  We've tried to stay backwards-compatible across
+major versions (by accepting deprecated flags and environment variables), but
+some things have evolved, and users are encouraged to use the most recent flags
+for their major verion.
+
 ### Volumes
 
 The `--root` flag must indicate either a directory that either a) does not
 exist (it will be created); or b) exists and is empty; or c) can be emptied by
 removing all of the contents.
 
-Why?  Git demands to clone into an empty directory.  If the directory exists
-and is not empty, git-sync will try to empty it by removing everything in it
-(we can't just `rm -rf` the dir because it might be a mounted volume).  If that
-fails, git-sync will abort.
+Why?  Git really wants an empty directory, to avoid any confusion.  If the
+directory exists and is not empty, git-sync will try to empty it by removing
+everything in it (we can't just `rm -rf` the dir because it might be a mounted
+volume).  If that fails, git-sync will abort.
 
 With the above example or with a Kubernetes `emptyDir`, there is usually no
 problem.  The problematic case is when the volume is the root of a filesystem,
 which sometimes contains metadata (e.g. ext{2,3,4} have a `lost+found` dir).
-Git will not clone into such a directory (`fatal: destination path
-'/tmp/git-data' already exists and is not an empty directory`).  The only real
-solution is to use a sub-directory of the volume as the `--root`.
+The only real solution is to use a sub-directory of the volume as the `--root`.
+
+## More docs
+
+More documentation on specific topics can be [found here](./docs).
 
 ## Manual
 
@@ -102,7 +118,7 @@ NAME
     git-sync - sync a remote git repository
 
 SYNOPSIS
-    git-sync --repo=<repo> [OPTION]...
+    git-sync --repo=<repo> --root=<path> [OPTIONS]...
 
 DESCRIPTION
 
@@ -128,7 +144,8 @@ DESCRIPTION
 OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
-    variable.
+    variable, but flags are preferred because a misspelled flag is a fatal
+    error while a misspelled environment variable is silently ignored.
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
@@ -139,9 +156,6 @@ OPTIONS
             A URL to query for git credentials.  The query must return success
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
-
-    --change-permissions <int>, $GITSYNC_PERMISSIONS
-            Change permissions on the checked-out files to the specified mode.
 
     --cookie-file <string>, $GITSYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
@@ -165,8 +179,8 @@ OPTIONS
     --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory.  The
-            environment variable $GITSYNC_HASH will be set to the git hash that
+            executes with the synced repo as its working directory.  The following
+            environment variables $GITSYNC_HASH will be set to the git hash that
             was synced.  The execution is subject to the overall --sync-timeout
             flag and will extend the effective period between sync attempts.
             This flag obsoletes --sync-hook-command, but if sync-hook-command
@@ -210,6 +224,13 @@ OPTIONS
               This mode can be slow and may require a longer --sync-timeout value.
             - off: Disable explicit git garbage collection, which may be a good
               fit when also using --one-time.
+
+    --group-write, $GITSYNC_GROUP_WRITE
+            Ensure that data written to disk (including the git repo metadata,
+            checked out files, worktrees, and symlink) are all group writable.
+            This corresponds to git's notion of a "shared repository".  This is
+            useful in cases where data produced by git-sync is used by a
+            different UID.  This replaces the older --change-permissions flag.
 
     -h, --help
             Print help text and exit.

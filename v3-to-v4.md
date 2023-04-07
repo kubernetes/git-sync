@@ -127,6 +127,12 @@ specify `--depth=0`.
 The logging output for v3 was semi-free-form text.  Log output in v4 is
 structured and rendered as strict JSON.
 
+## Root dir
+
+git-sync v3 container images defaulted `--root` to "/tmp/git".  In v4, that has
+moved to "/git".  Users who mount a volume and expect to use the default
+`--root` must mount it on "/git".
+
 ## Other changes
 
 git-sync v3 would allow invalidly formatted env vars (e.g. a value that was

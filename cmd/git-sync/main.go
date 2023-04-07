@@ -2237,7 +2237,7 @@ NAME
     git-sync - sync a remote git repository
 
 SYNOPSIS
-    git-sync --repo=<repo> [OPTION]...
+    git-sync --repo=<repo> --root=<path> [OPTIONS]...
 
 DESCRIPTION
 
@@ -2263,7 +2263,8 @@ DESCRIPTION
 OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
-    variable.
+    variable, but flags are preferred because a misspelled flag is a fatal
+    error while a misspelled environment variable is silently ignored.
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
@@ -2297,8 +2298,8 @@ OPTIONS
     --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory.  The following
-            environment variables $GITSYNC_HASH will be set to the git hash that
+            executes with the synced repo as its working directory.  The
+            $GITSYNC_HASH environment variable will be set to the git hash that
             was synced.  The execution is subject to the overall --sync-timeout
             flag and will extend the effective period between sync attempts.
             This flag obsoletes --sync-hook-command, but if sync-hook-command
