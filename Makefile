@@ -52,7 +52,7 @@ BASEIMAGE ?= registry.k8s.io/build-image/debian-base:bullseye-v1.4.3
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.18-alpine
+BUILD_IMAGE ?= golang:1.20-alpine
 
 DBG_MAKEFILE ?=
 ifneq ($(DBG_MAKEFILE),1)
