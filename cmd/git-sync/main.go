@@ -192,20 +192,20 @@ var flHTTPprof = pflag.Bool("http-pprof",
 // Obsolete flags, kept for compat.
 var flDeprecatedBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 	"DEPRECATED: use --ref instead")
-var flDeprecatedRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
-	"DEPRECATED: use --ref instead")
-var flDeprecatedWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
-	"DEPRECATED: use --period instead")
-var flDeprecatedTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
-	"DEPRECATED: use --sync-timeout instead")
 var flDeprecatedDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 	"DEPRECATED: use --link instead")
-var flDeprecatedSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
-	"DEPRECATED: use --exechook-command instead")
 var flDeprecatedMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
 	"DEPRECATED: use --max-failures instead")
+var flDeprecatedRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
+	"DEPRECATED: use --ref instead")
+var flDeprecatedSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
+	"DEPRECATED: use --exechook-command instead")
+var flDeprecatedTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
+	"DEPRECATED: use --sync-timeout instead")
 var flDeprecatedV = pflag.Int("v", -1,
 	"DEPRECATED: use -v or --verbose instead")
+var flDeprecatedWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
+	"DEPRECATED: use --period instead")
 
 func init() {
 	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
