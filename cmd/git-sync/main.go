@@ -190,21 +190,21 @@ var flHTTPprof = pflag.Bool("http-pprof",
 	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
 
 // Obsolete flags, kept for compat.
-var flBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
+var flDeprecatedBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 	"DEPRECATED: use --ref instead")
-var flRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
+var flDeprecatedRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
 	"DEPRECATED: use --ref instead")
-var flWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
+var flDeprecatedWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
 	"DEPRECATED: use --period instead")
-var flTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
+var flDeprecatedTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
 	"DEPRECATED: use --sync-timeout instead")
-var flDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
+var flDeprecatedDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 	"DEPRECATED: use --link instead")
-var flSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
+var flDeprecatedSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
 	"DEPRECATED: use --exechook-command instead")
-var flMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
+var flDeprecatedMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
 	"DEPRECATED: use --max-failures instead")
-var flOldSkoolVerbose = pflag.Int("v", -1,
+var flDeprecatedV = pflag.Int("v", -1,
 	"DEPRECATED: use -v or --verbose instead")
 
 func init() {
@@ -538,9 +538,9 @@ func main() {
 	}
 
 	// Init logging very early, so most errors can be written to a file.
-	if *flOldSkoolVerbose >= 0 {
+	if *flDeprecatedV >= 0 {
 		// Back-compat
-		*flVerbose = *flOldSkoolVerbose
+		*flVerbose = *flDeprecatedV
 	}
 	log := func() *logging.Logger {
 		if strings.HasPrefix(*flErrorFile, ".") {
@@ -556,15 +556,15 @@ func main() {
 		handleConfigError(log, true, "ERROR: --repo must be specified")
 	}
 
-	if *flBranch != "" && (*flRev == "" || *flRev == "HEAD") {
+	if *flDeprecatedBranch != "" && (*flDeprecatedRev == "" || *flDeprecatedRev == "HEAD") {
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --branch")
-		*flRef = *flBranch
-	} else if *flRev != "" {
+		*flRef = *flDeprecatedBranch
+	} else if *flDeprecatedRev != "" {
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --rev")
-		*flRef = *flRev
-	} else if *flBranch != "" && *flRev != "" {
+		*flRef = *flDeprecatedRev
+	} else if *flDeprecatedBranch != "" && *flDeprecatedRev != "" {
 		handleConfigError(log, true, "ERROR: can't set --ref from deprecated --branch and --rev")
 	}
 	if *flRef == "" {
@@ -587,10 +587,10 @@ func main() {
 		handleConfigError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
-	if *flDest != "" {
+	if *flDeprecatedDest != "" {
 		// Back-compat
 		log.V(0).Info("setting --link from deprecated --dest")
-		*flLink = *flDest
+		*flLink = *flDeprecatedDest
 	}
 	if *flLink == "" {
 		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
@@ -600,10 +600,10 @@ func main() {
 		handleConfigError(log, true, "ERROR: --link must not start with '.'")
 	}
 
-	if *flWait != 0 {
+	if *flDeprecatedWait != 0 {
 		// Back-compat
 		log.V(0).Info("setting --period from deprecated --wait")
-		*flPeriod = time.Duration(int(*flWait*1000)) * time.Millisecond
+		*flPeriod = time.Duration(int(*flDeprecatedWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
 		handleConfigError(log, true, "ERROR: --period must be at least 10ms")
@@ -627,19 +627,19 @@ func main() {
 		}
 	}
 
-	if *flTimeout != 0 {
+	if *flDeprecatedTimeout != 0 {
 		// Back-compat
 		log.V(0).Info("setting --sync-timeout from deprecated --timeout")
-		*flSyncTimeout = time.Duration(*flTimeout) * time.Second
+		*flSyncTimeout = time.Duration(*flDeprecatedTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
 		handleConfigError(log, true, "ERROR: --sync-timeout must be at least 10ms")
 	}
 
-	if *flMaxSyncFailures != 0 {
+	if *flDeprecatedMaxSyncFailures != 0 {
 		// Back-compat
 		log.V(0).Info("setting --max-failures from deprecated --max-sync-failures")
-		*flMaxFailures = *flMaxSyncFailures
+		*flMaxFailures = *flDeprecatedMaxSyncFailures
 	}
 
 	if *flTouchFile != "" {
@@ -648,10 +648,10 @@ func main() {
 		}
 	}
 
-	if *flSyncHookCommand != "" {
+	if *flDeprecatedSyncHookCommand != "" {
 		// Back-compat
 		log.V(0).Info("setting --exechook-command from deprecated --sync-hook-command")
-		*flExechookCommand = *flSyncHookCommand
+		*flExechookCommand = *flDeprecatedSyncHookCommand
 	}
 	if *flExechookCommand != "" {
 		if *flExechookTimeout < time.Second {
