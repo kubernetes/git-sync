@@ -51,177 +51,7 @@ import (
 	"k8s.io/git-sync/pkg/version"
 )
 
-var flVersion = pflag.Bool("version", false, "print the version and exit")
-var flHelp = pflag.BoolP("help", "h", false, "print help text and exit")
-var flManual = pflag.Bool("man", false, "print the full manual and exit")
-
-var flVerbose = pflag.IntP("verbose", "v", 0,
-	"logs at this V level and lower will be printed")
-
-var flRepo = pflag.String("repo",
-	envString("", "GITSYNC_REPO", "GIT_SYNC_REPO"),
-	"the git repository to sync (required)")
-var flRef = pflag.String("ref",
-	envString("HEAD", "GITSYNC_REF"),
-	"the git revision (branch, tag, or hash) to sync")
-var flDepth = pflag.Int("depth",
-	envInt(1, "GITSYNC_DEPTH", "GIT_SYNC_DEPTH"),
-	"create a shallow clone with history truncated to the specified number of commits")
-var flSubmodules = pflag.String("submodules",
-	envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
-	"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
-var flSparseCheckoutFile = pflag.String("sparse-checkout-file",
-	envString("", "GITSYNC_SPARSE_CHECKOUT_FILE", "GIT_SYNC_SPARSE_CHECKOUT_FILE"),
-	"the path to a sparse-checkout file")
-
-var flRoot = pflag.String("root",
-	envString("", "GITSYNC_ROOT", "GIT_SYNC_ROOT"),
-	"the root directory for git-sync operations (required)")
-var flLink = pflag.String("link",
-	envString("", "GITSYNC_LINK", "GIT_SYNC_LINK"),
-	"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
-var flErrorFile = pflag.String("error-file",
-	envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
-	"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
-var flPeriod = pflag.Duration("period",
-	envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
-	"how long to wait between syncs, must be >= 10ms; --wait overrides this")
-var flSyncTimeout = pflag.Duration("sync-timeout",
-	envDuration(120*time.Second, "GITSYNC_SYNC_TIMEOUT", "GIT_SYNC_SYNC_TIMEOUT"),
-	"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
-var flOneTime = pflag.Bool("one-time",
-	envBool(false, "GITSYNC_ONE_TIME", "GIT_SYNC_ONE_TIME"),
-	"exit after the first sync")
-var flSyncOnSignal = pflag.String("sync-on-signal",
-	envString("", "GITSYNC_SYNC_ON_SIGNAL", "GIT_SYNC_SYNC_ON_SIGNAL"),
-	"sync on receipt of the specified signal (e.g. SIGHUP)")
-var flMaxFailures = pflag.Int("max-failures",
-	envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
-	"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
-var flTouchFile = pflag.String("touch-file",
-	envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
-	"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
-var flAddUser = pflag.Bool("add-user",
-	envBool(false, "GITSYNC_ADD_USER", "GIT_SYNC_ADD_USER"),
-	"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
-var flGroupWrite = pflag.Bool("group-write",
-	envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
-	"ensure that all data (repo, worktrees, etc.) is group writable")
-var flStaleWorktreeTimeout = pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
-	"how long to retain non-current worktrees")
-
-var flExechookCommand = pflag.String("exechook-command",
-	envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
-	"an optional command to be run when syncs complete")
-var flExechookTimeout = pflag.Duration("exechook-timeout",
-	envDuration(30*time.Second, "GITSYNC_EXECHOOK_TIMEOUT", "GIT_SYNC_EXECHOOK_TIMEOUT"),
-	"the timeout for the exechook")
-var flExechookBackoff = pflag.Duration("exechook-backoff",
-	envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
-	"the time to wait before retrying a failed exechook")
-
-var flWebhookURL = pflag.String("webhook-url",
-	envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
-	"a URL for optional webhook notifications when syncs complete")
-var flWebhookMethod = pflag.String("webhook-method",
-	envString("POST", "GITSYNC_WEBHOOK_METHOD", "GIT_SYNC_WEBHOOK_METHOD"),
-	"the HTTP method for the webhook")
-var flWebhookStatusSuccess = pflag.Int("webhook-success-status",
-	envInt(200, "GITSYNC_WEBHOOK_SUCCESS_STATUS", "GIT_SYNC_WEBHOOK_SUCCESS_STATUS"),
-	"the HTTP status code indicating a successful webhook (0 disables success checks")
-var flWebhookTimeout = pflag.Duration("webhook-timeout",
-	envDuration(1*time.Second, "GITSYNC_WEBHOOK_TIMEOUT", "GIT_SYNC_WEBHOOK_TIMEOUT"),
-	"the timeout for the webhook")
-var flWebhookBackoff = pflag.Duration("webhook-backoff",
-	envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
-	"the time to wait before retrying a failed webhook")
-
-var flUsername = pflag.String("username",
-	envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
-	"the username to use for git auth")
-var flPassword = pflag.String("password",
-	envString("", "GITSYNC_PASSWORD", "GIT_SYNC_PASSWORD"),
-	"the password or personal access token to use for git auth (prefer --password-file or this env var)")
-var flPasswordFile = pflag.String("password-file",
-	envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
-	"the file from which the password or personal access token for git auth will be sourced")
-
-var flSSH = pflag.Bool("ssh",
-	envBool(false, "GITSYNC_SSH", "GIT_SYNC_SSH"),
-	"use SSH for git operations")
-var flSSHKeyFile = pflag.String("ssh-key-file",
-	envString("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
-	"the SSH key to use")
-var flSSHKnownHosts = pflag.Bool("ssh-known-hosts",
-	envBool(true, "GITSYNC_SSH_KNOWN_HOSTS", "GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"),
-	"enable SSH known_hosts verification")
-var flSSHKnownHostsFile = pflag.String("ssh-known-hosts-file",
-	envString("/etc/git-secret/known_hosts", "GITSYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"),
-	"the known_hosts file to use")
-
-var flCookieFile = pflag.Bool("cookie-file",
-	envBool(false, "GITSYNC_COOKIE_FILE", "GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"),
-	"use a git cookiefile (/etc/git-secret/cookie_file) for authentication")
-
-var flAskPassURL = pflag.String("askpass-url",
-	envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
-	"a URL to query for git credentials (username=<value> and password=<value>)")
-
-var flGitCmd = pflag.String("git",
-	envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
-	"the git command to run (subject to PATH search, mostly for testing)")
-var flGitConfig = pflag.String("git-config",
-	envString("", "GITSYNC_GIT_CONFIG", "GIT_SYNC_GIT_CONFIG"),
-	"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
-var flGitGC = pflag.String("git-gc",
-	envString("always", "GITSYNC_GIT_GC", "GIT_SYNC_GIT_GC"),
-	"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
-
-var flHTTPBind = pflag.String("http-bind",
-	envString("", "GITSYNC_HTTP_BIND", "GIT_SYNC_HTTP_BIND"),
-	"the bind address (including port) for git-sync's HTTP endpoint")
-var flHTTPMetrics = pflag.Bool("http-metrics",
-	envBool(false, "GITSYNC_HTTP_METRICS", "GIT_SYNC_HTTP_METRICS"),
-	"enable metrics on git-sync's HTTP endpoint")
-var flHTTPprof = pflag.Bool("http-pprof",
-	envBool(false, "GITSYNC_HTTP_PPROF", "GIT_SYNC_HTTP_PPROF"),
-	"enable the pprof debug endpoints on git-sync's HTTP endpoint")
-
-// Obsolete flags, kept for compat.
-var flDeprecatedBranch = pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
-	"DEPRECATED: use --ref instead")
-var flDeprecatedChmod = pflag.Int("change-permissions", envInt(0, "GIT_SYNC_PERMISSIONS"),
-	"DEPRECATED: use --group-write instead")
-var flDeprecatedDest = pflag.String("dest", envString("", "GIT_SYNC_DEST"),
-	"DEPRECATED: use --link instead")
-var flDeprecatedMaxSyncFailures = pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
-	"DEPRECATED: use --max-failures instead")
-var flDeprecatedRev = pflag.String("rev", envString("", "GIT_SYNC_REV"),
-	"DEPRECATED: use --ref instead")
-var flDeprecatedSyncHookCommand = pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
-	"DEPRECATED: use --exechook-command instead")
-var flDeprecatedTimeout = pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
-	"DEPRECATED: use --sync-timeout instead")
-var flDeprecatedV = pflag.Int("v", -1,
-	"DEPRECATED: use -v or --verbose instead")
-var flDeprecatedWait = pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
-	"DEPRECATED: use --period instead")
-
-func init() {
-	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
-	pflag.CommandLine.MarkDeprecated("change-permissions", "use --group-write instead")
-	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
-	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
-	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
-	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
-	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
-	pflag.CommandLine.MarkDeprecated("v", "use -v or --verbose instead")
-	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
-}
-
-// Total pull/error, summary on pull duration
 var (
-	// TODO: have a marker for "which" servergroup
 	metricSyncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "git_sync_duration_seconds",
 		Help: "Summary of git_sync durations",
@@ -242,6 +72,13 @@ var (
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",
 	}, []string{"status"})
 )
+
+func init() {
+	prometheus.MustRegister(metricSyncDuration)
+	prometheus.MustRegister(metricSyncCount)
+	prometheus.MustRegister(metricFetchCount)
+	prometheus.MustRegister(metricAskpassCount)
+}
 
 const (
 	metricKeySuccess = "success"
@@ -267,13 +104,6 @@ const (
 )
 
 const defaultDirMode = os.FileMode(0775) // subject to umask
-
-func init() {
-	prometheus.MustRegister(metricSyncDuration)
-	prometheus.MustRegister(metricSyncCount)
-	prometheus.MustRegister(metricFetchCount)
-	prometheus.MustRegister(metricAskpassCount)
-}
 
 func envString(def string, key string, alts ...string) string {
 	if val := os.Getenv(key); val != "" {
@@ -505,6 +335,175 @@ func main() {
 	}
 
 	//
+	// Declare flags inside main() so they are not used as global variables.
+	//
+
+	flVersion := pflag.Bool("version", false, "print the version and exit")
+	flHelp := pflag.BoolP("help", "h", false, "print help text and exit")
+	flManual := pflag.Bool("man", false, "print the full manual and exit")
+
+	flVerbose := pflag.IntP("verbose", "v", 0,
+		"logs at this V level and lower will be printed")
+
+	flRepo := pflag.String("repo",
+		envString("", "GITSYNC_REPO", "GIT_SYNC_REPO"),
+		"the git repository to sync (required)")
+	flRef := pflag.String("ref",
+		envString("HEAD", "GITSYNC_REF"),
+		"the git revision (branch, tag, or hash) to sync")
+	flDepth := pflag.Int("depth",
+		envInt(1, "GITSYNC_DEPTH", "GIT_SYNC_DEPTH"),
+		"create a shallow clone with history truncated to the specified number of commits")
+	flSubmodules := pflag.String("submodules",
+		envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
+		"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
+	flSparseCheckoutFile := pflag.String("sparse-checkout-file",
+		envString("", "GITSYNC_SPARSE_CHECKOUT_FILE", "GIT_SYNC_SPARSE_CHECKOUT_FILE"),
+		"the path to a sparse-checkout file")
+
+	flRoot := pflag.String("root",
+		envString("", "GITSYNC_ROOT", "GIT_SYNC_ROOT"),
+		"the root directory for git-sync operations (required)")
+	flLink := pflag.String("link",
+		envString("", "GITSYNC_LINK", "GIT_SYNC_LINK"),
+		"the path (absolute or relative to --root) at which to create a symlink to the directory holding the checked-out files (defaults to the leaf dir of --repo)")
+	flErrorFile := pflag.String("error-file",
+		envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
+		"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
+	flPeriod := pflag.Duration("period",
+		envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
+		"how long to wait between syncs, must be >= 10ms; --wait overrides this")
+	flSyncTimeout := pflag.Duration("sync-timeout",
+		envDuration(120*time.Second, "GITSYNC_SYNC_TIMEOUT", "GIT_SYNC_SYNC_TIMEOUT"),
+		"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
+	flOneTime := pflag.Bool("one-time",
+		envBool(false, "GITSYNC_ONE_TIME", "GIT_SYNC_ONE_TIME"),
+		"exit after the first sync")
+	flSyncOnSignal := pflag.String("sync-on-signal",
+		envString("", "GITSYNC_SYNC_ON_SIGNAL", "GIT_SYNC_SYNC_ON_SIGNAL"),
+		"sync on receipt of the specified signal (e.g. SIGHUP)")
+	flMaxFailures := pflag.Int("max-failures",
+		envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
+		"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
+	flTouchFile := pflag.String("touch-file",
+		envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
+		"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
+	flAddUser := pflag.Bool("add-user",
+		envBool(false, "GITSYNC_ADD_USER", "GIT_SYNC_ADD_USER"),
+		"add a record to /etc/passwd for the current UID/GID (needed to use SSH with an arbitrary UID)")
+	flGroupWrite := pflag.Bool("group-write",
+		envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
+		"ensure that all data (repo, worktrees, etc.) is group writable")
+	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+		"how long to retain non-current worktrees")
+
+	flExechookCommand := pflag.String("exechook-command",
+		envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
+		"an optional command to be run when syncs complete")
+	flExechookTimeout := pflag.Duration("exechook-timeout",
+		envDuration(30*time.Second, "GITSYNC_EXECHOOK_TIMEOUT", "GIT_SYNC_EXECHOOK_TIMEOUT"),
+		"the timeout for the exechook")
+	flExechookBackoff := pflag.Duration("exechook-backoff",
+		envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
+		"the time to wait before retrying a failed exechook")
+
+	flWebhookURL := pflag.String("webhook-url",
+		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
+		"a URL for optional webhook notifications when syncs complete")
+	flWebhookMethod := pflag.String("webhook-method",
+		envString("POST", "GITSYNC_WEBHOOK_METHOD", "GIT_SYNC_WEBHOOK_METHOD"),
+		"the HTTP method for the webhook")
+	flWebhookStatusSuccess := pflag.Int("webhook-success-status",
+		envInt(200, "GITSYNC_WEBHOOK_SUCCESS_STATUS", "GIT_SYNC_WEBHOOK_SUCCESS_STATUS"),
+		"the HTTP status code indicating a successful webhook (0 disables success checks")
+	flWebhookTimeout := pflag.Duration("webhook-timeout",
+		envDuration(1*time.Second, "GITSYNC_WEBHOOK_TIMEOUT", "GIT_SYNC_WEBHOOK_TIMEOUT"),
+		"the timeout for the webhook")
+	flWebhookBackoff := pflag.Duration("webhook-backoff",
+		envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
+		"the time to wait before retrying a failed webhook")
+
+	flUsername := pflag.String("username",
+		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
+		"the username to use for git auth")
+	flPassword := pflag.String("password",
+		envString("", "GITSYNC_PASSWORD", "GIT_SYNC_PASSWORD"),
+		"the password or personal access token to use for git auth (prefer --password-file or this env var)")
+	flPasswordFile := pflag.String("password-file",
+		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
+		"the file from which the password or personal access token for git auth will be sourced")
+
+	flSSH := pflag.Bool("ssh",
+		envBool(false, "GITSYNC_SSH", "GIT_SYNC_SSH"),
+		"use SSH for git operations")
+	flSSHKeyFile := pflag.String("ssh-key-file",
+		envString("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
+		"the SSH key to use")
+	flSSHKnownHosts := pflag.Bool("ssh-known-hosts",
+		envBool(true, "GITSYNC_SSH_KNOWN_HOSTS", "GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"),
+		"enable SSH known_hosts verification")
+	flSSHKnownHostsFile := pflag.String("ssh-known-hosts-file",
+		envString("/etc/git-secret/known_hosts", "GITSYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SYNC_SSH_KNOWN_HOSTS_FILE", "GIT_SSH_KNOWN_HOSTS_FILE"),
+		"the known_hosts file to use")
+
+	flCookieFile := pflag.Bool("cookie-file",
+		envBool(false, "GITSYNC_COOKIE_FILE", "GIT_SYNC_COOKIE_FILE", "GIT_COOKIE_FILE"),
+		"use a git cookiefile (/etc/git-secret/cookie_file) for authentication")
+
+	flAskPassURL := pflag.String("askpass-url",
+		envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
+		"a URL to query for git credentials (username=<value> and password=<value>)")
+
+	flGitCmd := pflag.String("git",
+		envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
+		"the git command to run (subject to PATH search, mostly for testing)")
+	flGitConfig := pflag.String("git-config",
+		envString("", "GITSYNC_GIT_CONFIG", "GIT_SYNC_GIT_CONFIG"),
+		"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
+	flGitGC := pflag.String("git-gc",
+		envString("always", "GITSYNC_GIT_GC", "GIT_SYNC_GIT_GC"),
+		"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
+
+	flHTTPBind := pflag.String("http-bind",
+		envString("", "GITSYNC_HTTP_BIND", "GIT_SYNC_HTTP_BIND"),
+		"the bind address (including port) for git-sync's HTTP endpoint")
+	flHTTPMetrics := pflag.Bool("http-metrics",
+		envBool(false, "GITSYNC_HTTP_METRICS", "GIT_SYNC_HTTP_METRICS"),
+		"enable metrics on git-sync's HTTP endpoint")
+	flHTTPprof := pflag.Bool("http-pprof",
+		envBool(false, "GITSYNC_HTTP_PPROF", "GIT_SYNC_HTTP_PPROF"),
+		"enable the pprof debug endpoints on git-sync's HTTP endpoint")
+
+	// Obsolete flags, kept for compat.
+	flDeprecatedBranch := pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
+		"DEPRECATED: use --ref instead")
+	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
+	flDeprecatedChmod := pflag.Int("change-permissions", envInt(0, "GIT_SYNC_PERMISSIONS"),
+		"DEPRECATED: use --group-write instead")
+	pflag.CommandLine.MarkDeprecated("change-permissions", "use --group-write instead")
+	flDeprecatedDest := pflag.String("dest", envString("", "GIT_SYNC_DEST"),
+		"DEPRECATED: use --link instead")
+	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
+	flDeprecatedMaxSyncFailures := pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
+		"DEPRECATED: use --max-failures instead")
+	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
+	flDeprecatedRev := pflag.String("rev", envString("", "GIT_SYNC_REV"),
+		"DEPRECATED: use --ref instead")
+	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
+	flDeprecatedSyncHookCommand := pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
+		"DEPRECATED: use --exechook-command instead")
+	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
+	flDeprecatedTimeout := pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
+		"DEPRECATED: use --sync-timeout instead")
+	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	flDeprecatedV := pflag.Int("v", -1,
+		"DEPRECATED: use -v or --verbose instead")
+	pflag.CommandLine.MarkDeprecated("v", "use -v or --verbose instead")
+	flDeprecatedWait := pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
+		"DEPRECATED: use --period instead")
+	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
+
+	//
 	// Parse and verify flags.  Errors here are fatal.
 	//
 
@@ -714,7 +713,10 @@ func main() {
 		}
 	}
 
+	//
 	// From here on, output goes through logging.
+	//
+
 	log.V(0).Info("starting up",
 		"pid", os.Getpid(),
 		"uid", os.Getuid(),
