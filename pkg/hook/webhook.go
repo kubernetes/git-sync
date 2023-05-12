@@ -19,6 +19,7 @@ package hook
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -71,12 +72,17 @@ func (w *Webhook) Do(ctx context.Context, hash string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
 
 	// If the webhook has a success statusCode, check against it
 	if w.success > 0 && resp.StatusCode != w.success {
-		return fmt.Errorf("received response code %d expected %d", resp.StatusCode, w.success)
+		return fmt.Errorf("received response code %d expected %d, body: %q", resp.StatusCode, w.success, body)
 	}
 
+	w.log.V(1).Info("webhook succeeded", "hash", hash, "status", resp.StatusCode, "headers", resp.Header, "body", body)
 	return nil
 }

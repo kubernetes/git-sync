@@ -1218,12 +1218,12 @@ func addUser() error {
 }
 
 // Run runs `git` with the specified args.
-func (git *repoSync) Run(ctx context.Context, cwd absPath, args ...string) (string, error) {
+func (git *repoSync) Run(ctx context.Context, cwd absPath, args ...string) (string, string, error) {
 	return git.run.WithCallDepth(1).Run(ctx, cwd.String(), nil, git.cmd, args...)
 }
 
 // Run runs `git` with the specified args and stdin.
-func (git *repoSync) RunWithStdin(ctx context.Context, cwd absPath, stdin string, args ...string) (string, error) {
+func (git *repoSync) RunWithStdin(ctx context.Context, cwd absPath, stdin string, args ...string) (string, string, error) {
 	return git.run.WithCallDepth(1).RunWithStdin(ctx, cwd.String(), nil, stdin, git.cmd, args...)
 }
 
@@ -1263,7 +1263,7 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 
 	// Running `git init` in an existing repo is safe (according to git docs).
 	git.log.V(0).Info("initializing repo directory", "path", git.root)
-	if _, err := git.Run(ctx, git.root, "init", "-b", "git-sync"); err != nil {
+	if _, _, err := git.Run(ctx, git.root, "init", "-b", "git-sync"); err != nil {
 		return err
 	}
 	if !git.sanityCheckRepo(ctx) {
@@ -1309,7 +1309,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	}
 
 	// Check that this is actually the root of the repo.
-	if root, err := git.Run(ctx, git.root, "rev-parse", "--show-toplevel"); err != nil {
+	if root, _, err := git.Run(ctx, git.root, "rev-parse", "--show-toplevel"); err != nil {
 		git.log.Error(err, "can't get repo toplevel", "path", git.root)
 		return false
 	} else {
@@ -1322,7 +1322,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 
 	// Consistency-check the repo.  Don't use --verbose because it can be
 	// REALLY verbose.
-	if _, err := git.Run(ctx, git.root, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+	if _, _, err := git.Run(ctx, git.root, "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "repo fsck failed", "path", git.root)
 		return false
 	}
@@ -1348,7 +1348,7 @@ func (git *repoSync) sanityCheckWorktree(ctx context.Context, worktree worktree)
 
 	// Consistency-check the worktree.  Don't use --verbose because it can be
 	// REALLY verbose.
-	if _, err := git.Run(ctx, worktree.Path(), "fsck", "--no-progress", "--connectivity-only"); err != nil {
+	if _, _, err := git.Run(ctx, worktree.Path(), "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "worktree fsck failed", "path", worktree.Path())
 		return false
 	}
@@ -1454,7 +1454,7 @@ func (git *repoSync) removeWorktree(ctx context.Context, worktree worktree) erro
 	if err := os.RemoveAll(worktree.Path().String()); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
 	}
-	if _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
+	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
 		return err
 	}
 	return nil
@@ -1475,7 +1475,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 	}
 
 	git.log.V(0).Info("adding worktree", "path", worktree.Path(), "hash", hash)
-	_, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
+	_, _, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
 	if err != nil {
 		return "", err
 	}
@@ -1540,14 +1540,14 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		if _, err = git.Run(ctx, worktree.Path(), args...); err != nil {
+		if _, _, err = git.Run(ctx, worktree.Path(), args...); err != nil {
 			return err
 		}
 	}
 
 	// Reset the worktree's working copy to the specific ref.
 	git.log.V(1).Info("setting worktree HEAD", "hash", hash)
-	if _, err := git.Run(ctx, worktree.Path(), "reset", "--hard", hash, "--"); err != nil {
+	if _, _, err := git.Run(ctx, worktree.Path(), "reset", "--hard", hash, "--"); err != nil {
 		return err
 	}
 
@@ -1562,7 +1562,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 		if git.depth != 0 {
 			submodulesArgs = append(submodulesArgs, "--depth", strconv.Itoa(git.depth))
 		}
-		if _, err := git.Run(ctx, worktree.Path(), submodulesArgs...); err != nil {
+		if _, _, err := git.Run(ctx, worktree.Path(), submodulesArgs...); err != nil {
 			return err
 		}
 	}
@@ -1585,12 +1585,12 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 	}
 
 	// Let git know we don't need those old commits any more.
-	if _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
+	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
 	// Expire old refs.
-	if _, err := git.Run(ctx, git.root, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
+	if _, _, err := git.Run(ctx, git.root, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
@@ -1605,7 +1605,7 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 		case gcAggressive:
 			args = append(args, "--aggressive")
 		}
-		if _, err := git.Run(ctx, git.root, args...); err != nil {
+		if _, _, err := git.Run(ctx, git.root, args...); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -1637,7 +1637,7 @@ func (git *repoSync) remoteHashForRef(ctx context.Context, ref string) (string, 
 	// Fetch both the bare and dereferenced ref. git sorts the results and
 	// prints the dereferenced result, if present, after the bare result, so we
 	// always want the last result it produces.
-	output, err := git.Run(ctx, git.root, "ls-remote", "-q", git.repo, ref, ref+"^{}")
+	output, _, err := git.Run(ctx, git.root, "ls-remote", "-q", git.repo, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
@@ -1664,7 +1664,7 @@ func lastNonEmptyLine(text string) string {
 // is not a hash or is not known to this repo, even if it appears to be a hash,
 // this will return false.
 func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) {
-	output, err := git.Run(ctx, git.root, "rev-parse", ref+"^{commit}")
+	output, _, err := git.Run(ctx, git.root, "rev-parse", ref+"^{commit}")
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown revision") {
 			return false, nil
@@ -1738,7 +1738,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	if remoteHash == "" {
 		// If git thinks it tastes like a hash, we just use that and if it
 		// is wrong, we will fail later.
-		output, err := git.Run(ctx, git.root, "rev-parse", git.ref)
+		output, _, err := git.Run(ctx, git.root, "rev-parse", git.ref)
 		if err != nil {
 			return false, "", err
 		}
@@ -1789,7 +1789,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// Reset the repo (note: not the worktree - that happens later) to the new
 		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
 		// so no files are checked out.
-		if _, err := git.Run(ctx, git.root, "reset", "--soft", "FETCH_HEAD"); err != nil {
+		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", "FETCH_HEAD"); err != nil {
 			return false, "", err
 		}
 
@@ -1863,7 +1863,7 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 			args = append(args, "--unshallow")
 		}
 	}
-	if _, err := git.Run(ctx, git.root, args...); err != nil {
+	if _, _, err := git.Run(ctx, git.root, args...); err != nil {
 		return err
 	}
 
@@ -1871,7 +1871,7 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 }
 
 func (git *repoSync) isShallow(ctx context.Context) (bool, error) {
-	boolStr, err := git.Run(ctx, git.root, "rev-parse", "--is-shallow-repository")
+	boolStr, _, err := git.Run(ctx, git.root, "rev-parse", "--is-shallow-repository")
 	if err != nil {
 		return false, fmt.Errorf("can't determine repo shallowness: %w", err)
 	}
@@ -1897,7 +1897,7 @@ func (git *repoSync) StoreCredentials(ctx context.Context, username, password st
 	git.log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
-	_, err := git.RunWithStdin(ctx, "", creds, "credential", "approve")
+	_, _, err := git.RunWithStdin(ctx, "", creds, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
 	}
@@ -1946,7 +1946,7 @@ func (git *repoSync) SetupCookieFile(ctx context.Context) error {
 		return fmt.Errorf("can't access git cookiefile: %w", err)
 	}
 
-	if _, err = git.Run(ctx, "", "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
+	if _, _, err = git.Run(ctx, "", "config", "--global", "http.cookiefile", pathToCookieFile); err != nil {
 		return fmt.Errorf("can't configure git cookiefile: %w", err)
 	}
 
@@ -2037,7 +2037,7 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 	}}
 
 	for _, kv := range configs {
-		if _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
+		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring git %q %q: %v", kv.key, kv.val, err)
 		}
 	}
@@ -2054,7 +2054,7 @@ func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag strin
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
 	for _, kv := range configs {
-		if _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
+		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
 		}
 	}
