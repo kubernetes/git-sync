@@ -849,17 +849,7 @@ func main() {
 			os.Exit(1)
 		}
 		mux := http.NewServeMux()
-		if *flHTTPMetrics {
-			mux.Handle("/metrics", promhttp.Handler())
-		}
-
-		if *flHTTPprof {
-			mux.HandleFunc("/debug/pprof/", pprof.Index)
-			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-		}
+		reasons := []string{}
 
 		// This is a dumb liveliness check endpoint. Currently this checks
 		// nothing and will always return 200 if the process is live.
@@ -869,7 +859,23 @@ func main() {
 			}
 			// Otherwise success
 		})
-		log.V(0).Info("serving HTTP", "endpoint", *flHTTPBind)
+		reasons = append(reasons, "liveness")
+
+		if *flHTTPMetrics {
+			mux.Handle("/metrics", promhttp.Handler())
+			reasons = append(reasons, "metrics")
+		}
+
+		if *flHTTPprof {
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			reasons = append(reasons, "pprof")
+		}
+
+		log.V(0).Info("serving HTTP", "endpoint", *flHTTPBind, "reasons", reasons)
 		go func() {
 			err := http.Serve(ln, mux)
 			log.Error(err, "HTTP server terminated")
@@ -925,7 +931,7 @@ func main() {
 	// Setup signal notify channel
 	sigChan := make(chan os.Signal, 1)
 	if syncSig != 0 {
-		log.V(2).Info("installing signal handler", "signal", unix.SignalName(syncSig))
+		log.V(1).Info("installing signal handler", "signal", unix.SignalName(syncSig))
 		signal.Notify(sigChan, syncSig)
 	}
 
@@ -971,7 +977,7 @@ func main() {
 					if err := touch(absTouchFile); err != nil {
 						log.Error(err, "failed to touch touch-file", "path", absTouchFile)
 					} else {
-						log.V(4).Info("touched touch-file", "path", absTouchFile)
+						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
 				}
 				if webhookRunner != nil {
@@ -1022,13 +1028,13 @@ func main() {
 			}
 
 			if failCount > 0 {
-				log.V(5).Info("resetting failure count", "failCount", failCount)
+				log.V(4).Info("resetting failure count", "failCount", failCount)
 				failCount = 0
 			}
 			log.DeleteErrorFile()
 		}
 
-		log.V(1).Info("next sync", "waitTime", flPeriod.String())
+		log.V(3).Info("next sync", "waitTime", flPeriod.String())
 		cancel()
 
 		// Sleep until the next sync. If syncSig is set then the sleep may
@@ -1037,7 +1043,7 @@ func main() {
 		select {
 		case <-t.C:
 		case <-sigChan:
-			log.V(2).Info("caught signal", "signal", unix.SignalName(syncSig))
+			log.V(1).Info("caught signal", "signal", unix.SignalName(syncSig))
 			t.Stop()
 		}
 	}
@@ -1205,7 +1211,7 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	case os.IsNotExist(err):
 		// Probably the first sync.  defaultDirMode ensures that this is usable
 		// as a volume when the consumer isn't running as the same UID.
-		git.log.V(2).Info("repo directory does not exist, creating it", "path", git.root)
+		git.log.V(1).Info("repo directory does not exist, creating it", "path", git.root)
 		if err := os.MkdirAll(git.root.String(), defaultDirMode); err != nil {
 			return err
 		}
@@ -1213,9 +1219,9 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 		return err
 	default:
 		// Make sure the directory we found is actually usable.
-		git.log.V(2).Info("repo directory exists", "path", git.root)
+		git.log.V(3).Info("repo directory exists", "path", git.root)
 		if git.sanityCheckRepo(ctx) {
-			git.log.V(2).Info("repo directory is valid", "path", git.root)
+			git.log.V(4).Info("repo directory is valid", "path", git.root)
 			return nil
 		} else {
 			// Maybe a previous run crashed?  Git won't use this dir.  We remove
@@ -1237,7 +1243,6 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	if !git.sanityCheckRepo(ctx) {
 		return fmt.Errorf("can't initialize git repo directory")
 	}
-	git.log.V(2).Info("repo directory is valid", "path", git.root)
 	return nil
 }
 
@@ -1359,11 +1364,11 @@ func removeDirContentsIf(dir absPath, log *logging.Logger, fn func(fi os.FileInf
 			log.Error(err, "predicate function failed for path, skipping", "path", p)
 			continue
 		} else if !shouldDelete {
-			log.V(3).Info("skipping path", "path", p)
+			log.V(4).Info("skipping path", "path", p)
 			continue
 		}
 		if log != nil {
-			log.V(3).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
+			log.V(4).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
 		}
 		if err := os.RemoveAll(p); err != nil {
 			errs = append(errs, err)
@@ -1442,7 +1447,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 		return "", err
 	}
 
-	git.log.V(0).Info("adding worktree", "path", worktree.Path(), "hash", hash)
+	git.log.V(1).Info("adding worktree", "path", worktree.Path(), "hash", hash)
 	_, _, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
 	if err != nil {
 		return "", err
@@ -1553,11 +1558,13 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 	}
 
 	// Let git know we don't need those old commits any more.
+	git.log.V(3).Info("pruning worktrees")
 	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
 	// Expire old refs.
+	git.log.V(3).Info("expiring unreachable refs")
 	if _, _, err := git.Run(ctx, git.root, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
@@ -1573,6 +1580,7 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 		case gcAggressive:
 			args = append(args, "--aggressive")
 		}
+		git.log.V(3).Info("running git garbage collection")
 		if _, _, err := git.Run(ctx, git.root, args...); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
@@ -1687,7 +1695,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
-	git.log.V(1).Info("syncing", "repo", git.repo)
+	git.log.V(3).Info("syncing", "repo", git.repo)
 
 	refreshCreds(ctx)
 
@@ -1797,6 +1805,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// Mark ourselves as "ready".
 		setRepoReady()
 		git.syncCount++
+		git.log.V(0).Info("updated successfully", "ref", git.ref, "remote", remoteHash, "syncCount", git.syncCount)
 
 		// Regular cleanup will happen in the outer loop, to catch stale
 		// worktrees.
@@ -1806,6 +1815,8 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 			// not get caught by the normal cleanup.
 			os.RemoveAll(currentWorktree.Path().String())
 		}
+	} else {
+		git.log.V(2).Info("update not required", "ref", git.ref, "remote", remoteHash, "syncCount", git.syncCount)
 	}
 
 	return changed, remoteHash, nil
@@ -1861,7 +1872,7 @@ func md5sum(s string) string {
 
 // StoreCredentials stores the username and password for later use.
 func (git *repoSync) StoreCredentials(ctx context.Context, username, password string) error {
-	git.log.V(2).Info("storing git credentials")
+	git.log.V(1).Info("storing git credentials")
 	git.log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
@@ -1874,7 +1885,7 @@ func (git *repoSync) StoreCredentials(ctx context.Context, username, password st
 }
 
 func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSSHKnownHosts string) error {
-	git.log.V(2).Info("setting up git SSH credentials")
+	git.log.V(1).Info("setting up git SSH credentials")
 
 	// If the user sets GIT_SSH_COMMAND we try to respect it.
 	sshCmd := os.Getenv("GIT_SSH_COMMAND")
@@ -1905,7 +1916,7 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSS
 }
 
 func (git *repoSync) SetupCookieFile(ctx context.Context) error {
-	git.log.V(2).Info("configuring git cookie file")
+	git.log.V(1).Info("configuring git cookie file")
 
 	var pathToCookieFile = "/etc/git-secret/cookie_file"
 
@@ -2015,12 +2026,11 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 // SetupExtraGitConfigs configures the global git environment with user-provided
 // override settings.
 func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
-	git.log.V(2).Info("setting additional git configs")
-
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
 		return fmt.Errorf("can't parse --git-config flag: %v", err)
 	}
+	git.log.V(1).Info("setting additional git configs", "configs", configs)
 	for _, kv := range configs {
 		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
@@ -2341,12 +2351,12 @@ OPTIONS
               "127.0.0.1:1234": listen on localhost, port 1234
 
     --http-metrics, $GITSYNC_HTTP_METRICS
-            Enable metrics on git-sync's HTTP endpoint.  Requires --http-bind
-            to be specified.
+            Enable metrics on git-sync's HTTP endpoint at /metrics.  Requires
+            --http-bind to be specified.
 
     --http-pprof, $GITSYNC_HTTP_PPROF
-            Enable the pprof debug endpoints on git-sync's HTTP endpoint.
-            Requires --http-bind to be specified.
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint at
+            /debug/pprof.  Requires --http-bind to be specified.
 
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
@@ -2456,7 +2466,16 @@ OPTIONS
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
-            printed.
+            printed.  Logs follow these guidelines:
+
+            - 0: Minimal, just log updates
+            - 1: More details about updates
+            - 2: Log the sync loop
+            - 3: More details about the sync loop
+            - 4: More details
+            - 5: Log all executed commands
+            - 6: Log stdout/stderr of all executed commands
+            - 9: Tracing and debug messages
 
     --version
             Print the version and exit.
