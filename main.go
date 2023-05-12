@@ -722,8 +722,7 @@ func main() {
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
 		"home", os.Getenv("HOME"),
-		"args", logSafeArgs(os.Args),
-		"env", logSafeEnv(os.Environ()))
+		"flags", logSafeFlags())
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
@@ -1089,61 +1088,30 @@ func redactURL(urlstr string) string {
 	return u.String()
 }
 
-// logSafeArgs makes sure any sensitive args (e.g. passwords) are redacted
-// before logging.
-func logSafeArgs(args []string) []string {
-	ret := make([]string, len(args))
-	redactWholeArg := false
-	readactURLArg := false
-	for i, arg := range args {
-		if redactWholeArg {
-			ret[i] = redactedString
-			redactWholeArg = false
-			continue
-		}
-		if readactURLArg {
-			ret[i] = redactURL(arg)
-			readactURLArg = false
-			continue
-		}
+// logSafeFlags makes sure any sensitive args (e.g. passwords) are redacted
+// before logging.  This returns a slice rather than a map so it is always
+// sorted.
+func logSafeFlags() []string {
+	ret := []string{}
+	pflag.VisitAll(func(fl *pflag.Flag) {
+		arg := fl.Name
+		val := fl.Value.String()
+
 		// Handle --password
-		if arg == "--password" {
-			redactWholeArg = true
-		}
-		if strings.HasPrefix(arg, "--password=") {
-			arg = "--password=" + redactedString
+		if arg == "password" {
+			val = redactedString
 		}
 		// Handle password embedded in --repo
-		if arg == "--repo" {
-			readactURLArg = true
+		if arg == "repo" {
+			val = redactURL(val)
 		}
-		if strings.HasPrefix(arg, "--repo=") {
-			arg = "--repo=" + redactURL(arg[7:])
+		// Don't log empty values
+		if val == "" {
+			return
 		}
-		ret[i] = arg
-	}
-	return ret
-}
 
-// logSafeEnv makes sure any sensitive env vars (e.g. passwords) are redacted
-// before logging.
-func logSafeEnv(env []string) []string {
-	ret := make([]string, len(env))
-	for i, ev := range env {
-		if strings.HasPrefix(ev, "GITSYNC_PASSWORD=") {
-			ev = "GITSYNC_PASSWORD=" + redactedString
-		}
-		if strings.HasPrefix(ev, "GIT_SYNC_PASSWORD=") {
-			ev = "GIT_SYNC_PASSWORD=" + redactedString
-		}
-		if strings.HasPrefix(ev, "GITSYNC_REPO=") {
-			ev = "GITSYNC_REPO=" + redactURL(ev[14:])
-		}
-		if strings.HasPrefix(ev, "GIT_SYNC_REPO=") {
-			ev = "GIT_SYNC_REPO=" + redactURL(ev[14:])
-		}
-		ret[i] = ev
-	}
+		ret = append(ret, "--"+arg+"="+val)
+	})
 	return ret
 }
 
