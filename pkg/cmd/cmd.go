@@ -46,18 +46,18 @@ func NewRunner(log logintf) Runner {
 }
 
 // Run runs given command
-func (r Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, error) {
+func (r Runner) Run(ctx context.Context, cwd string, env []string, command string, args ...string) (string, string, error) {
 	// call depth = 2 to erase the runWithStdin frame and this one
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, "", command, args...)
 }
 
 // RunWithStdin runs given command with standard input
-func (r Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, error) {
+func (r Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdin, command string, args ...string) (string, string, error) {
 	// call depth = 2 to erase the runWithStdin frame and this one
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, stdin, command, args...)
 }
 
-func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, stdin, command string, args ...string) (string, error) {
+func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, stdin, command string, args ...string) (string, string, error) {
 	cmdStr := cmdForLog(command, args...)
 	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
@@ -80,14 +80,14 @@ func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, st
 	stdout := strings.TrimSpace(outbuf.String())
 	stderr := strings.TrimSpace(errbuf.String())
 	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
+		return "", "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, ctx.Err(), stdout, stderr)
 	}
 	if err != nil {
-		return "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
+		return "", "", fmt.Errorf("Run(%s): %w: { stdout: %q, stderr: %q }", cmdStr, err, stdout, stderr)
 	}
 	log.V(6).Info("command result", "stdout", stdout, "stderr", stderr, "time", wallTime)
 
-	return stdout, nil
+	return stdout, stderr, nil
 }
 
 func cmdForLog(command string, args ...string) string {

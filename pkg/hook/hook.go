@@ -140,7 +140,7 @@ func (r *HookRunner) Run(ctx context.Context) {
 			}
 
 			if err := r.hook.Do(ctx, hash); err != nil {
-				r.log.Error(err, "hook failed")
+				r.log.Error(err, "hook failed", "hash", hash, "retry", r.backoff)
 				updateHookRunCountMetric(r.hook.Name(), "error")
 				// don't want to sleep unnecessarily terminating anyways
 				r.sendOneTimeResultAndTerminate(false)

@@ -68,8 +68,11 @@ func (h *Exechook) Do(ctx context.Context, hash string) error {
 	env := os.Environ()
 	env = append(env, envKV("GITSYNC_HASH", hash))
 
-	h.log.V(0).Info("running exechook", "command", h.command, "timeout", h.timeout)
-	_, err := h.cmdrunner.Run(ctx, worktreePath, env, h.command, h.args...)
+	h.log.V(0).Info("running exechook", "hash", hash, "command", h.command, "timeout", h.timeout)
+	stdout, stderr, err := h.cmdrunner.Run(ctx, worktreePath, env, h.command, h.args...)
+	if err == nil {
+		h.log.V(1).Info("exechook succeeded", "hash", hash, "stdout", stdout, "stderr", stderr)
+	}
 	return err
 }
 
