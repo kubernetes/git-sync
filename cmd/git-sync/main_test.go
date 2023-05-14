@@ -717,3 +717,60 @@ func TestRemoveDirContents(t *testing.T) {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
+
+func TestTouch(t *testing.T) {
+	root := absPath(t.TempDir())
+
+	// Make a dir and get info.
+	dirPath := root.Join("dir")
+	if err := os.MkdirAll(dirPath.String(), 0755); err != nil {
+		t.Fatalf("can't create dir: %v", err)
+	}
+
+	// Make a file and get info.
+	filePath := root.Join("file")
+	if file, err := os.Create(filePath.String()); err != nil {
+		t.Fatalf("can't create file: %v", err)
+	} else {
+		file.Close()
+	}
+
+	// Make sure a newfile does not exist.
+	newfilePath := root.Join("newfile")
+	if fi, err := os.Stat(newfilePath.String()); err == nil {
+		t.Fatalf("unexpected newfile: %v", fi)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("can't stat newfile: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	stamp := time.Now()
+	time.Sleep(100 * time.Millisecond)
+
+	touch(dirPath)
+	if dirInfo, err := os.Stat(dirPath.String()); err != nil {
+		t.Fatalf("can't stat dir: %v", err)
+	} else if !dirInfo.IsDir() {
+		t.Errorf("touch(dir) is no longer a dir: %v", dirInfo)
+	} else if !dirInfo.ModTime().After(stamp) {
+		t.Errorf("touch(dir) mtime %v is not after %v", dirInfo.ModTime(), stamp)
+	}
+
+	touch(filePath)
+	if fileInfo, err := os.Stat(filePath.String()); err != nil {
+		t.Fatalf("can't stat file: %v", err)
+	} else if fileInfo.IsDir() {
+		t.Errorf("touch(file) is no longer a file: %v", fileInfo)
+	} else if !fileInfo.ModTime().After(stamp) {
+		t.Errorf("touch(file) mtime %v is not after %v", fileInfo.ModTime(), stamp)
+	}
+
+	touch(newfilePath)
+	if newfileInfo, err := os.Stat(newfilePath.String()); err != nil {
+		t.Fatalf("can't stat newfile: %v", err)
+	} else if newfileInfo.IsDir() {
+		t.Errorf("touch(newfile) is not a file: %v", newfileInfo)
+	} else if !newfileInfo.ModTime().After(stamp) {
+		t.Errorf("touch(newfile) mtime %v is not after %v", newfileInfo.ModTime(), stamp)
+	}
+}
