@@ -953,12 +953,6 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 
-		if git.staleTimeout > 0 {
-			if err := git.cleanupStaleWorktrees(); err != nil {
-				log.Error(err, "failed to clean up stale worktrees")
-			}
-		}
-
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
@@ -988,6 +982,11 @@ func main() {
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
 				updateSyncMetrics(metricKeyNoOp, start)
+			}
+
+			// Clean up old worktree(s) and run GC.
+			if err := git.cleanup(ctx); err != nil {
+				log.Error(err, "git cleanup failed")
 			}
 
 			// Determine if git-sync should terminate for one of several reasons
@@ -1272,19 +1271,27 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	return nil
 }
 
-func (git *repoSync) cleanupStaleWorktrees() error {
+func (git *repoSync) removeStaleWorktrees() (int, error) {
 	currentWorktree, err := git.currentWorktree()
 	if err != nil {
-		return err
+		return 0, err
 	}
+
+	git.log.V(3).Info("cleaning up stale worktrees", "currentHash", currentWorktree.Hash())
+
+	count := 0
 	err = removeDirContentsIf(git.worktreeFor("").Path(), git.log, func(fi os.FileInfo) (bool, error) {
 		// delete files that are over the stale time out, and make sure to never delete the current worktree
-		return fi.Name() != currentWorktree.Hash() && time.Since(fi.ModTime()) > git.staleTimeout, nil
+		if fi.Name() != currentWorktree.Hash() && time.Since(fi.ModTime()) > git.staleTimeout {
+			count++
+			return true, nil
+		}
+		return false, nil
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return count, nil
 }
 
 // sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
@@ -1379,10 +1386,10 @@ func removeDirContentsIf(dir absPath, log *logging.Logger, fn func(fi os.FileInf
 			continue
 		}
 		if shouldDelete, err := fn(stat); err != nil {
-			log.Error(err, "failed to evaluate shouldDelete function, skipping", "path", p)
+			log.Error(err, "predicate function failed for path, skipping", "path", p)
 			continue
 		} else if !shouldDelete {
-			log.V(3).Info("skipping path that should not be removed", "path", p)
+			log.V(3).Info("skipping path", "path", p)
 			continue
 		}
 		if log != nil {
@@ -1431,8 +1438,8 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 	return nil
 }
 
-// cleanupWorktree is used to remove a worktree and its folder
-func (git *repoSync) cleanupWorktree(ctx context.Context, worktree worktree) error {
+// removeWorktree is used to remove a worktree and its folder
+func (git *repoSync) removeWorktree(ctx context.Context, worktree worktree) error {
 	// Clean up worktree, if needed.
 	_, err := os.Stat(worktree.Path().String())
 	switch {
@@ -1461,7 +1468,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 	// error'd without cleaning up.  The next time thru the sync loop fails to
 	// create the worktree and bails out. This manifests as:
 	//     "fatal: '/repo/root/nnnn' already exists"
-	if err := git.cleanupWorktree(ctx, worktree); err != nil {
+	if err := git.removeWorktree(ctx, worktree); err != nil {
 		return "", err
 	}
 
@@ -1568,8 +1575,11 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 	var cleanupErrs multiError
 
 	// Clean up previous worktree(s).
-	if err := git.cleanupStaleWorktrees(); err != nil {
+	if n, err := git.removeStaleWorktrees(); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
+	} else if n == 0 {
+		// We didn't clean up any worktrees, so the rest of this is moot.
+		return nil
 	}
 
 	// Let git know we don't need those old commits any more.
@@ -1752,7 +1762,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		if !git.sanityCheckWorktree(ctx, currentWorktree) {
 			// Sanity check failed, nuke it and start over.
 			git.log.V(0).Info("worktree failed checks or was empty", "path", currentWorktree)
-			if err := git.cleanupWorktree(ctx, currentWorktree); err != nil {
+			if err := git.removeWorktree(ctx, currentWorktree); err != nil {
 				return false, "", err
 			}
 			currentHash = ""
@@ -1806,11 +1816,10 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 				return false, "", err
 			}
 			if currentWorktree != "" {
-				// Touch the old worktree -- which will make cleanupStaleWorktrees delete it in the future,
-				// if the stale timeout option is enabled
+				// Start the stale worktree removal timer.
 				err = touch(currentWorktree.Path())
 				if err != nil {
-					git.log.Error(err, "Couldn't change stale worktree mtime", "path", currentWorktree.Path())
+					git.log.Error(err, "can't change stale worktree mtime", "path", currentWorktree.Path())
 				}
 			}
 		}
@@ -1819,14 +1828,13 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		setRepoReady()
 		git.syncCount++
 
-		// Clean up old worktree(s) and run GC.
+		// Regular cleanup will happen in the outer loop, to catch stale
+		// worktrees.
+
 		if currentWorktree != git.worktreeFor(currentHash) {
 			// The old worktree might have come from a prior version, and so
 			// not get caught by the normal cleanup.
 			os.RemoveAll(currentWorktree.Path().String())
-		}
-		if err := git.cleanup(ctx); err != nil {
-			git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
 		}
 	}
 
