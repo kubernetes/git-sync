@@ -21,8 +21,10 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -165,6 +167,9 @@ var flCookieFile = pflag.Bool("cookie-file",
 var flAskPassURL = pflag.String("askpass-url",
 	envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
 	"a URL to query for git credentials (username=<value> and password=<value>)")
+
+var flStaleWorktreeTimeout = pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+	"how long to retain non-current worktrees")
 
 var flGitCmd = pflag.String("git",
 	envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
@@ -475,19 +480,20 @@ func (abs absPath) Base() string {
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd        string         // the git command to run
-	root       absPath        // absolute path to the root directory
-	repo       string         // remote repo to sync
-	ref        string         // the ref to sync
-	depth      int            // for shallow sync
-	submodules submodulesMode // how to handle submodules
-	gc         gcMode         // garbage collection
-	link       absPath        // absolute path to the symlink to publish
-	authURL    string         // a URL to re-fetch credentials, or ""
-	sparseFile string         // path to a sparse-checkout file
-	syncCount  int            // how many times have we synced?
-	log        *logging.Logger
-	run        cmd.Runner
+	cmd          string         // the git command to run
+	root         absPath        // absolute path to the root directory
+	repo         string         // remote repo to sync
+	ref          string         // the ref to sync
+	depth        int            // for shallow sync
+	submodules   submodulesMode // how to handle submodules
+	gc           gcMode         // garbage collection
+	link         absPath        // absolute path to the symlink to publish
+	authURL      string         // a URL to re-fetch credentials, or ""
+	sparseFile   string         // path to a sparse-checkout file
+	syncCount    int            // how many times have we synced?
+	log          *logging.Logger
+	run          cmd.Runner
+	staleTimeout time.Duration // time for worktrees to be cleaned up
 }
 
 func main() {
@@ -791,18 +797,19 @@ func main() {
 
 	// Capture the various git parameters.
 	git := &repoSync{
-		cmd:        *flGitCmd,
-		root:       absRoot,
-		repo:       *flRepo,
-		ref:        *flRef,
-		depth:      *flDepth,
-		submodules: submodulesMode(*flSubmodules),
-		gc:         gcMode(*flGitGC),
-		link:       absLink,
-		authURL:    *flAskPassURL,
-		sparseFile: *flSparseCheckoutFile,
-		log:        log,
-		run:        cmdRunner,
+		cmd:          *flGitCmd,
+		root:         absRoot,
+		repo:         *flRepo,
+		ref:          *flRef,
+		depth:        *flDepth,
+		submodules:   submodulesMode(*flSubmodules),
+		gc:           gcMode(*flGitGC),
+		link:         absLink,
+		authURL:      *flAskPassURL,
+		sparseFile:   *flSparseCheckoutFile,
+		log:          log,
+		run:          cmdRunner,
+		staleTimeout: *flStaleWorktreeTimeout,
 	}
 
 	// This context is used only for git credentials initialization. There are
@@ -963,6 +970,12 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 
+		if git.staleTimeout > 0 {
+			if err := git.cleanupStaleWorktrees(); err != nil {
+				log.Error(err, "failed to clean up stale worktrees")
+			}
+		}
+
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
@@ -1068,11 +1081,15 @@ func touch(path absPath) error {
 	if err := os.MkdirAll(dir, defaultDirMode); err != nil {
 		return err
 	}
-	file, err := os.Create(path.String())
-	if err != nil {
+	if err := os.Chtimes(path.String(), time.Now(), time.Now()); errors.Is(err, fs.ErrNotExist) {
+		file, createErr := os.Create(path.String())
+		if createErr != nil {
+			return createErr
+		}
+		return file.Close()
+	} else {
 		return err
 	}
-	return file.Close()
 }
 
 const redactedString = "REDACTED"
@@ -1272,6 +1289,21 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	return nil
 }
 
+func (git *repoSync) cleanupStaleWorktrees() error {
+	currentWorktree, err := git.currentWorktree()
+	if err != nil {
+		return err
+	}
+	err = removeDirContentsIf(git.worktreeFor("").Path(), git.log, func(fi os.FileInfo) (bool, error) {
+		// delete files that are over the stale time out, and make sure to never delete the current worktree
+		return fi.Name() != currentWorktree.Hash() && time.Since(fi.ModTime()) > git.staleTimeout, nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
 func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	git.log.V(3).Info("sanity-checking git repo", "repo", git.root)
@@ -1340,27 +1372,36 @@ func dirIsEmpty(dir absPath) (bool, error) {
 	return len(dirents) == 0, nil
 }
 
-// removeDirContents iterated the specified dir and removes all contents,
-// except entries which are specifically excepted.
-func removeDirContents(dir absPath, log *logging.Logger, except ...string) error {
+// removeDirContents iterated the specified dir and removes all contents
+func removeDirContents(dir absPath, log *logging.Logger) error {
+	return removeDirContentsIf(dir, log, func(fi os.FileInfo) (bool, error) {
+		return true, nil
+	})
+}
+
+func removeDirContentsIf(dir absPath, log *logging.Logger, fn func(fi os.FileInfo) (bool, error)) error {
 	dirents, err := os.ReadDir(dir.String())
 	if err != nil {
 		return err
-	}
-
-	exceptMap := map[string]bool{}
-	for _, x := range except {
-		exceptMap[x] = true
 	}
 
 	// Save errors until the end.
 	var errs multiError
 	for _, fi := range dirents {
 		name := fi.Name()
-		if exceptMap[name] {
+		p := filepath.Join(dir.String(), name)
+		stat, err := os.Stat(p)
+		if err != nil {
+			log.Error(err, "failed to stat path, skipping", "path", p)
 			continue
 		}
-		p := filepath.Join(dir.String(), name)
+		if shouldDelete, err := fn(stat); err != nil {
+			log.Error(err, "failed to evaluate shouldDelete function, skipping", "path", p)
+			continue
+		} else if !shouldDelete {
+			log.V(3).Info("skipping path that should not be removed", "path", p)
+			continue
+		}
 		if log != nil {
 			log.V(3).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
 		}
@@ -1539,12 +1580,12 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 
 // cleanup removes old worktrees and runs git's garbage collection.  The
 // specified worktree is preserved.
-func (git *repoSync) cleanup(ctx context.Context, worktree worktree) error {
+func (git *repoSync) cleanup(ctx context.Context) error {
 	// Save errors until the end.
 	var cleanupErrs multiError
 
 	// Clean up previous worktree(s).
-	if err := removeDirContents(git.worktreeFor("").Path(), git.log, worktree.Hash()); err != nil {
+	if err := git.cleanupStaleWorktrees(); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
@@ -1639,7 +1680,7 @@ func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) 
 	return strings.HasPrefix(line, ref), nil
 }
 
-// worktree represents a git worktree (which may or may not exisat on disk).
+// worktree represents a git worktree (which may or may not exist on disk).
 type worktree absPath
 
 // Hash returns the intended commit hash for this worktree.
@@ -1781,6 +1822,14 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 			if err != nil {
 				return false, "", err
 			}
+			if currentWorktree != "" {
+				// Touch the old worktree -- which will make cleanupStaleWorktrees delete it in the future,
+				// if the stale timeout option is enabled
+				err = touch(currentWorktree.Path())
+				if err != nil {
+					git.log.Error(err, "Couldn't change stale worktree mtime", "path", currentWorktree.Path())
+				}
+			}
 		}
 
 		// Mark ourselves as "ready".
@@ -1793,7 +1842,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 			// not get caught by the normal cleanup.
 			os.RemoveAll(currentWorktree.Path().String())
 		}
-		if err := git.cleanup(ctx, newWorktree); err != nil {
+		if err := git.cleanup(ctx); err != nil {
 			git.log.Error(err, "git cleanup failed", "newWorktree", newWorktree)
 		}
 	}
@@ -2411,6 +2460,13 @@ OPTIONS
     --ssh-known-hosts-file <string>, $GITSYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
             If not specified, this defaults to "/etc/git-secret/known_hosts".
+
+    --stale-worktree-timeout <duration>, $GITSYNC_STALE_WORKTREE_TIMEOUT
+            The length of time to retain stale (not the current link target)
+            worktrees before being removed. Once this duration has elapsed,
+            a stale worktree will be removed during the next sync attempt
+            (as determined by --sync-timeout). If not specified, this defaults
+            to 0, meaning that stale worktrees will be removed immediately.
 
     --submodules <string>, $GITSYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
