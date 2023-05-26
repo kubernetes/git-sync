@@ -133,6 +133,12 @@ git-sync v3 container images defaulted `--root` to "/tmp/git".  In v4, that has
 moved to "/git".  Users who mount a volume and expect to use the default
 `--root` must mount it on "/git".
 
+## Hooks
+
+git-sync v3 could "lose" exechook and webhook calls in the face of the app
+restarting.  In v4, app startup is treated as a sync, even if the correct hash
+was already present, which means that hooks are always called.
+
 ## Other changes
 
 git-sync v3 would allow invalidly formatted env vars (e.g. a value that was

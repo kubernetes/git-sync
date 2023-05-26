@@ -399,7 +399,7 @@ func main() {
 
 	flExechookCommand := pflag.String("exechook-command",
 		envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
-		"an optional command to be run when syncs complete")
+		"an optional command to be run when syncs complete (must be idempotent)")
 	flExechookTimeout := pflag.Duration("exechook-timeout",
 		envDuration(30*time.Second, "GITSYNC_EXECHOOK_TIMEOUT", "GIT_SYNC_EXECHOOK_TIMEOUT"),
 		"the timeout for the exechook")
@@ -409,7 +409,7 @@ func main() {
 
 	flWebhookURL := pflag.String("webhook-url",
 		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
-		"a URL for optional webhook notifications when syncs complete")
+		"a URL for optional webhook notifications when syncs complete (must be idempotent)")
 	flWebhookMethod := pflag.String("webhook-method",
 		envString("POST", "GITSYNC_WEBHOOK_METHOD", "GIT_SYNC_WEBHOOK_METHOD"),
 		"the HTTP method for the webhook")
@@ -956,6 +956,7 @@ func main() {
 	}
 
 	failCount := 0
+	firstLoop := true
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -972,7 +973,8 @@ func main() {
 		} else {
 			// this might have been called before, but also might not have
 			setRepoReady()
-			if changed {
+			// We treat the first loop as a sync, including sending hooks.
+			if changed || firstLoop {
 				if absTouchFile != "" {
 					if err := touch(absTouchFile); err != nil {
 						log.Error(err, "failed to touch touch-file", "path", absTouchFile)
@@ -990,6 +992,7 @@ func main() {
 			} else {
 				updateSyncMetrics(metricKeyNoOp, start)
 			}
+			firstLoop = false
 
 			// Clean up old worktree(s) and run GC.
 			if err := git.cleanup(ctx); err != nil {
@@ -2288,10 +2291,11 @@ OPTIONS
             remote repository.  This command does not take any arguments and
             executes with the synced repo as its working directory.  The
             $GITSYNC_HASH environment variable will be set to the git hash that
-            was synced.  The execution is subject to the overall --sync-timeout
-            flag and will extend the effective period between sync attempts.
-            This flag obsoletes --sync-hook-command, but if sync-hook-command
-            is specified, it will take precedence.
+            was synced.  If, at startup, git-sync finds that the --root already
+            has the correct hash, this hook will still be invoked.  This means
+            that hooks can be invoked more than one time per hash, so they
+            must be idempotent.  This flag obsoletes --sync-hook-command, but
+            if sync-hook-command is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
@@ -2499,6 +2503,10 @@ OPTIONS
     --webhook-url <string>, $GITSYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
             header 'Gitsync-Hash' will be set to the git hash that was synced.
+            If, at startup, git-sync finds that the --root already has the
+            correct hash, this hook will still be invoked.  This means that
+            hooks can be invoked more than one time per hash, so they must be
+            idempotent.
 
 EXAMPLE USAGE
 
@@ -2540,14 +2548,16 @@ AUTHENTICATION
 HOOKS
 
     Webhooks and exechooks are executed asynchronously from the main git-sync
-    process.  If a --webhook-url or --exechook-command is configured, whenever
-    a new hash is synced the hook(s) will be invoked.  For exechook, that means
-    the command is exec()'ed, and for webhooks that means an HTTP request is
-    sent using the method defined in --webhook-method.  Git-sync will retry
-    both forms of hooks until they succeed (exit code 0 for exechooks, or
-    --webhook-success-status for webhooks).  If unsuccessful, git-sync will
-    wait --exechook-backoff or --webhook-backoff (as appropriate) before
-    re-trying the hook.
+    process.  If a --webhook-url or --exechook-command is configured, they will
+    be invoked whenever a new hash is synced, including when git-sync starts up
+    and find that the --root directory already has the correct hash.  For
+    exechook, that means the command is exec()'ed, and for webhooks that means
+    an HTTP request is sent using the method defined in --webhook-method.
+    Git-sync will retry both forms of hooks until they succeed (exit code 0 for
+    exechooks, or --webhook-success-status for webhooks).  If unsuccessful,
+    git-sync will wait --exechook-backoff or --webhook-backoff (as appropriate)
+    before re-trying the hook.  Git-sync does not ensure that hooks are invoked
+    exactly once, so hooks must be idempotent.
 
     Hooks are not guaranteed to succeed on every single hash change.  For example,
     if a hook fails and a new hash is synced during the backoff period, the
