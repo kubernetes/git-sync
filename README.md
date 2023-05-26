@@ -112,6 +112,7 @@ More documentation on specific topics can be [found here](./docs).
 ## Manual
 
 ```
+
 GIT-SYNC
 
 NAME
@@ -179,12 +180,13 @@ OPTIONS
     --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
             remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory.  The following
-            environment variables $GITSYNC_HASH will be set to the git hash that
-            was synced.  The execution is subject to the overall --sync-timeout
-            flag and will extend the effective period between sync attempts.
-            This flag obsoletes --sync-hook-command, but if sync-hook-command
-            is specified, it will take precedence.
+            executes with the synced repo as its working directory.  The
+            $GITSYNC_HASH environment variable will be set to the git hash that
+            was synced.  If, at startup, git-sync finds that the --root already
+            has the correct hash, this hook will still be invoked.  This means
+            that hooks can be invoked more than one time per hash, so they
+            must be idempotent.  This flag obsoletes --sync-hook-command, but
+            if sync-hook-command is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
@@ -244,12 +246,12 @@ OPTIONS
               "127.0.0.1:1234": listen on localhost, port 1234
 
     --http-metrics, $GITSYNC_HTTP_METRICS
-            Enable metrics on git-sync's HTTP endpoint.  Requires --http-bind
-            to be specified.
+            Enable metrics on git-sync's HTTP endpoint at /metrics.  Requires
+            --http-bind to be specified.
 
     --http-pprof, $GITSYNC_HTTP_PPROF
-            Enable the pprof debug endpoints on git-sync's HTTP endpoint.
-            Requires --http-bind to be specified.
+            Enable the pprof debug endpoints on git-sync's HTTP endpoint at
+            /debug/pprof.  Requires --http-bind to be specified.
 
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
@@ -324,6 +326,13 @@ OPTIONS
             The known_hosts file to use when --ssh-known-hosts is specified.
             If not specified, this defaults to "/etc/git-secret/known_hosts".
 
+    --stale-worktree-timeout <duration>, $GITSYNC_STALE_WORKTREE_TIMEOUT
+            The length of time to retain stale (not the current link target)
+            worktrees before being removed. Once this duration has elapsed,
+            a stale worktree will be removed during the next sync attempt
+            (as determined by --sync-timeout). If not specified, this defaults
+            to 0, meaning that stale worktrees will be removed immediately.
+
     --submodules <string>, $GITSYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
@@ -352,7 +361,16 @@ OPTIONS
 
     -v, --verbose <int>
             Set the log verbosity level.  Logs at this level and lower will be
-            printed.
+            printed.  Logs follow these guidelines:
+
+            - 0: Minimal, just log updates
+            - 1: More details about updates
+            - 2: Log the sync loop
+            - 3: More details about the sync loop
+            - 4: More details
+            - 5: Log all executed commands
+            - 6: Log stdout/stderr of all executed commands
+            - 9: Tracing and debug messages
 
     --version
             Print the version and exit.
@@ -376,6 +394,10 @@ OPTIONS
     --webhook-url <string>, $GITSYNC_WEBHOOK_URL
             A URL for optional webhook notifications when syncs complete.  The
             header 'Gitsync-Hash' will be set to the git hash that was synced.
+            If, at startup, git-sync finds that the --root already has the
+            correct hash, this hook will still be invoked.  This means that
+            hooks can be invoked more than one time per hash, so they must be
+            idempotent.
 
 EXAMPLE USAGE
 
@@ -417,14 +439,16 @@ AUTHENTICATION
 HOOKS
 
     Webhooks and exechooks are executed asynchronously from the main git-sync
-    process.  If a --webhook-url or --exechook-command is configured, whenever
-    a new hash is synced the hook(s) will be invoked.  For exechook, that means
-    the command is exec()'ed, and for webhooks that means an HTTP request is
-    sent using the method defined in --webhook-method.  Git-sync will retry
-    both forms of hooks until they succeed (exit code 0 for exechooks, or
-    --webhook-success-status for webhooks).  If unsuccessful, git-sync will
-    wait --exechook-backoff or --webhook-backoff (as appropriate) before
-    re-trying the hook.
+    process.  If a --webhook-url or --exechook-command is configured, they will
+    be invoked whenever a new hash is synced, including when git-sync starts up
+    and find that the --root directory already has the correct hash.  For
+    exechook, that means the command is exec()'ed, and for webhooks that means
+    an HTTP request is sent using the method defined in --webhook-method.
+    Git-sync will retry both forms of hooks until they succeed (exit code 0 for
+    exechooks, or --webhook-success-status for webhooks).  If unsuccessful,
+    git-sync will wait --exechook-backoff or --webhook-backoff (as appropriate)
+    before re-trying the hook.  Git-sync does not ensure that hooks are invoked
+    exactly once, so hooks must be idempotent.
 
     Hooks are not guaranteed to succeed on every single hash change.  For example,
     if a hook fails and a new hash is synced during the backoff period, the

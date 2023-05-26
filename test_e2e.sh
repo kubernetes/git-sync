@@ -101,6 +101,20 @@ function assert_file_contains() {
     fail "$1 does not contain '$2': $(cat $1)"
 }
 
+function assert_file_lines_eq() {
+    N=$(cat "$1" | wc -l)
+    if (( "$N" != "$2" )); then
+        fail "$1 is not $2 lines: $N"
+    fi
+}
+
+function assert_file_lines_ge() {
+    N=$(cat "$1" | wc -l)
+    if (( "$N" < "$2" )); then
+        fail "$1 is not at least $2 lines: $N"
+    fi
+}
+
 function assert_metric_eq() {
     local val
     val="$(curl --silent "http://localhost:$HTTP_PORT/metrics" \
@@ -973,7 +987,7 @@ function e2e::sync_branch_switch() {
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
-        --ref=$OTHER_BRANCH \
+        --ref="$OTHER_BRANCH" \
         --root="$ROOT" \
         --link="link"
     assert_link_exists "$ROOT/link"
@@ -1807,6 +1821,8 @@ function e2e::auth_askpass_url_flaky() {
 # Test exechook-success
 ##############################################
 function e2e::exechook_success() {
+    cat /dev/null > "$RUNLOG"
+
     # First sync
     echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1825,6 +1841,7 @@ function e2e::exechook_success() {
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 1"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_lines_eq "$RUNLOG" 1
 
     # Move forward
     echo "$FUNCNAME 2" > "$REPO/file"
@@ -1836,6 +1853,7 @@ function e2e::exechook_success() {
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
     assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 2"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_lines_eq "$RUNLOG" 2
 }
 
 ##############################################
@@ -1859,10 +1877,7 @@ function e2e::exechook_fail_retry() {
     sleep 3 # give it time to retry
 
     # Check that exechook was called
-    RUNS=$(cat "$RUNLOG" | wc -l)
-    if (( "$RUNS" < 2 )); then
-        fail "exechook called $RUNS times, it should be at least 2"
-    fi
+    assert_file_lines_ge "$RUNLOG" 2
 }
 
 ##############################################
@@ -1914,14 +1929,47 @@ function e2e::exechook_fail_once() {
         fi
     )
 
-    # Check that exechook was called
-    RUNS=$(cat "$RUNLOG" | wc -l)
-    if [[ "$RUNS" != 1 ]]; then
-        fail "exechook called $RUNS times, it should be at exactly 1"
-    fi
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_lines_eq "$RUNLOG" 1
+}
+
+##############################################
+# Test exechook at startup with correct SHA
+##############################################
+function e2e::exechook_startup_after_crash() {
+    # First sync
+    echo "$FUNCNAME" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+
+    # No changes to repo
+
+    cat /dev/null > "$RUNLOG"
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_lines_eq "$RUNLOG" 1
 }
 
 ##############################################
@@ -1955,23 +2003,16 @@ function e2e::webhook_success() {
     # check that basic call works
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
-    HITS=$(cat "$HITLOG" | wc -l)
-    if (( "$HITS" < 1 )); then
-        fail "webhook 1 called $HITS times"
-    fi
+    assert_file_lines_eq "$HITLOG" 1
 
     # Move forward
-    cat /dev/null > "$HITLOG"
     echo "$FUNCNAME 2" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 2"
 
     # check that another call works
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
-    HITS=$(cat "$HITLOG" | wc -l)
-    if (( "$HITS" < 1 )); then
-        fail "webhook 2 called $HITS times"
-    fi
+    assert_file_lines_eq "$HITLOG" 2
 }
 
 ##############################################
@@ -2005,10 +2046,7 @@ function e2e::webhook_fail_retry() {
     # Check that webhook was called
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
-    HITS=$(cat "$HITLOG" | wc -l)
-    if (( "$HITS" < 1 )); then
-        fail "webhook 1 called $HITS times"
-    fi
+    assert_file_lines_ge "$HITLOG" 1
 
     # Now return 200, ensure that it gets called
     docker_kill "$CTR"
@@ -2022,10 +2060,7 @@ function e2e::webhook_fail_retry() {
             echo
            ')
     sleep 2 # webhooks are async
-    HITS=$(cat "$HITLOG" | wc -l)
-    if (( "$HITS" < 1 )); then
-        fail "webhook 2 called $HITS times"
-    fi
+    assert_file_lines_eq "$HITLOG" 1
 }
 
 ##############################################
@@ -2057,10 +2092,7 @@ function e2e::webhook_success_once() {
         --link="link"
 
     # check that basic call works
-    HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" != 1 ]]; then
-        fail "webhook called $HITS times"
-    fi
+    assert_file_lines_eq "$HITLOG" 1
 }
 
 ##############################################
@@ -2098,14 +2130,10 @@ function e2e::webhook_fail_retry_once() {
         fi
     )
 
-    # Check that webhook was called
-    HITS=$(cat "$HITLOG" | wc -l)
-    if [[ "$HITS" != 1 ]]; then
-        fail "webhook called $HITS times"
-    fi
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_lines_eq "$HITLOG" 1
 }
 
 ##############################################
@@ -2140,10 +2168,7 @@ function e2e::webhook_fire_and_forget() {
     # check that basic call works
     wait_for_sync "${MAXWAIT}"
     sleep 1 # webhooks are async
-    HITS=$(cat "$HITLOG" | wc -l)
-    if (( "$HITS" < 1 )); then
-        fail "webhook called $HITS times"
-    fi
+    assert_file_lines_eq "$HITLOG" 1
 }
 
 ##############################################

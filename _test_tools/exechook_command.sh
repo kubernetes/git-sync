@@ -23,3 +23,4 @@ if [ -z "${GITSYNC_HASH}" ]; then
 fi
 cat file > exechook
 echo "ENVKEY=$ENVKEY" > exechook-env
+date >> /var/log/runs
