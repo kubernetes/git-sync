@@ -41,22 +41,36 @@
 #############################################################################
 # First we prepare the image that we want, regardless of build layers.
 #############################################################################
-FROM {ARG_FROM} as prep
+FROM {ARG_FROM} as base
 
 # When building, we can pass a unique value (e.g. `date +%s`) for this arg,
 # which will force a rebuild from here (by invalidating docker's cache).
 ARG FORCE_REBUILD=0
 
-RUN apt-get -q -y update
-RUN apt-get -q -y upgrade
-RUN apt-get -q -y install --no-install-recommends \
-        ca-certificates \
-        coreutils \
-        socat \
-        openssh-client \
-        git
-RUN apt-get -q -y autoremove
-RUN rm -rf /var/lib/apt/lists/*
+RUN apt-get -y -qq -o Dpkg::Use-Pty=0 update
+RUN apt-get -y -qq -o Dpkg::Use-Pty=0 -y upgrade
+
+RUN apt-get -y -qq -o Dpkg::Use-Pty=0 install bash # for the staging scripts and ldd
+RUN mkdir -p {ARG_STAGING}
+COPY stage_binaries.sh /
+RUN /stage_binaries.sh -o {ARG_STAGING} \
+	-p coreutils \
+	-p socat \
+	-p openssh-client \
+	-p git \
+	-b /bin/dash \
+	-b /bin/grep \
+	-b /bin/sed
+RUN ln -sf /bin/dash {ARG_STAGING}/bin/sh
+
+COPY clean_distroless.sh /clean_distroless.sh
+RUN /clean_distroless.sh {ARG_STAGING}
+
+# We need to use distroless/base for tzdata, glibc, and some others.
+FROM gcr.io/distroless/base as intermediate
+
+# Docker doesn't do vars in COPY, so we can't use a regular ARG.
+COPY --from=base {ARG_STAGING} /
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
@@ -90,7 +104,7 @@ COPY bin/{ARG_OS}_{ARG_ARCH}/{ARG_BIN} /{ARG_BIN}
 # Now we make a "clean" final image.
 #############################################################################
 FROM scratch
-COPY --from=prep / /
+COPY --from=intermediate / /
 
 # Run as non-root by default.  There's simply no reason to run as root.
 USER 65533:65533
