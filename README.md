@@ -112,7 +112,6 @@ More documentation on specific topics can be [found here](./docs).
 ## Manual
 
 ```
-
 GIT-SYNC
 
 NAME
@@ -266,10 +265,10 @@ OPTIONS
             Print this manual and exit.
 
     --max-failures <int>, $GITSYNC_MAX_FAILURES
-            The number of consecutive failures allowed before aborting (the
-            first sync must succeed), Setting this to a negative value will
-            retry forever after the initial sync.  If not specified, this
-            defaults to 0, meaning any sync failure will terminate git-sync.
+            The number of consecutive failures allowed before aborting.
+            Setting this to a negative value will retry forever.  If not
+            specified, this defaults to 0, meaning any sync failure will
+            terminate git-sync.
 
     --one-time, $GITSYNC_ONE_TIME
             Exit after one sync.

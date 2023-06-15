@@ -89,6 +89,10 @@ The new name of this flag is shorter and captures the idea that any
 non-recoverable error in the sync loop counts as a failure.  For backwards
 compatibility, `--max-sync-failures` will be used if it is specified.
 
+git-sync v3 demanded that the first sync succeed, regardless of this flag.
+git-sync v4 always allows failures up to this maximum, whether it is the first
+sync or any other.
+
 ### Timeouts: `--timeout` -> `--sync-timeout`
 
 The old `--timeout` flag took an integer number of seconds as an argument.  The

@@ -384,7 +384,7 @@ func main() {
 		"sync on receipt of the specified signal (e.g. SIGHUP)")
 	flMaxFailures := pflag.Int("max-failures",
 		envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
-		"the number of consecutive failures allowed before aborting (the first sync must succeed, -1 will retry forever")
+		"the number of consecutive failures allowed before aborting (-1 will retry forever")
 	flTouchFile := pflag.String("touch-file",
 		envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
 		"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
@@ -964,7 +964,7 @@ func main() {
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
-			if *flMaxFailures >= 0 && failCount > *flMaxFailures {
+			if *flMaxFailures >= 0 && failCount >= *flMaxFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
@@ -2375,10 +2375,10 @@ OPTIONS
             Print this manual and exit.
 
     --max-failures <int>, $GITSYNC_MAX_FAILURES
-            The number of consecutive failures allowed before aborting (the
-            first sync must succeed), Setting this to a negative value will
-            retry forever after the initial sync.  If not specified, this
-            defaults to 0, meaning any sync failure will terminate git-sync.
+            The number of consecutive failures allowed before aborting.
+            Setting this to a negative value will retry forever.  If not
+            specified, this defaults to 0, meaning any sync failure will
+            terminate git-sync.
 
     --one-time, $GITSYNC_ONE_TIME
             Exit after one sync.
