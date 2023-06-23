@@ -2,21 +2,14 @@
 
 ## Tags
 
-First, see what has been tagged:
+First, pick the new tag.  Usually this means to see what has already been
+tagged, and pick the next release number.
 
 ```
 git tag
 ```
 
-Pick the next release number and tag it.
-
-```
-git tag -am v3.3.2 v3.3.2
-```
-
-## Build and push to staging
-
-To build git-sync you need [docker buildx](https://github.com/docker/buildx).
+## Log in
 
 Make sure you are logged into Google Cloud (to push to GCR).
 
@@ -24,14 +17,19 @@ Make sure you are logged into Google Cloud (to push to GCR).
 gcloud auth login
 ```
 
+## Build and push to staging
+
+To build git-sync you need [docker buildx](https://github.com/docker/buildx).
+
 The following step will build for all platforms and push the container images
 to our staging repo (gcr.io/k8s-staging-git-sync).
 
 ```
-make manifest-list
+make release TAG="<tag you chose above>"
 ```
 
 This will produce output like:
+
 ```
 <...lots of output...>
 Successfully tagged gcr.io/k8s-staging-git-sync/git-sync:v3.3.2__linux_amd64

@@ -222,6 +222,15 @@ manifest-list: all-push
 	    --template $(REGISTRY)/$(BIN):$(VERSION)__OS_ARCH \
 	    --target $(REGISTRY)/$(BIN):$(VERSION)
 
+release:
+	if [ -z "$(TAG)" ]; then        \
+		echo "ERROR: TAG must be set"; \
+		false;                  \
+	fi
+	docker pull "$(BUILD_IMAGE)"
+	git tag -am "$(TAG)" "$(TAG)"
+	make manifest-list
+
 version:
 	echo $(VERSION)
 
