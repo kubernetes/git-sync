@@ -50,7 +50,8 @@ ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 BASEIMAGE ?= registry.k8s.io/build-image/debian-base:bullseye-v1.4.3
 
 IMAGE := $(REGISTRY)/$(BIN)
-TAG := $(VERSION)__$(OS)_$(ARCH)
+TAG := $(VERSION)
+OS_ARCH_TAG := $(TAG)__$(OS)_$(ARCH)
 
 BUILD_IMAGE ?= golang:1.20-alpine
 
@@ -145,7 +146,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	fi
 
 # Used to track state in hidden files.
-DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(TAG)
+DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(OS_ARCH_TAG)
 
 LICENSES = .licenses
 
@@ -187,27 +188,27 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    --platform "$(OS)/$(ARCH)"                               \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                     \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                   \
-	    -t $(IMAGE):$(TAG)                                       \
+	    -t $(IMAGE):$(OS_ARCH_TAG)                               \
 	    -f .dockerfile-$(OS)_$(ARCH)                             \
 	    .
-	docker images -q $(IMAGE):$(TAG) > $@
+	docker images -q $(IMAGE):$(OS_ARCH_TAG) > $@
 
 container-name:
-	echo "container: $(IMAGE):$(TAG)"
+	echo "container: $(IMAGE):$(OS_ARCH_TAG)"
 	echo
 
 push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
-	docker push $(IMAGE):$(TAG)
-	docker images -q $(IMAGE):$(TAG) > $@
+	docker push $(IMAGE):$(OS_ARCH_TAG)
+	docker images -q $(IMAGE):$(OS_ARCH_TAG) > $@
 
 push-name:
-	echo "pushed: $(IMAGE):$(TAG)"
+	echo "pushed: $(IMAGE):$(OS_ARCH_TAG)"
 	echo
 
 # This depends on github.com/estesp/manifest-tool in $PATH.
 manifest-list: all-push
-	echo "manifest-list: $(REGISTRY)/$(BIN):$(VERSION)"
+	echo "manifest-list: $(REGISTRY)/$(BIN):$(TAG)"
 	pushd tools >/dev/null;                                   \
 	  export GOOS=$(shell go env GOHOSTOS);                   \
 	  export GOARCH=$(shell go env GOHOSTARCH);               \
@@ -219,8 +220,8 @@ manifest-list: all-push
 	    --password=$$(gcloud auth print-access-token)     \
 	    push from-args                                    \
 	    --platforms "$$platforms"                         \
-	    --template $(REGISTRY)/$(BIN):$(VERSION)__OS_ARCH \
-	    --target $(REGISTRY)/$(BIN):$(VERSION)
+	    --template $(REGISTRY)/$(BIN):$(TAG)__OS_ARCH \
+	    --target $(REGISTRY)/$(BIN):$(TAG)
 
 release:
 	if [ -z "$(TAG)" ]; then        \
