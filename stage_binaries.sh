@@ -70,6 +70,11 @@ function stage_file() {
     local file="$1"
     local staging="$2"
 
+    # short circuit if we have done this file before
+    if [[ -e "${staging}/${file}" ]]; then
+        return
+    fi
+
     # copy the named path
     cp -a --parents "${file}" "${staging}"
 
