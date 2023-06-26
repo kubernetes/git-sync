@@ -50,7 +50,7 @@ ARG FORCE_REBUILD=0
 RUN apt-get -y -qq -o Dpkg::Use-Pty=0 update
 RUN apt-get -y -qq -o Dpkg::Use-Pty=0 -y upgrade
 
-RUN apt-get -y -qq -o Dpkg::Use-Pty=0 install bash # for the staging scripts and ldd
+RUN apt-get -y -qq -o Dpkg::Use-Pty=0 install --no-install-recommends bash # for the staging scripts and ldd
 RUN mkdir -p {ARG_STAGING}
 COPY stage_binaries.sh /
 RUN /stage_binaries.sh -o {ARG_STAGING} \
