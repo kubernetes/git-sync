@@ -566,38 +566,40 @@ func main() {
 			} else {
 				updateSyncMetrics(metricKeyNoOp, start)
 			}
-		}
 
-		if initialSync {
-			// Determine if git-sync should terminate for one of several reasons
-			if *flOneTime {
-				// Wait for hooks to complete at least once, if not nil, before
-				// checking whether to stop program.
-				// Assumes that if hook channels are not nil, they will have at
-				// least one value before getting closed
-				exitCode := 0 // is 0 if all hooks succeed, else is 1
-				if exechookRunner != nil {
-					if err := exechookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+			if initialSync {
+				// Determine if git-sync should terminate for one of several reasons
+				if *flOneTime {
+					exitCode := 0 // is 0 if all hooks succeed, else is 1
+					if changed {
+						// Wait for hooks to complete at least once, if not nil, before
+						// checking whether to stop program.
+						// Assumes that if hook channels are not nil, they will have at
+						// least one value before getting closed
+						if exechookRunner != nil {
+							if err := exechookRunner.WaitForCompletion(); err != nil {
+								exitCode = 1
+							}
+						}
+						if webhookRunner != nil {
+							if err := webhookRunner.WaitForCompletion(); err != nil {
+								exitCode = 1
+							}
+						}
 					}
+					log.DeleteErrorFile()
+					os.Exit(exitCode)
 				}
-				if webhookRunner != nil {
-					if err := webhookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
-					}
+				if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
+					log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
+					os.Exit(1)
+				} else if isHash {
+					log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
+					log.DeleteErrorFile()
+					sleepForever()
 				}
-				log.DeleteErrorFile()
-				os.Exit(exitCode)
+				initialSync = false
 			}
-			if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
-				log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
-				os.Exit(1)
-			} else if isHash {
-				log.V(0).Info("rev appears to be a git hash, no further sync needed", "rev", *flRev)
-				log.DeleteErrorFile()
-				sleepForever()
-			}
-			initialSync = false
 		}
 
 		if failCount > 0 {
