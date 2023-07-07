@@ -169,6 +169,10 @@ function docker_signal() {
 # tags are system-global, but one might have multiple repos checked out.
 E2E_TAG=$(git rev-parse --show-toplevel | sed 's|/|_|g')
 
+# Setting IMAGE forces the test to use a specific image instead of the current
+# tree.
+IMAGE="${IMAGE:-"e2e/git-sync:${E2E_TAG}__$(go env GOOS)_$(go env GOARCH)"}"
+
 # DIR is the directory in which all this test's state lives.
 RUNID="${RANDOM}${RANDOM}"
 DIR="/tmp/git-sync-e2e.$RUNID"
@@ -264,7 +268,7 @@ function GIT_SYNC() {
         --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
-        e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
+        "${IMAGE}" \
             -v=6 \
             --add-user \
             --group-write \
