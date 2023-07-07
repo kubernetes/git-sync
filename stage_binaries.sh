@@ -48,53 +48,128 @@ trap 'errexit' ERR
 # expansions and subshells
 set -o errtrace
 
+# Track these globally so we only load it once.
+ROOT_FWD_LINKS=()
+ROOT_REV_LINKS=()
+
+function load_root_links() {
+    local staging="$1"
+
+    while read -r x; do
+        if [[ -L "/${x}" ]]; then
+            ROOT_FWD_LINKS+=("/${x}")
+            ROOT_REV_LINKS+=("$(realpath "/${x}")")
+        fi
+    done < <(ls /)
+}
+
 # file_to_package identifies the debian package that provided the file $1
 function file_to_package() {
     local file="$1"
 
+    # Newer versions of debian symlink /lib -> /usr/lib (and others), but dpkg
+    # has some files in its DB as "/lib/<whatever>" and others as
+    # "/usr/lib/<whatever>".  This causes havoc trying to identify the package
+    # for a library discovered via ldd.
+    #
+    # So, to combat this we build a "map" of root links, and their targets, and
+    # try to search for both paths.
+
+    local alt=""
+    local i=0
+    while (( "${i}" < "${#ROOT_FWD_LINKS[@]}" )); do
+        fwd="${ROOT_FWD_LINKS[i]}"
+        rev="${ROOT_REV_LINKS[i]}"
+        if [[ "${file}" =~ ^"${fwd}/" ]]; then
+            alt="$(echo "${file}" | sed "s|^${fwd}|${rev}|")"
+            break
+        elif [[ "${file}" =~ ^"${rev}/" ]]; then
+            alt="$(echo "${file}" | sed "s|^${rev}|${fwd}|")"
+            break
+        fi
+        i=$(($i+1))
+    done
+
+    local out=""
+    local result=""
+    out="$(dpkg-query --search "${file}" 2>&1)"
+    if [[ $? == 0 ]]; then
+        result="${out}"
+    elif [[ -n "${alt}" ]]; then
+        out="$(dpkg-query --search "${alt}" 2>&1)"
+        if [[ $? == 0 ]]; then
+            result="${out}"
+        fi
+    fi
+
+    # If we found no match, let it error out.
+    if [[ -z "${result}" ]]; then
+        dpkg-query --search "${file}"
+        return 1
+    fi
+
     # `dpkg-query --search $file-pattern` outputs lines with the format: "$package: $file-path"
-    # where $file-path belongs to $package
-    # https://manpages.debian.org/jessie/dpkg/dpkg-query.1.en.html
-    dpkg-query --search "$(realpath "${file}")" | cut -d':' -f1
+    # where $file-path belongs to $package.
+    echo "${result}" | cut -d':' -f1
 }
 
-# package_to_copyright gives the path to the copyright file for the package $1
-function package_to_copyright() {
-    local pkg="$1"
-    echo "/usr/share/doc/${pkg}/copyright"
+function ensure_dir_in_staging() {
+    local staging="$1"
+    local dir="$2"
+
+    if [[ ! -e "${staging}/${dir}" ]]; then
+        local rel="$(echo "${dir}" | sed 's|^/||')"
+        tar -C / -c --no-recursion --dereference "${rel}" | tar -C "${staging}" -x
+    fi
 }
 
-# stage_file stages the filepath $1 to $2, following symlinks
+# stage_file stages the filepath $2 to $1, following symlinks
 # and staging copyrights
 function stage_file() {
-    local file="$1"
-    local staging="$2"
+    local staging="$1"
+    local file="$2"
 
     # short circuit if we have done this file before
     if [[ -e "${staging}/${file}" ]]; then
         return
     fi
 
-    # copy the named path
-    cp -a --parents "${file}" "${staging}"
+    # copy the real form of the named path
+    local real="$(realpath "${file}")"
+    cp -a --parents "${real}" "${staging}"
 
-    # recursively follow symlinks
-    if [[ -L "${file}" ]]; then
-        stage_file "$(cd "$(dirname "${file}")" || exit; realpath -s "$(readlink "${file}")")" "${staging}"
+    # recreate symlinks, even on intermediate path elements
+    if [[ "${file}" != "${real}" ]]; then
+        if [[ ! -e "${staging}/${file}" ]]; then
+            local dir="$(dirname "${file}")"
+            ensure_dir_in_staging "${staging}" "${dir}"
+            ln -s "${real}" "${staging}/${file}"
+        fi
+    elif [[ -x "$file" ]]; then
+        # stage the dependencies of the binary
+        binary_to_libraries "${file}" \
+            | while read -r lib; do
+                stage_file "${staging}" "${lib}"
+        done
     fi
 
     # get the package so we can stage package metadata as well
-    local package="$(file_to_package "${file}")"
+    local package
+    package="$(file_to_package "${file}")"
     # stage the copyright for the file, if it exists
-    local copyright="$(package_to_copyright "${package}")"
-    if [[ -f "${copyright}" ]]; then
-        cp -a --parents "${copyright}" "${staging}"
+    local copyright_src="/usr/share/doc/${package}/copyright"
+    local copyright_dst="${staging}/copyright/${package}/copyright.gz"
+    if [[ -f "${copyright_src}" && ! -f "${copyright_dst}" ]]; then
+        mkdir -p "$(dirname "${copyright_dst}")"
+        gzip -9 --to-stdout "${copyright_src}" > "${copyright_dst}"
     fi
 
     # stage the package status mimicking bazel
     # https://github.com/bazelbuild/rules_docker/commit/f5432b813e0a11491cf2bf83ff1a923706b36420
     # instead of parsing the control file, we can just get the actual package status with dpkg
+    mkdir -p "${staging}/var/lib/dpkg/status.d/"
     dpkg -s "${package}" > "${staging}/var/lib/dpkg/status.d/${package}"
+
 }
 
 function grep_allow_nomatch() {
@@ -115,23 +190,37 @@ function indent() {
     { "$@" 2>&1 1>&3 | _indent; } 3>&1 1>&2 | _indent
 }
 
-function stage_file_list() {
-    local pkg="$1"
-    local staging="$2"
+function stage_one_package() {
+    local staging="$1"
+    local pkg="$2"
 
-    dpkg -L "${pkg}" \
-        | grep_allow_nomatch -vE '(/\.|/usr/share/(man|doc|.*-completion))' \
-        | while read -r file; do
-            if [[ -f "$file" ]]; then
-                stage_file "${file}" "${staging}"
-                if [[ -L "$file" ]]; then
-                    continue
-                fi
-                if [[ -x "$file" ]]; then
-                    stage_binaries "${staging}" "${file}"
-                fi
+    local names=()
+    local sums=()
+    while read -r file; do
+        if [[ -f "${file}" ]]; then
+            local found=""
+            if [[ ! -L "${file}" ]]; then
+                sum="$(md5sum "${file}" | cut -f1 -d' ')"
+                local i=0
+                for s in "${sums[@]}"; do
+                    if [[ "${sum}" == "${s}" ]]; then
+                        local dir="$(dirname "${file}")"
+                        ensure_dir_in_staging "${staging}" "$(dirname "${file}")"
+                        ln -s "${names[$i]}" "${staging}/${file}"
+                        found="true"
+                        break
+                    fi
+                    i=$((i+1))
+                done
             fi
-        done
+            if [[ -z "${found}" ]]; then
+                names+=("${file}")
+                sums+=("${sum}")
+                stage_file "${staging}" "${file}"
+            fi
+        fi
+    done < <( dpkg -L "${pkg}" \
+        | grep_allow_nomatch -vE '(/\.|/usr/share/(man|doc|.*-completion))' )
 }
 
 function get_dependent_packages() {
@@ -148,18 +237,20 @@ function stage_packages() {
     local staging="$1"
     shift
 
-    mkdir -p "${staging}"/var/lib/dpkg/status.d/
     indent apt-get -y -qq -o Dpkg::Use-Pty=0 update
 
     local pkg
     for pkg; do
         echo "staging package ${pkg}"
+        local du_before="$(du -sk "${staging}" | cut -f1)"
         indent apt-get -y -qq -o Dpkg::Use-Pty=0 --no-install-recommends install "${pkg}"
-        stage_file_list "${pkg}" "$staging"
+        stage_one_package "$staging" "${pkg}"
         get_dependent_packages "${pkg}" \
             | while read -r dep; do
-                stage_file_list "${dep}" "${staging}"
+                stage_one_package "${staging}" "${dep}"
             done
+        local du_after="$(du -sk "${staging}" | cut -f1)"
+        echo "package ${pkg} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -191,6 +282,18 @@ function binary_to_libraries() {
         | awk '{print $1}'
 }
 
+function stage_one_binary() {
+    local staging="$1"
+    local bin="$2"
+
+    # locate the path to the binary
+    local binary_path
+    binary_path="$(which "${bin}")"
+
+    # stage the binary itself
+    stage_file "${staging}" "${binary_path}"
+}
+
 function stage_binaries() {
     local staging="$1"
     shift
@@ -198,22 +301,10 @@ function stage_binaries() {
     local bin
     for bin; do
         echo "staging binary ${bin}"
-
-        # locate the path to the binary
-        local binary_path
-        binary_path="$(which "${bin}")"
-
-        # ensure package metadata dir
-        mkdir -p "${staging}/var/lib/dpkg/status.d/"
-
-        # stage the binary itself
-        stage_file "${binary_path}" "${staging}"
-
-        # stage the dependencies of the binary
-        binary_to_libraries "${binary_path}" \
-            | while read -r lib; do
-                stage_file "${lib}" "${staging}"
-            done
+        local du_before="$(du -sk "${staging}" | cut -f1)"
+        stage_one_binary "${staging}" "${bin}"
+        local du_after="$(du -sk "${staging}" | cut -f1)"
+        echo "binary ${bin} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -272,12 +363,21 @@ function main() {
         exit 4
     fi
 
+    # Newer versions of debian symlink /bin -> /usr/bin (and lib, and others).
+    # The somewhat naive copying done in this program does not retain that,
+    # which causes some files to be duplicated.  Fortunately, these are all in
+    # the root dir, or we might have to do something more complicated.
+    load_root_links "${staging}"
+
     if (( "${#pkgs[@]}" > 0 )); then
         stage_packages "${staging}" "${pkgs[@]}"
     fi
     if (( "${#bins[@]}" > 0 )); then
         stage_binaries "${staging}" "${bins[@]}"
     fi
+
+    echo "final staged size: $(du -sk "${staging}" | cut -f1) kB"
+    du -xk --max-depth=3 "${staging}" | sort -n | _indent
 }
 
 main "$@"

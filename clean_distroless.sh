@@ -14,24 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# USAGE: clean-distroless.sh <staging_dir>
-
-if [ -z "$1" ]; then
-    echo "usage: $0 <staging-dir>"
-    exit 1
-fi
-ROOT="$1"
-
 # This script needs to be "sh" and not "bash", but there are no arrays in sh,
 # except for "$@".  We need array semantics on the off chance we ever have a
 # pathname with spaces in it.
+#
+# This list is not generic - it is specific to git-sync on debian bookworm.
 set -- \
     /usr/share/base-files \
+    /usr/share/doc \
     /usr/share/man \
     /usr/lib/*-linux-gnu/gconv \
     /usr/bin/c_rehash \
+    /usr/bin/git-shell \
     /usr/bin/openssl \
-    /iptables-wrapper-installer.sh \
+    /usr/bin/scalar \
+    /usr/bin/scp \
+    /usr/bin/sftp \
+    /usr/bin/ssh-add \
+    /usr/bin/ssh-agent \
+    /usr/bin/ssh-keygen \
+    /usr/bin/ssh-keyscan \
+    /usr/lib/git-core/git-shell \
+    /usr/bin/openssl \
+    /usr/lib/git-core/git-daemon \
+    /usr/lib/git-core/git-http-backend \
+    /usr/lib/git-core/git-http-fetch \
+    /usr/lib/git-core/git-http-push \
+    /usr/lib/git-core/git-imap-send \
+    /usr/lib/openssh/ssh-keysign \
+    /usr/lib/openssh/ssh-pkcs11-helper \
+    /usr/lib/openssh/ssh-sk-helper \
+    /usr/share/gitweb \
     /clean-distroless.sh
 
 for item; do
