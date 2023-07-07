@@ -1208,6 +1208,8 @@ func (git *repoSync) RunWithStdin(ctx context.Context, cwd absPath, stdin string
 // not, it will (re)initialize it.  After running this function, callers can
 // assume the repo is valid, though maybe empty.
 func (git *repoSync) initRepo(ctx context.Context) error {
+	needGitInit := false
+
 	// Check out the git root, and see if it is already usable.
 	_, err := os.Stat(git.root.String())
 	switch {
@@ -1218,6 +1220,7 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 		if err := os.MkdirAll(git.root.String(), defaultDirMode); err != nil {
 			return err
 		}
+		needGitInit = true
 	case err != nil:
 		return err
 	default:
@@ -1225,7 +1228,6 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 		git.log.V(3).Info("repo directory exists", "path", git.root)
 		if git.sanityCheckRepo(ctx) {
 			git.log.V(4).Info("repo directory is valid", "path", git.root)
-			return nil
 		} else {
 			// Maybe a previous run crashed?  Git won't use this dir.  We remove
 			// the contents rather than the dir itself, because a common use-case
@@ -1235,17 +1237,38 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 			if err := removeDirContents(git.root, git.log); err != nil {
 				return fmt.Errorf("can't wipe unusable root directory: %w", err)
 			}
+			needGitInit = true
 		}
 	}
 
-	// Running `git init` in an existing repo is safe (according to git docs).
-	git.log.V(0).Info("initializing repo directory", "path", git.root)
-	if _, _, err := git.Run(ctx, git.root, "init", "-b", "git-sync"); err != nil {
-		return err
+	if needGitInit {
+		// Running `git init` in an existing repo is safe (according to git docs).
+		git.log.V(0).Info("initializing repo directory", "path", git.root)
+		if _, _, err := git.Run(ctx, git.root, "init", "-b", "git-sync"); err != nil {
+			return err
+		}
+		if !git.sanityCheckRepo(ctx) {
+			return fmt.Errorf("can't initialize git repo directory")
+		}
 	}
-	if !git.sanityCheckRepo(ctx) {
-		return fmt.Errorf("can't initialize git repo directory")
+
+	// The "origin" remote has special meaning, like in relative-path
+	// submodules.
+	if stdout, stderr, err := git.Run(ctx, git.root, "remote", "get-url", "origin"); err != nil {
+		if !strings.Contains(stderr, "No such remote") {
+			return err
+		}
+		// It doesn't exist - make it.
+		if _, _, err := git.Run(ctx, git.root, "remote", "add", "origin", git.repo); err != nil {
+			return err
+		}
+	} else if strings.TrimSpace(stdout) != git.repo {
+		// It exists, but is wrong.
+		if _, _, err := git.Run(ctx, git.root, "remote", "set-url", "origin", git.repo); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -1643,14 +1666,14 @@ func lastNonEmptyLine(text string) string {
 // is not a hash or is not known to this repo, even if it appears to be a hash,
 // this will return false.
 func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) {
-	output, _, err := git.Run(ctx, git.root, "rev-parse", ref+"^{commit}")
+	stdout, stderr, err := git.Run(ctx, git.root, "rev-parse", ref+"^{commit}")
 	if err != nil {
-		if strings.Contains(err.Error(), "unknown revision") {
+		if strings.Contains(stderr, "unknown revision") {
 			return false, nil
 		}
 		return false, err
 	}
-	line := lastNonEmptyLine(output)
+	line := lastNonEmptyLine(stdout)
 	return strings.HasPrefix(line, ref), nil
 }
 
