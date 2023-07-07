@@ -63,14 +63,14 @@ RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-b /bin/sed
 RUN ln -sf /bin/dash {ARG_STAGING}/bin/sh
 
-COPY clean_distroless.sh /clean_distroless.sh
-RUN /clean_distroless.sh {ARG_STAGING}
-
 # We need to use distroless/base for tzdata, glibc, and some others.
 FROM gcr.io/distroless/base as intermediate
 
 # Docker doesn't do vars in COPY, so we can't use a regular ARG.
 COPY --from=base {ARG_STAGING} /
+
+COPY clean_distroless.sh /clean_distroless.sh
+RUN /clean_distroless.sh
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
