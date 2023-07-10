@@ -2528,6 +2528,42 @@ function e2e::submodule_sync_shallow() {
 }
 
 ##############################################
+# Test submodule sync with a relative path
+##############################################
+function e2e::submodule_sync_relative() {
+    # Init submodule repo
+    SUBMODULE_REPO_NAME="sub"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
+    mkdir "$SUBMODULE"
+
+    git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
+    echo "submodule" > "$SUBMODULE/submodule"
+    git -C "$SUBMODULE" add submodule
+    git -C "$SUBMODULE" commit -aqm "init submodule file"
+
+    # Add submodule
+    REL="$(realpath --relative-to "$REPO" "$WORK/$SUBMODULE_REPO_NAME")"
+    echo $REL
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q "${REL}"
+    git -C "$REPO" commit -aqm "add submodule"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    rm -rf $SUBMODULE
+}
+
+##############################################
 # Test SSH
 ##############################################
 function e2e::auth_ssh() {
