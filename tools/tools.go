@@ -21,10 +21,10 @@ limitations under the License.
 // tree.  One day, Go may handle this more cleanly.  Until then, this works.
 //
 // TO ADD A NEW TOOL:
-//   1) add an import line below
-//   2) go mod vendor
-//   3) go mod tidy
-//   4) go mod vendor  # yes, again
+//  1. add an import line below
+//  2. go mod vendor
+//  3. go mod tidy
+//  4. go mod vendor  # yes, again
 package tools
 
 import (
