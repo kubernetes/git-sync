@@ -237,8 +237,11 @@ OPTIONS
             Print help text and exit.
 
     --http-bind <string>, $GITSYNC_HTTP_BIND
-            The bind address (including port) for git-sync's HTTP endpoint.  If
-            not specified, the HTTP endpoint is not enabled.
+            The bind address (including port) for git-sync's HTTP endpoint.
+            The '/' URL of this endpoint is suitable for Kubernetes startup and
+            liveness probes, returning a 5xx error until the first sync is
+            complete, and a 200 status thereafter. If not specified, the HTTP
+            endpoint is not enabled.
 
             Examples:
               ":1234": listen on any IP, port 1234
