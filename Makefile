@@ -39,8 +39,6 @@ HTTPS_PROXY ?=
 ### These variables should not need tweaking.
 ###
 
-SRC_DIRS := cmd pkg # directories which hold app source (not vendored)
-
 ALL_PLATFORMS := linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/s390x
 
 # Used internally.  Users should pass GOOS and/or GOARCH.
@@ -248,7 +246,7 @@ test: $(BUILD_DIRS)
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
-	        ./build/test.sh $(SRC_DIRS)                        \
+	        ./build/test.sh ./...                              \
 	    "
 	./test_e2e.sh
 

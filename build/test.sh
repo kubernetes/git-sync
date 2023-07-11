@@ -21,14 +21,12 @@ set -o pipefail
 export CGO_ENABLED=0
 export GOFLAGS="-mod=vendor"
 
-TARGETS=$(for d in "$@"; do echo ./$d/...; done)
-
 echo "Running tests:"
-go test -installsuffix "static" ${TARGETS}
+go test -installsuffix "static" "$@"
 echo
 
 echo -n "Checking gofmt: "
-ERRS=$(find "$@" -type f -name \*.go | xargs gofmt -l 2>&1 || true)
+ERRS="$(go fmt "$@")"
 if [ -n "${ERRS}" ]; then
     echo "FAIL - the following files need to be gofmt'ed:"
     for e in ${ERRS}; do
@@ -41,7 +39,7 @@ echo "PASS"
 echo
 
 echo -n "Checking go vet: "
-ERRS=$(go vet ${TARGETS} 2>&1 || true)
+ERRS="$(go vet "$@" 2>&1 || true)"
 if [ -n "${ERRS}" ]; then
     echo "FAIL"
     echo "${ERRS}"
