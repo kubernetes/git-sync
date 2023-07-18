@@ -1,8 +1,8 @@
-# NOTE: THIS IS THE DEVELOPMENT BRANCH
+# NOTE: THIS DOCUMENT COVERS GIT-SYNC v4
 
-This document is the "master" branch, which is under active development.  If
-you are looking for docs on released versions of git-sync, you probably want to
-use the [v3.x branch](https://github.com/kubernetes/git-sync/tree/release-3.x).
+This is the "master" branch, which is under development.  If you are looking 
+for docs on older (v3) versions of git-sync, you probably want to use the
+[v3.x branch](https://github.com/kubernetes/git-sync/tree/release-3.x).
 
 # git-sync
 
