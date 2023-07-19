@@ -7,7 +7,7 @@ for docs on older (v3) versions of git-sync, you probably want to use the
 # git-sync
 
 git-sync is a simple command that pulls a git repository into a local
-directory, waits for a while, then repeats.  As the remote repository chan ges,
+directory, waits for a while, then repeats.  As the remote repository changes,
 those changes will be synced locally.  It is a perfect "sidecar" container in
 Kubernetes - it can pull files down from a repository so that an application
 can consume them.
