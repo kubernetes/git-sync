@@ -1083,7 +1083,9 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
 func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, refreshCreds func(context.Context) error, submoduleMode string) (bool, string, error) {
-	refreshCreds(ctx)
+	if err := refreshCreds(ctx); err != nil {
+		return false, "", err
+	}
 
 	currentWorktreeGit := filepath.Join(dest, ".git")
 	var hash string
