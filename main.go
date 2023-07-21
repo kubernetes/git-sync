@@ -1723,7 +1723,9 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", git.repo)
 
-	refreshCreds(ctx)
+	if err := refreshCreds(ctx); err != nil {
+		return false, "", err
+	}
 
 	// Initialize the repo directory if needed.
 	if err := git.initRepo(ctx); err != nil {
