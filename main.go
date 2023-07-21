@@ -944,8 +944,8 @@ func main() {
 			}
 		}
 		if *flAskPassURL != "" {
-			// When using an auth URL, the credentials can be dynamic, it needs to be
-			// re-fetched each time.
+			// When using an auth URL, the credentials can be dynamic, and need
+			// to be re-fetched each time.
 			if err := git.CallAskPassURL(ctx); err != nil {
 				metricAskpassCount.WithLabelValues(metricKeyError).Inc()
 				return err
@@ -1723,7 +1723,9 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", git.repo)
 
-	refreshCreds(ctx)
+	if err := refreshCreds(ctx); err != nil {
+		return false, "", fmt.Errorf("credential refresh failed: %w", err)
+	}
 
 	// Initialize the repo directory if needed.
 	if err := git.initRepo(ctx); err != nil {
