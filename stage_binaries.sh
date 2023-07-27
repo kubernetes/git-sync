@@ -19,8 +19,7 @@
 # Stages all the packages or files and their dependencies (+ libraries and
 # copyrights) to the staging dir.
 #
-# This is intended to be used in a multi-stage docker build with a distroless/base
-# or distroless/cc image.
+# This is intended to be used in a multi-stage docker build.
 
 set -o errexit
 set -o nounset
@@ -47,6 +46,33 @@ trap 'errexit' ERR
 # setting errtrace allows our ERR trap handler to be propagated to functions,
 # expansions and subshells
 set -o errtrace
+
+function DBG() {
+    if [[ -n "${DBG:-}" ]]; then
+        echo "$@"
+    fi
+}
+
+function grep_allow_nomatch() {
+    # grep exits 0 on match, 1 on no match, 2 on error
+    grep "$@" || [[ $? == 1 ]]
+}
+
+function _indent() {
+    (
+        IFS="" # preserve spaces in `read`
+        while read -r X; do
+            echo "  ${X}"
+        done
+    )
+}
+
+# run "$@" and indent the output
+function indent() {
+    # This lets us process stderr and stdout without merging them, without
+    # bash-isms.
+    { "$@" 2>&1 1>&3 | _indent; } 3>&1 1>&2 | _indent
+}
 
 # Track these globally so we only load it once.
 ROOT_FWD_LINKS=()
@@ -109,8 +135,9 @@ function file_to_package() {
     fi
 
     # `dpkg-query --search $file-pattern` outputs lines with the format: "$package: $file-path"
-    # where $file-path belongs to $package.
-    echo "${result}" | cut -d':' -f1
+    # where $file-path belongs to $package.  Sometimes it has lines that say
+    # "diversion" but there's no documented grammar I can find.
+    echo "${result}" | grep -v "diversion" | cut -d':' -f1
 }
 
 function ensure_dir_in_staging() {
@@ -123,16 +150,10 @@ function ensure_dir_in_staging() {
     fi
 }
 
-# stage_file stages the filepath $2 to $1, following symlinks
-# and staging copyrights
-function stage_file() {
+# stage_one_file stages the filepath $2 to $1, following symlinks
+function stage_one_file() {
     local staging="$1"
     local file="$2"
-
-    # short circuit if we have done this file before
-    if [[ -e "${staging}/${file}" ]]; then
-        return
-    fi
 
     # copy the real form of the named path
     local real="$(realpath "${file}")"
@@ -145,49 +166,49 @@ function stage_file() {
             ensure_dir_in_staging "${staging}" "${dir}"
             ln -s "${real}" "${staging}/${file}"
         fi
-    elif [[ -x "$file" ]]; then
-        # stage the dependencies of the binary
-        binary_to_libraries "${file}" \
-            | while read -r lib; do
-                stage_file "${staging}" "${lib}"
-        done
+    fi
+}
+
+# stage_file_and_deps stages the filepath $2 to $1, following symlinks and
+# library deps, and staging copyrights
+function stage_file_and_deps() {
+    local staging="$1"
+    local file="$2"
+
+    # short circuit if we have done this file before
+    if [[ -e "${staging}/${file}" ]]; then
+        return
     fi
 
     # get the package so we can stage package metadata as well
     local package
     package="$(file_to_package "${file}")"
-    # stage the copyright for the file, if it exists
-    local copyright_src="/usr/share/doc/${package}/copyright"
-    local copyright_dst="${staging}/copyright/${package}/copyright.gz"
-    if [[ -f "${copyright_src}" && ! -f "${copyright_dst}" ]]; then
-        mkdir -p "$(dirname "${copyright_dst}")"
-        gzip -9 --to-stdout "${copyright_src}" > "${copyright_dst}"
+    DBG "staging file ${file} from pkg ${package}"
+
+    stage_one_file "${staging}" "$file"
+
+    # stage dependencies of binaries
+    if [[ -x "$file" ]]; then
+        while read -r lib; do
+            indent stage_file_and_deps "${staging}" "${lib}"
+        done < <( binary_to_libraries "${file}" )
     fi
 
-    # stage the package status mimicking bazel
-    # https://github.com/bazelbuild/rules_docker/commit/f5432b813e0a11491cf2bf83ff1a923706b36420
-    # instead of parsing the control file, we can just get the actual package status with dpkg
-    mkdir -p "${staging}/var/lib/dpkg/status.d/"
-    dpkg -s "${package}" > "${staging}/var/lib/dpkg/status.d/${package}"
+    if [[ -n "${package}" ]]; then
+        # stage the copyright for the file, if it exists
+        local copyright_src="/usr/share/doc/${package}/copyright"
+        local copyright_dst="${staging}/copyright/${package}/copyright.gz"
+        if [[ -f "${copyright_src}" && ! -f "${copyright_dst}" ]]; then
+            mkdir -p "$(dirname "${copyright_dst}")"
+            gzip -9 --to-stdout "${copyright_src}" > "${copyright_dst}"
+        fi
 
-}
-
-function grep_allow_nomatch() {
-    # grep exits 0 on match, 1 on no match, 2 on error
-    grep "$@" || [[ $? == 1 ]]
-}
-
-function _indent() {
-    while read -r X; do
-        echo "    ${X}"
-    done
-}
-
-# run "$@" and indent the output
-function indent() {
-    # This lets us process stderr and stdout without merging them, without
-    # bash-isms.
-    { "$@" 2>&1 1>&3 | _indent; } 3>&1 1>&2 | _indent
+        # Since apt is not in the final image, stage the package status
+        # (mimicking bazel).  This allows security scanners to run against it.
+        # https://github.com/bazelbuild/rules_docker/commit/f5432b813e0a11491cf2bf83ff1a923706b36420
+        mkdir -p "${staging}/var/lib/dpkg/status.d/"
+        dpkg -s "${package}" > "${staging}/var/lib/dpkg/status.d/${package}"
+    fi
 }
 
 function stage_one_package() {
@@ -216,7 +237,7 @@ function stage_one_package() {
             if [[ -z "${found}" ]]; then
                 names+=("${file}")
                 sums+=("${sum}")
-                stage_file "${staging}" "${file}"
+                indent stage_file_and_deps "${staging}" "${file}"
             fi
         fi
     done < <( dpkg -L "${pkg}" \
@@ -225,9 +246,15 @@ function stage_one_package() {
 
 function get_dependent_packages() {
     local pkg="$1"
+    # There's no documented grammar for the output of this.  Sometimes it says:
+    #    Depends: package
+    # ...and other times it says:
+    #    Depends <package>
+    # ...but those don't really seem to be required.  There's also "PreDepends"
+    # which are something else.
     apt-cache depends "${pkg}" \
-        | grep_allow_nomatch Depends \
-        | awk -F '.*Depends:[[:space:]]?' '{print $2}'
+        | grep_allow_nomatch '^ *Depends: [a-zA-Z0-9]' \
+        | awk -F ':' '{print $2}'
 }
 
 # Args:
@@ -245,12 +272,12 @@ function stage_packages() {
         local du_before="$(du -sk "${staging}" | cut -f1)"
         indent apt-get -y -qq -o Dpkg::Use-Pty=0 --no-install-recommends install "${pkg}"
         stage_one_package "$staging" "${pkg}"
-        get_dependent_packages "${pkg}" \
-            | while read -r dep; do
-                stage_one_package "${staging}" "${dep}"
-            done
+        while read -r dep; do
+            DBG "staging dependent package ${dep}"
+            indent stage_one_package "${staging}" "${dep}"
+        done < <( get_dependent_packages "${pkg}" )
         local du_after="$(du -sk "${staging}" | cut -f1)"
-        echo "package ${pkg} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+        indent echo "package ${pkg} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -291,7 +318,7 @@ function stage_one_binary() {
     binary_path="$(which "${bin}")"
 
     # stage the binary itself
-    stage_file "${staging}" "${binary_path}"
+    stage_file_and_deps "${staging}" "${binary_path}"
 }
 
 function stage_binaries() {
@@ -304,7 +331,21 @@ function stage_binaries() {
         local du_before="$(du -sk "${staging}" | cut -f1)"
         stage_one_binary "${staging}" "${bin}"
         local du_after="$(du -sk "${staging}" | cut -f1)"
-        echo "binary ${bin} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+        indent echo "binary ${bin} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+    done
+}
+
+function stage_files() {
+    local staging="$1"
+    shift
+
+    local bin
+    for file; do
+        echo "staging file ${file}"
+        local du_before="$(du -sk "${staging}" | cut -f1)"
+        stage_one_file "${staging}" "${file}"
+        local du_after="$(du -sk "${staging}" | cut -f1)"
+        indent echo "file ${file} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -316,6 +357,7 @@ function main() {
     local staging=""
     local pkgs=()
     local bins=()
+    local files=()
 
     while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -330,6 +372,15 @@ function main() {
                 exit 2
             fi
             bins+=("$2")
+            shift 2
+            ;;
+        "-f")
+            if [[ -z "${2:-}" ]]; then
+                echo "error: flag '-f' requires an argument" >&2
+                usage >&2
+                exit 2
+            fi
+            files+=("$2")
             shift 2
             ;;
         "-p")
@@ -374,6 +425,9 @@ function main() {
     fi
     if (( "${#bins[@]}" > 0 )); then
         stage_binaries "${staging}" "${bins[@]}"
+    fi
+    if (( "${#files[@]}" > 0 )); then
+        stage_files "${staging}" "${files[@]}"
     fi
 
     echo "final staged size: $(du -sk "${staging}" | cut -f1) kB"
