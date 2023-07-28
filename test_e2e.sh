@@ -1093,9 +1093,9 @@ function e2e::auth_askpass_url_correct_password() {
 }
 
 ##############################################
-# Test askpass-url where the URL is flaky
+# Test askpass-url where the URL is sometimes wrong
 ##############################################
-function e2e::auth_askpass_url_flaky() {
+function e2e::auth_askpass_url_sometimes_wrong() {
     # run with askpass_url service which alternates good/bad replies.
     HITLOG="$WORK/hitlog"
     cat /dev/null > "$HITLOG"
@@ -1153,6 +1153,112 @@ function e2e::auth_askpass_url_flaky() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
 }
+
+##############################################
+# Test askpass-url where the URL is flaky
+##############################################
+function e2e::auth_askpass_url_flaky() {
+    # run with askpass_url service which alternates good/bad replies.
+    HITLOG="$WORK/hitlog"
+    cat /dev/null > "$HITLOG"
+    CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
+        e2e/test/ncsvr \
+        80 'read X
+            if [ -f /tmp/flag ]; then
+                echo "HTTP/1.1 200 OK"
+                echo
+                echo "username=my-username"
+                echo "password=my-password"
+                rm /tmp/flag
+            else
+                echo "HTTP/1.1 503 Service Unavailable"
+                echo
+                touch /tmp/flag
+            fi
+            ')
+    IP=$(docker_ip "$CTR")
+
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-sync-failures=2 \
+        --wait=0.1 \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        >> "$1" 2>&1 &
+    sleep 3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    sleep 3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    sleep 3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+}
+
+##############################################
+# Test askpass-url where the URL fails at startup
+##############################################
+function e2e::auth_askpass_url_slow_start() {
+    # run with askpass_url service which takes a while to come up
+    HITLOG="$WORK/hitlog"
+    cat /dev/null > "$HITLOG"
+    CTR=$(docker_run \
+        -v "$HITLOG":/var/log/hits \
+        --entrypoint sh \
+        e2e/test/ncsvr \
+        -c "sleep 4;
+            /ncsvr.sh 80 'read X
+                echo \"HTTP/1.1 200 OK\"
+                echo
+                echo \"username=my-username\"
+                echo \"password=my-password\"
+                '")
+    IP=$(docker_ip "$CTR")
+
+    # Sync
+    echo "$FUNCNAME" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    GIT_SYNC \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-sync-failures=5 \
+        --wait=1 \
+        --repo="file://$REPO" \
+        --branch="$MAIN_BRANCH" \
+        --rev=HEAD \
+        --root="$ROOT" \
+        --dest="link" \
+        >> "$1" 2>&1 &
+    sleep 1
+    assert_file_absent "$ROOT/link"
+
+    sleep 5
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+}
+
 
 ##############################################
 # Test exechook-success
