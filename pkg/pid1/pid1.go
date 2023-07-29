@@ -69,7 +69,7 @@ func runInit(firstborn int) (int, error) {
 			if status.Exited() {
 				return status.ExitStatus(), nil
 			}
-			return 0, fmt.Errorf("unhandled exit status: 0x%x\n", status)
+			return 0, fmt.Errorf("unhandled exit status: 0x%x", status)
 		}
 	}
 	return 0, fmt.Errorf("signal handler terminated unexpectedly")
@@ -83,7 +83,7 @@ func sigchld(firstborn int) (bool, syscall.WaitStatus, error) {
 		var status syscall.WaitStatus
 		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
 		if err != nil {
-			return false, 0, fmt.Errorf("wait4(): %w\n", err)
+			return false, 0, fmt.Errorf("wait4(): %w", err)
 		}
 
 		if pid == firstborn {
