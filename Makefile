@@ -276,3 +276,11 @@ container-clean:
 
 bin-clean:
 	rm -rf .go bin
+
+lint-staticcheck:
+	go run honnef.co/go/tools/cmd/staticcheck@2023.1.3
+
+lint-golangci-lint:
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3 run
+
+lint: lint-staticcheck lint-golangci-lint
