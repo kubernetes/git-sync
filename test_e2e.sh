@@ -1916,7 +1916,7 @@ function e2e::auth_askpass_url_slow_start() {
     sleep 1
     assert_file_absent "$ROOT/link"
 
-    wait_for_sync "5"
+    wait_for_sync 5
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "$FUNCNAME"
