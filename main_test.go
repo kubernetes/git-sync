@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/goleak"
 )
 
 const (
@@ -378,6 +380,8 @@ func TestParseGitConfigs(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			defer goleak.VerifyNone(t)
+
 			kvs, err := parseGitConfigs(tc.input)
 			if err != nil && !tc.fail {
 				t.Errorf("unexpected error: %v", err)
