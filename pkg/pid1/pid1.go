@@ -83,7 +83,7 @@ func sigchld(firstborn int) (bool, syscall.WaitStatus, error) {
 		var status syscall.WaitStatus
 		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
 		if err != nil {
-			return false, 0, fmt.Errorf("wait4(): %v\n", err)
+			return false, 0, fmt.Errorf("wait4(): %w\n", err)
 		}
 
 		if pid == firstborn {

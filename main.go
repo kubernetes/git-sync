@@ -1415,25 +1415,25 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 
 	// Make sure the link directory exists.
 	if err := os.MkdirAll(linkDir, defaultDirMode); err != nil {
-		return fmt.Errorf("error making symlink dir: %v", err)
+		return fmt.Errorf("error making symlink dir: %w", err)
 	}
 
 	// newDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
 	targetRelative, err := filepath.Rel(linkDir, targetPath.String())
 	if err != nil {
-		return fmt.Errorf("error converting to relative path: %v", err)
+		return fmt.Errorf("error converting to relative path: %w", err)
 	}
 
 	const tmplink = "tmp-link"
 	git.log.V(2).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
 	if err := os.Symlink(targetRelative, filepath.Join(linkDir, tmplink)); err != nil {
-		return fmt.Errorf("error creating symlink: %v", err)
+		return fmt.Errorf("error creating symlink: %w", err)
 	}
 
 	git.log.V(2).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
 	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link.String()); err != nil {
-		return fmt.Errorf("error replacing symlink: %v", err)
+		return fmt.Errorf("error replacing symlink: %w", err)
 	}
 
 	return nil
@@ -1451,7 +1451,7 @@ func (git *repoSync) removeWorktree(ctx context.Context, worktree worktree) erro
 	}
 	git.log.V(1).Info("removing worktree", "path", worktree.Path())
 	if err := os.RemoveAll(worktree.Path().String()); err != nil {
-		return fmt.Errorf("error removing directory: %v", err)
+		return fmt.Errorf("error removing directory: %w", err)
 	}
 	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
 		return err
@@ -2045,7 +2045,7 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 
 	for _, kv := range configs {
 		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
-			return fmt.Errorf("error configuring git %q %q: %v", kv.key, kv.val, err)
+			return fmt.Errorf("error configuring git %q %q: %w", kv.key, kv.val, err)
 		}
 	}
 	return nil
@@ -2056,12 +2056,12 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
-		return fmt.Errorf("can't parse --git-config flag: %v", err)
+		return fmt.Errorf("can't parse --git-config flag: %w", err)
 	}
 	git.log.V(1).Info("setting additional git configs", "configs", configs)
 	for _, kv := range configs {
 		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
-			return fmt.Errorf("error configuring additional git configs %q %q: %v", kv.key, kv.val, err)
+			return fmt.Errorf("error configuring additional git configs %q %q: %w", kv.key, kv.val, err)
 		}
 	}
 
@@ -2122,12 +2122,12 @@ func parseGitConfigs(configsFlag string) ([]keyVal, error) {
 			if r == '"' {
 				cur.val, err = parseGitConfigQVal(ch)
 				if err != nil {
-					return nil, fmt.Errorf("key %q: %v", cur.key, err)
+					return nil, fmt.Errorf("key %q: %w", cur.key, err)
 				}
 			} else {
 				cur.val, err = parseGitConfigVal(r, ch)
 				if err != nil {
-					return nil, fmt.Errorf("key %q: %v", cur.key, err)
+					return nil, fmt.Errorf("key %q: %w", cur.key, err)
 				}
 			}
 		}
