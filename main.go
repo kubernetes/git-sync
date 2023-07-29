@@ -2074,16 +2074,12 @@ type keyVal struct {
 }
 
 func parseGitConfigs(configsFlag string) ([]keyVal, error) {
-	ch := make(chan rune)
-	stop := make(chan bool)
+	// Use a channel as a FIFO.  We don't expect the input strings to be very
+	// large, so this simple model should suffice.
+	ch := make(chan rune, len(configsFlag))
 	go func() {
 		for _, r := range configsFlag {
-			select {
-			case <-stop:
-				break
-			default:
-				ch <- r
-			}
+			ch <- r
 		}
 		close(ch)
 	}()
