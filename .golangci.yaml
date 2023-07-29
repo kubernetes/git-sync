@@ -1,0 +1,26 @@
+# This file configures checks that all new code for Kubernetes is meant to
+# pass, in contrast to .golangci.yaml which defines checks that also the
+# existing code passes.
+
+run:
+  timeout: 30m
+
+linters:
+  disable-all: false
+  enable: # please keep this alphabetized
+    - ginkgolinter
+    - gocritic
+    - govet
+    - ineffassign
+    # Should we add logcheck, for consistency with kubernetes/kubernetes?
+    # - logcheck
+    - staticcheck
+    - stylecheck
+    - unused
+
+linters-settings: # please keep this alphabetized
+  gocritic:
+  staticcheck:
+    checks:
+      - "all"
+  stylecheck:
