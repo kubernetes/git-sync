@@ -2077,10 +2077,11 @@ func parseGitConfigs(configsFlag string) ([]keyVal, error) {
 	ch := make(chan rune)
 	stop := make(chan bool)
 	go func() {
+	loopOverConfigFlags:
 		for _, r := range configsFlag {
 			select {
 			case <-stop:
-				break
+				break loopOverConfigFlags
 			default:
 				ch <- r
 			}
