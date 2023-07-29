@@ -1149,7 +1149,7 @@ func setRepoReady() {
 // it is deadlocked.
 func sleepForever() {
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	signal.Notify(c, os.Interrupt)
 	<-c
 	os.Exit(0)
 }
@@ -1932,7 +1932,7 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSS
 		}
 		sshCmd += fmt.Sprintf(" -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s", pathToSSHKnownHosts)
 	} else {
-		sshCmd += fmt.Sprintf(" -o StrictHostKeyChecking=no")
+		sshCmd += " -o StrictHostKeyChecking=no"
 	}
 
 	git.log.V(9).Info("setting GIT_SSH_COMMAND", "value", sshCmd)
@@ -2086,7 +2086,6 @@ func parseGitConfigs(configsFlag string) ([]keyVal, error) {
 			}
 		}
 		close(ch)
-		return
 	}()
 
 	result := []keyVal{}
