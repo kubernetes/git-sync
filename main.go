@@ -477,31 +477,31 @@ func main() {
 	// Obsolete flags, kept for compat.
 	flDeprecatedBranch := pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 		"DEPRECATED: use --ref instead")
-	pflag.CommandLine.MarkDeprecated("branch", "use --ref instead")
+	mustMarkDeprecated("branch", "use --ref instead")
 	flDeprecatedChmod := pflag.Int("change-permissions", envInt(0, "GIT_SYNC_PERMISSIONS"),
 		"DEPRECATED: use --group-write instead")
-	pflag.CommandLine.MarkDeprecated("change-permissions", "use --group-write instead")
+	mustMarkDeprecated("change-permissions", "use --group-write instead")
 	flDeprecatedDest := pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 		"DEPRECATED: use --link instead")
-	pflag.CommandLine.MarkDeprecated("dest", "use --link instead")
+	mustMarkDeprecated("dest", "use --link instead")
 	flDeprecatedMaxSyncFailures := pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
 		"DEPRECATED: use --max-failures instead")
-	pflag.CommandLine.MarkDeprecated("max-sync-failures", "use --max-failures instead")
+	mustMarkDeprecated("max-sync-failures", "use --max-failures instead")
 	flDeprecatedRev := pflag.String("rev", envString("", "GIT_SYNC_REV"),
 		"DEPRECATED: use --ref instead")
-	pflag.CommandLine.MarkDeprecated("rev", "use --ref instead")
+	mustMarkDeprecated("rev", "use --ref instead")
 	flDeprecatedSyncHookCommand := pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
 		"DEPRECATED: use --exechook-command instead")
-	pflag.CommandLine.MarkDeprecated("sync-hook-command", "use --exechook-command instead")
+	mustMarkDeprecated("sync-hook-command", "use --exechook-command instead")
 	flDeprecatedTimeout := pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
 		"DEPRECATED: use --sync-timeout instead")
-	pflag.CommandLine.MarkDeprecated("timeout", "use --sync-timeout instead")
+	mustMarkDeprecated("timeout", "use --sync-timeout instead")
 	flDeprecatedV := pflag.Int("v", -1,
 		"DEPRECATED: use -v or --verbose instead")
-	pflag.CommandLine.MarkDeprecated("v", "use -v or --verbose instead")
+	mustMarkDeprecated("v", "use -v or --verbose instead")
 	flDeprecatedWait := pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
 		"DEPRECATED: use --period instead")
-	pflag.CommandLine.MarkDeprecated("wait", "use --period instead")
+	mustMarkDeprecated("wait", "use --period instead")
 
 	//
 	// Parse and verify flags.  Errors here are fatal.
@@ -552,17 +552,19 @@ func main() {
 		handleConfigError(log, true, "ERROR: --repo must be specified")
 	}
 
-	if *flDeprecatedBranch != "" && (*flDeprecatedRev == "" || *flDeprecatedRev == "HEAD") {
+	switch {
+	case *flDeprecatedBranch != "" && (*flDeprecatedRev == "" || *flDeprecatedRev == "HEAD"):
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --branch")
 		*flRef = *flDeprecatedBranch
-	} else if *flDeprecatedRev != "" {
+	case *flDeprecatedRev != "":
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --rev")
 		*flRef = *flDeprecatedRev
-	} else if *flDeprecatedBranch != "" && *flDeprecatedRev != "" {
+	case *flDeprecatedBranch != "" && *flDeprecatedRev != "":
 		handleConfigError(log, true, "ERROR: can't set --ref from deprecated --branch and --rev")
 	}
+
 	if *flRef == "" {
 		handleConfigError(log, true, "ERROR: --ref must be specified")
 	}
@@ -1049,6 +1051,16 @@ func main() {
 			log.V(1).Info("caught signal", "signal", unix.SignalName(syncSig))
 			t.Stop()
 		}
+	}
+}
+
+// mustMarkDeprecated is a helper around pflag.CommandLine.MarkDeprecated.
+// It panics if there is an error (as these indicate a coding issue).
+// This makes it easier to keep the linters happy.
+func mustMarkDeprecated(name string, usageMessage string) {
+	err := pflag.CommandLine.MarkDeprecated(name, usageMessage)
+	if err != nil {
+		panic(fmt.Sprintf("error marking flag %q as deprecated: %v", name, err))
 	}
 }
 
@@ -1894,7 +1906,10 @@ func (git *repoSync) isShallow(ctx context.Context) (bool, error) {
 
 func md5sum(s string) string {
 	h := md5.New()
-	io.WriteString(h, s)
+	if _, err := io.WriteString(h, s); err != nil {
+		// Documented as never failing, so panic
+		panic(fmt.Sprintf("md5 WriteString failed: %v", err))
+	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
