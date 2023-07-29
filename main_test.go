@@ -747,7 +747,9 @@ func TestTouch(t *testing.T) {
 	stamp := time.Now()
 	time.Sleep(100 * time.Millisecond)
 
-	touch(dirPath)
+	if err := touch(dirPath); err != nil {
+		t.Fatalf("touch(dir) failed: %v", err)
+	}
 	if dirInfo, err := os.Stat(dirPath.String()); err != nil {
 		t.Fatalf("can't stat dir: %v", err)
 	} else if !dirInfo.IsDir() {
@@ -756,7 +758,9 @@ func TestTouch(t *testing.T) {
 		t.Errorf("touch(dir) mtime %v is not after %v", dirInfo.ModTime(), stamp)
 	}
 
-	touch(filePath)
+	if err := touch(filePath); err != nil {
+		t.Fatalf("touch(file) failed: %v", err)
+	}
 	if fileInfo, err := os.Stat(filePath.String()); err != nil {
 		t.Fatalf("can't stat file: %v", err)
 	} else if fileInfo.IsDir() {
@@ -765,7 +769,9 @@ func TestTouch(t *testing.T) {
 		t.Errorf("touch(file) mtime %v is not after %v", fileInfo.ModTime(), stamp)
 	}
 
-	touch(newfilePath)
+	if err := touch(newfilePath); err != nil {
+		t.Fatalf("touch(newfile) failed: %v", err)
+	}
 	if newfileInfo, err := os.Stat(newfilePath.String()); err != nil {
 		t.Fatalf("can't stat newfile: %v", err)
 	} else if newfileInfo.IsDir() {
