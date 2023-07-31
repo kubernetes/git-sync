@@ -68,8 +68,7 @@ RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-f /etc/nsswitch.conf \
 	-f /etc/os-release \
 	-f /etc/passwd \
-	-f /etc/shadow
-RUN ln -sf /bin/dash {ARG_STAGING}/bin/sh
+	-f /tmp
 
 FROM scratch as intermediate
 
