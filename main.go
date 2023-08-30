@@ -131,7 +131,7 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 		return parse(val)
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(key); val != "" {
+		if val := os.Getenv(alt); val != "" {
 			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
 			return parse(val)
 		}
