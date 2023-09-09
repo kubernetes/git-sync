@@ -118,6 +118,23 @@ func envString(def string, key string, alts ...string) string {
 	return def
 }
 
+func envStringArray(def string, key string, alts ...string) []string {
+	parse := func(s string) []string {
+		return strings.Split(s, ":")
+	}
+
+	if val := os.Getenv(key); val != "" {
+		return parse(val)
+	}
+	for _, alt := range alts {
+		if val := os.Getenv(alt); val != "" {
+			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			return parse(val)
+		}
+	}
+	return parse(def)
+}
+
 func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 	parse := func(val string) (bool, error) {
 		parsed, err := strconv.ParseBool(val)
@@ -437,9 +454,9 @@ func main() {
 	flSSH := pflag.Bool("ssh",
 		envBool(false, "GITSYNC_SSH", "GIT_SYNC_SSH"),
 		"use SSH for git operations")
-	flSSHKeyFile := pflag.String("ssh-key-file",
-		envString("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
-		"the SSH key to use")
+	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
+		envStringArray("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
+		"the SSH key(s) to use")
 	flSSHKnownHosts := pflag.Bool("ssh-known-hosts",
 		envBool(true, "GITSYNC_SSH_KNOWN_HOSTS", "GIT_SYNC_KNOWN_HOSTS", "GIT_KNOWN_HOSTS"),
 		"enable SSH known_hosts verification")
@@ -697,7 +714,7 @@ func main() {
 		if *flCookieFile {
 			handleConfigError(log, true, "ERROR: only one of --ssh and --cookie-file may be specified")
 		}
-		if *flSSHKeyFile == "" {
+		if len(*flSSHKeyFiles) == 0 {
 			handleConfigError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is set")
 		}
 		if *flSSHKnownHosts {
@@ -821,8 +838,8 @@ func main() {
 	}
 
 	if *flSSH {
-		if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFile, *flSSHKnownHostsFile); err != nil {
-			log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFile, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
+		if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
+			log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFiles, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
 			os.Exit(1)
 		}
 	}
@@ -1928,7 +1945,7 @@ func (git *repoSync) StoreCredentials(ctx context.Context, username, password st
 	return nil
 }
 
-func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSSHKnownHosts string) error {
+func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathsToSSHSecrets []string, pathToSSHKnownHosts string) error {
 	git.log.V(1).Info("setting up git SSH credentials")
 
 	// If the user sets GIT_SSH_COMMAND we try to respect it.
@@ -1937,10 +1954,12 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathToSSHSecret, pathToSS
 		sshCmd = "ssh"
 	}
 
-	if _, err := os.Stat(pathToSSHSecret); err != nil {
-		return fmt.Errorf("can't access SSH key file %s: %w", pathToSSHSecret, err)
+	for _, p := range pathsToSSHSecrets {
+		if _, err := os.Stat(p); err != nil {
+			return fmt.Errorf("can't access SSH key file %s: %w", p, err)
+		}
+		sshCmd += fmt.Sprintf(" -i %s", p)
 	}
-	sshCmd += fmt.Sprintf(" -i %s", pathToSSHSecret)
 
 	if setupKnownHosts {
 		if _, err := os.Stat(pathToSSHKnownHosts); err != nil {
@@ -2463,8 +2482,10 @@ OPTIONS
             Use SSH for git authentication and operations.
 
     --ssh-key-file <string>, $GITSYNC_SSH_KEY_FILE
-            The SSH key to use when using --ssh.  If not specified, this
-            defaults to "/etc/git-secret/ssh".
+            The SSH key(s) to use when using --ssh.  This flag may be specified
+            more than once and the environment variable will be parsed like
+            PATH - using a colon (':') to separate elements.  If not specified,
+            this defaults to "/etc/git-secret/ssh".
 
     --ssh-known-hosts, $GITSYNC_SSH_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.  If not

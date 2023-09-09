@@ -317,8 +317,10 @@ OPTIONS
             Use SSH for git authentication and operations.
 
     --ssh-key-file <string>, $GITSYNC_SSH_KEY_FILE
-            The SSH key to use when using --ssh.  If not specified, this
-            defaults to "/etc/git-secret/ssh".
+            The SSH key(s) to use when using --ssh.  This flag may be specified
+            more than once and the environment variable will be parsed like
+            PATH - using a colon (':') to separate elements.  If not specified,
+            this defaults to "/etc/git-secret/ssh".
 
     --ssh-known-hosts, $GITSYNC_SSH_KNOWN_HOSTS
             Enable SSH known_hosts verification when using --ssh.  If not
