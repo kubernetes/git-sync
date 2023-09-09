@@ -238,9 +238,12 @@ function wait_for_sync() {
 
 # Init SSH for test cases.
 DOT_SSH="$DIR/dot_ssh"
-mkdir -p "$DOT_SSH"
-ssh-keygen -f "$DOT_SSH/id_test" -P "" >/dev/null
-cat "$DOT_SSH/id_test.pub" > "$DOT_SSH/authorized_keys"
+for i in $(seq 1 3); do
+    mkdir -p "$DOT_SSH/$i"
+    ssh-keygen -f "$DOT_SSH/$i/id_test" -P "" >/dev/null
+    mkdir -p "$DOT_SSH/server/$i"
+    cat "$DOT_SSH/$i/id_test.pub" > "$DOT_SSH/server/$i/authorized_keys"
+done
 chmod -R g+r "$DOT_SSH"
 
 TEST_TOOLS="_test_tools"
@@ -279,7 +282,9 @@ function GIT_SYNC() {
         -v "$(pwd)/$TEST_TOOLS":"/$TEST_TOOLS":ro \
         --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
         -v "$RUNLOG":/var/log/runs \
-        -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
+        -v "$DOT_SSH/1/id_test":"/ssh/secret.1":ro \
+        -v "$DOT_SSH/2/id_test":"/ssh/secret.2":ro \
+        -v "$DOT_SSH/3/id_test":"/ssh/secret.3":ro \
         "${IMAGE}" \
             -v=6 \
             --add-user \
@@ -2690,14 +2695,43 @@ function e2e::submodule_sync_relative() {
 }
 
 ##############################################
+# Test SSH with bad key
+##############################################
+function e2e::auth_ssh_wrong_key() {
+    echo "$FUNCNAME" > "$REPO/file"
+
+    # Run a git-over-SSH server.  Use key #1.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/src:ro \
+        e2e/test/sshd)
+    IP=$(docker_ip "$CTR")
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    # Try to sync with key #2.
+    GIT_SYNC \
+        --one-time \
+        --repo="test@$IP:/src" \
+        --root="$ROOT" \
+        --link="link" \
+        --ssh \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-known-hosts=false \
+      || true
+
+    # check for failure
+    assert_file_absent "$ROOT/link/file"
+}
+
+##############################################
 # Test SSH
 ##############################################
 function e2e::auth_ssh() {
     echo "$FUNCNAME" > "$REPO/file"
 
-    # Run a git-over-SSH server
+    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
     CTR=$(docker_run \
-        -v "$DOT_SSH":/dot_ssh:ro \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
         -v "$REPO":/src:ro \
         e2e/test/sshd)
     IP=$(docker_ip "$CTR")
@@ -2713,6 +2747,9 @@ function e2e::auth_ssh() {
         --root="$ROOT" \
         --link="link" \
         --ssh \
+        --ssh-key-file="/ssh/secret.1" \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-key-file="/ssh/secret.3" \
         --ssh-known-hosts=false \
         &
     wait_for_sync "${MAXWAIT}"
