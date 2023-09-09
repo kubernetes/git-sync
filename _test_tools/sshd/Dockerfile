@@ -47,6 +47,9 @@ COPY sshd.sh /
 # manage permissions.
 VOLUME /dot_ssh
 
+# Callers should mount a directory with git repos here.
+VOLUME /git
+
 # Callers can SSH as user "test"
 RUN echo "test:x:65533:65533::/home/test:/usr/bin/git-shell" >> /etc/passwd
 

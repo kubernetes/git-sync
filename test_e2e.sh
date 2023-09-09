@@ -241,10 +241,13 @@ DOT_SSH="$DIR/dot_ssh"
 for i in $(seq 1 3); do
     mkdir -p "$DOT_SSH/$i"
     ssh-keygen -f "$DOT_SSH/$i/id_test" -P "" >/dev/null
+    cp -a "$DOT_SSH/$i/id_test" "$DOT_SSH/$i/id_local" # for outside-of-container use
     mkdir -p "$DOT_SSH/server/$i"
     cat "$DOT_SSH/$i/id_test.pub" > "$DOT_SSH/server/$i/authorized_keys"
 done
-chmod -R g+r "$DOT_SSH"
+# Allow files to be read inside containers running as a different UID.
+# Note: this does not include the *.local forms.
+chmod g+r "$DOT_SSH"/*/id_test* "$DOT_SSH"/server/*
 
 TEST_TOOLS="_test_tools"
 SLOW_GIT_FETCH="$TEST_TOOLS/git_slow_fetch.sh"
@@ -2727,23 +2730,20 @@ function e2e::auth_ssh_wrong_key() {
 # Test SSH
 ##############################################
 function e2e::auth_ssh() {
-    echo "$FUNCNAME" > "$REPO/file"
-
     # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
     CTR=$(docker_run \
         -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/src:ro \
+        -v "$REPO":/git/repo:ro \
         e2e/test/sshd)
     IP=$(docker_ip "$CTR")
-    git -C "$REPO" commit -qam "$FUNCNAME"
 
-    # First sync
+    # Configure the repo.
     echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
         --period=100ms \
-        --repo="test@$IP:/src" \
+        --repo="test@$IP:/git/repo" \
         --root="$ROOT" \
         --link="link" \
         --ssh \
@@ -2752,6 +2752,8 @@ function e2e::auth_ssh() {
         --ssh-key-file="/ssh/secret.3" \
         --ssh-known-hosts=false \
         &
+
+    # First sync
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -2774,6 +2776,87 @@ function e2e::auth_ssh() {
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+}
+
+##############################################
+# Test submodules over SSH with different keys
+##############################################
+function e2e::submodule_sync_over_ssh_different_keys() {
+    # Init nested submodule repo
+    NESTED_SUBMODULE_REPO_NAME="nested-sub"
+    NESTED_SUBMODULE="$WORK/$NESTED_SUBMODULE_REPO_NAME"
+    mkdir "$NESTED_SUBMODULE"
+
+    git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
+    config_repo "$NESTED_SUBMODULE"
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
+    git -C "$NESTED_SUBMODULE" add nested-submodule.file
+    git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
+
+    # Run a git-over-SSH server.  Use key #1.
+    CTR_SUBSUB=$(docker_run \
+        -v "$DOT_SSH/server/1":/dot_ssh:ro \
+        -v "$NESTED_SUBMODULE":/git/repo:ro \
+        e2e/test/sshd)
+    IP_SUBSUB=$(docker_ip "$CTR_SUBSUB")
+
+    # Tell local git not to do host checking and to use the test keys.
+    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $DOT_SSH/1/id_local -i $DOT_SSH/2/id_local"
+
+    # Init submodule repo
+    SUBMODULE_REPO_NAME="sub"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
+    mkdir "$SUBMODULE"
+
+    git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
+    config_repo "$SUBMODULE"
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
+    git -C "$SUBMODULE" commit -aqm "init submodule.file"
+
+    # Add nested submodule to submodule repo
+    git -C "$SUBMODULE" submodule add -q "test@$IP_SUBSUB:/git/repo" "$NESTED_SUBMODULE_REPO_NAME"
+    git -C "$SUBMODULE" commit -aqm "add nested submodule"
+
+    # Run a git-over-SSH server.  Use key #2.
+    CTR_SUB=$(docker_run \
+        -v "$DOT_SSH/server/2":/dot_ssh:ro \
+        -v "$SUBMODULE":/git/repo:ro \
+        e2e/test/sshd)
+    IP_SUB=$(docker_ip "$CTR_SUB")
+
+    # Add the submodule to the main repo
+    git -C "$REPO" submodule add -q "test@$IP_SUB:/git/repo" "$SUBMODULE_REPO_NAME"
+    git -C "$REPO" commit -aqm "add submodule"
+    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+
+    # Run a git-over-SSH server.  Use key #3.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/sshd)
+    IP=$(docker_ip "$CTR")
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="test@$IP:/git/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --ssh \
+        --ssh-key-file="/ssh/secret.1" \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-key-file="/ssh/secret.3" \
+        --ssh-known-hosts=false \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    rm -rf $SUBMODULE
+    rm -rf $NESTED_SUBMODULE
 }
 
 ##############################################
