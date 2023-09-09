@@ -2403,9 +2403,9 @@ function e2e::submodule_sync_default() {
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$SUBMODULE"
-    echo "submodule" > "$SUBMODULE/submodule"
-    git -C "$SUBMODULE" add submodule
-    git -C "$SUBMODULE" commit -aqm "init submodule file"
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
+    git -C "$SUBMODULE" commit -aqm "init submodule.file"
 
     # Init nested submodule repo
     NESTED_SUBMODULE_REPO_NAME="nested-sub"
@@ -2414,12 +2414,12 @@ function e2e::submodule_sync_default() {
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$NESTED_SUBMODULE"
-    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule"
-    git -C "$NESTED_SUBMODULE" add nested-submodule
-    git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
+    git -C "$NESTED_SUBMODULE" add nested-submodule.file
+    git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
 
     # Add submodule
-    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE "$SUBMODULE_REPO_NAME"
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
@@ -2431,20 +2431,20 @@ function e2e::submodule_sync_default() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     # Make change in submodule repo
-    echo "$FUNCNAME 2" > "$SUBMODULE/submodule"
+    echo "$FUNCNAME 2" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" commit -qam "$FUNCNAME 2"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 2"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
 
     # Move backward in submodule repo
@@ -2454,21 +2454,21 @@ function e2e::submodule_sync_default() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 
     # Add nested submodule to submodule repo
-    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE
+    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE "$NESTED_SUBMODULE_REPO_NAME"
     git -C "$SUBMODULE" commit -aqm "add nested submodule"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 4"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule" "nested-submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file" "nested-submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 4
 
     # Remove nested submodule
@@ -2481,8 +2481,8 @@ function e2e::submodule_sync_default() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 5
 
     # Remove submodule
@@ -2493,7 +2493,7 @@ function e2e::submodule_sync_default() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 6
 
     rm -rf $SUBMODULE
@@ -2514,10 +2514,10 @@ function e2e::submodule_sync_depth() {
 
     # First sync
     expected_depth="1"
-    echo "$FUNCNAME 1" > "$SUBMODULE/submodule"
-    git -C "$SUBMODULE" add submodule
+    echo "$FUNCNAME 1" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 1"
-    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE "$SUBMODULE_REPO_NAME"
     git -C "$REPO" config -f "$REPO/.gitmodules" "submodule.$SUBMODULE_REPO_NAME.shallow" true
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
@@ -2530,8 +2530,8 @@ function e2e::submodule_sync_depth() {
         &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 1"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2543,14 +2543,14 @@ function e2e::submodule_sync_depth() {
     fi
 
     # Move forward
-    echo "$FUNCNAME 2" > "$SUBMODULE/submodule"
+    echo "$FUNCNAME 2" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" commit -aqm "submodule $FUNCNAME 2"
     git -C "$REPO" -c protocol.file.allow=always submodule update --recursive --remote > /dev/null 2>&1
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 2"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "$FUNCNAME 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2567,8 +2567,8 @@ function e2e::submodule_sync_depth() {
     git -C "$REPO" commit -qam "$FUNCNAME 3"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "$FUNCNAME 1"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
     if [[ $expected_depth != $depth ]]; then
@@ -2592,8 +2592,8 @@ function e2e::submodule_sync_off() {
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$SUBMODULE"
-    echo "submodule" > "$SUBMODULE/submodule"
-    git -C "$SUBMODULE" add submodule
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
     # Add submodule
@@ -2608,7 +2608,7 @@ function e2e::submodule_sync_off() {
         --submodules=off \
         &
     wait_for_sync "${MAXWAIT}"
-    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
     rm -rf $SUBMODULE
 }
 
@@ -2623,8 +2623,8 @@ function e2e::submodule_sync_shallow() {
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$SUBMODULE"
-    echo "submodule" > "$SUBMODULE/submodule"
-    git -C "$SUBMODULE" add submodule
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
     # Init nested submodule repo
@@ -2634,14 +2634,14 @@ function e2e::submodule_sync_shallow() {
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$NESTED_SUBMODULE"
-    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule"
-    git -C "$NESTED_SUBMODULE" add nested-submodule
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
+    git -C "$NESTED_SUBMODULE" add nested-submodule.file
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
-    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE
+    git -C "$SUBMODULE" -c protocol.file.allow=always submodule add -q file://$NESTED_SUBMODULE "$NESTED_SUBMODULE_REPO_NAME"
     git -C "$SUBMODULE" commit -aqm "add nested submodule"
 
     # Add submodule
-    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q file://$SUBMODULE "$SUBMODULE_REPO_NAME"
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
@@ -2654,8 +2654,8 @@ function e2e::submodule_sync_shallow() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_absent "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file"
     rm -rf $SUBMODULE
     rm -rf $NESTED_SUBMODULE
 }
@@ -2671,14 +2671,14 @@ function e2e::submodule_sync_relative() {
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
     config_repo "$SUBMODULE"
-    echo "submodule" > "$SUBMODULE/submodule"
-    git -C "$SUBMODULE" add submodule
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
 
     # Add submodule
     REL="$(realpath --relative-to "$REPO" "$WORK/$SUBMODULE_REPO_NAME")"
     echo $REL
-    git -C "$REPO" -c protocol.file.allow=always submodule add -q "${REL}"
+    git -C "$REPO" -c protocol.file.allow=always submodule add -q "$REL" "$SUBMODULE_REPO_NAME"
     git -C "$REPO" commit -aqm "add submodule"
 
     GIT_SYNC \
@@ -2690,8 +2690,8 @@ function e2e::submodule_sync_relative() {
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule"
-    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule" "submodule"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "submodule"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     rm -rf $SUBMODULE
