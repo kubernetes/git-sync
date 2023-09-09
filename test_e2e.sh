@@ -1703,6 +1703,158 @@ function e2e::auth_password_correct_password() {
 }
 
 ##############################################
+# Test HTTP with password
+##############################################
+function e2e::auth_http_password() {
+    # Run a git-over-HTTP server.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/httpd)
+    IP=$(docker_ip "$CTR")
+
+    # Try with wrong username
+    GIT_SYNC \
+        --one-time \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="wrong" \
+        --password="testpass" \
+        || true
+    assert_file_absent "$ROOT/link/file"
+
+    # Try with wrong password
+    GIT_SYNC \
+        --one-time \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="testuser" \
+        --password="wrong" \
+        || true
+    assert_file_absent "$ROOT/link/file"
+
+    # Configure the repo.
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="testuser" \
+        --password="testpass" \
+        &
+
+    # First sync
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+}
+
+##############################################
+# Test SSH with bad key
+##############################################
+function e2e::auth_ssh_wrong_key() {
+    echo "$FUNCNAME" > "$REPO/file"
+
+    # Run a git-over-SSH server.  Use key #1.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/src:ro \
+        e2e/test/sshd)
+    IP=$(docker_ip "$CTR")
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    # Try to sync with key #2.
+    GIT_SYNC \
+        --one-time \
+        --repo="test@$IP:/src" \
+        --root="$ROOT" \
+        --link="link" \
+        --ssh \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-known-hosts=false \
+      || true
+
+    # check for failure
+    assert_file_absent "$ROOT/link/file"
+}
+
+##############################################
+# Test SSH
+##############################################
+function e2e::auth_ssh() {
+    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/sshd)
+    IP=$(docker_ip "$CTR")
+
+    # Configure the repo.
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="test@$IP:/git/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --ssh \
+        --ssh-key-file="/ssh/secret.1" \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-key-file="/ssh/secret.3" \
+        --ssh-known-hosts=false \
+        &
+
+    # First sync
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+}
+
+##############################################
 # Test askpass-url with bad password
 ##############################################
 function e2e::auth_askpass_url_wrong_password() {
@@ -2695,158 +2847,6 @@ function e2e::submodule_sync_relative() {
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
 
     rm -rf $SUBMODULE
-}
-
-##############################################
-# Test HTTP with password
-##############################################
-function e2e::auth_http_password() {
-    # Run a git-over-HTTP server.
-    CTR=$(docker_run \
-        -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/git/repo:ro \
-        e2e/test/httpd)
-    IP=$(docker_ip "$CTR")
-
-    # Try with wrong username
-    GIT_SYNC \
-        --one-time \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="wrong" \
-        --password="testpass" \
-        || true
-    assert_file_absent "$ROOT/link/file"
-
-    # Try with wrong password
-    GIT_SYNC \
-        --one-time \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="testuser" \
-        --password="wrong" \
-        || true
-    assert_file_absent "$ROOT/link/file"
-
-    # Configure the repo.
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
-    GIT_SYNC \
-        --period=100ms \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="testuser" \
-        --password="testpass" \
-        &
-
-    # First sync
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-
-    # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 2"
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-
-    # Move HEAD backward
-    git -C "$REPO" reset -q --hard HEAD^
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
-}
-
-##############################################
-# Test SSH with bad key
-##############################################
-function e2e::auth_ssh_wrong_key() {
-    echo "$FUNCNAME" > "$REPO/file"
-
-    # Run a git-over-SSH server.  Use key #1.
-    CTR=$(docker_run \
-        -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/src:ro \
-        e2e/test/sshd)
-    IP=$(docker_ip "$CTR")
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    # Try to sync with key #2.
-    GIT_SYNC \
-        --one-time \
-        --repo="test@$IP:/src" \
-        --root="$ROOT" \
-        --link="link" \
-        --ssh \
-        --ssh-key-file="/ssh/secret.2" \
-        --ssh-known-hosts=false \
-      || true
-
-    # check for failure
-    assert_file_absent "$ROOT/link/file"
-}
-
-##############################################
-# Test SSH
-##############################################
-function e2e::auth_ssh() {
-    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
-    CTR=$(docker_run \
-        -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/git/repo:ro \
-        e2e/test/sshd)
-    IP=$(docker_ip "$CTR")
-
-    # Configure the repo.
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
-    GIT_SYNC \
-        --period=100ms \
-        --repo="test@$IP:/git/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --ssh \
-        --ssh-key-file="/ssh/secret.1" \
-        --ssh-key-file="/ssh/secret.2" \
-        --ssh-key-file="/ssh/secret.3" \
-        --ssh-known-hosts=false \
-        &
-
-    # First sync
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
-
-    # Move HEAD forward
-    echo "$FUNCNAME 2" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 2"
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 2"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
-
-    # Move HEAD backward
-    git -C "$REPO" reset -q --hard HEAD^
-    wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
-    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
 }
 
 ##############################################
