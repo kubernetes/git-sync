@@ -1643,7 +1643,7 @@ function e2e::sync_depth_change_on_restart() {
 }
 
 ##############################################
-# Test HTTP with password
+# Test HTTP basicauth with a password
 ##############################################
 function e2e::auth_http_password() {
     # Run a git-over-HTTP server.
@@ -1685,6 +1685,48 @@ function e2e::auth_http_password() {
         --link="link" \
         --username="testuser" \
         --password="testpass" \
+
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+}
+
+##############################################
+# Test HTTP basicauth with a password-file
+##############################################
+function e2e::auth_http_password_file() {
+    echo "$FUNCNAME" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME"
+
+    # Run a git-over-HTTP server.
+    CTR=$(docker_run \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/httpd)
+    IP=$(docker_ip "$CTR")
+
+    # Make a password file with a bad password.
+    echo -n "wrong" > "$WORK/password-file"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="testuser" \
+        --password-file="$WORK/password-file" \
+        || true
+    assert_file_absent "$ROOT/link/file"
+
+    # Make a password file the right password.
+    echo -n "testpass" > "$WORK/password-file"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="testuser" \
+        --password-file="$WORK/password-file"
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
