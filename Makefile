@@ -248,7 +248,7 @@ test: $(BUILD_DIRS)
 	    /bin/sh -c "                                           \
 	        ./build/test.sh ./...                              \
 	    "
-	./test_e2e.sh
+	VERBOSE=1 ./test_e2e.sh
 
 TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
