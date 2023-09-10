@@ -3200,20 +3200,16 @@ make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
 make test-tools REGISTRY=e2e
 
 function finish() {
-  r=$?
-  trap "" INT EXIT ERR
-  if [[ $r != 0 ]]; then
-    echo
-    echo "the directory $DIR was not removed as it contains"\
-         "log files useful for debugging"
-  fi
-  exit $r
+    r=$?
+    trap "" INT EXIT ERR
+    if [[ $r != 0 ]]; then
+        echo
+        echo "the directory $DIR was not removed as it contains"\
+             "log files useful for debugging"
+    fi
+    exit $r
 }
 trap finish INT EXIT ERR
-
-echo
-echo "test root is $DIR"
-echo
 
 # Run a test function and return its error code.  This is needed because POSIX
 # dictates that `errexit` does not apply inside a function called in an `if`
@@ -3254,10 +3250,24 @@ umask 0002
 # Mark all repos as safe, to avoid "dubious ownership".
 git config --global --add safe.directory '*'
 
-# Iterate over the chosen tests and run them.
 FAILS=()
 FINAL_RET=0
 RUNS="${RUNS:-1}"
+
+echo
+echo "test root is $DIR"
+if (( "${RUNS}" > 1 )); then
+    echo "  RUNS=$RUNS"
+fi
+if [[ "${CLEANUP:-}" == 0 ]]; then
+    echo "  CLEANUP disabled"
+fi
+if [[ -n "${VERBOSE:-}" ]]; then
+    echo "  VERBOSE enabled"
+fi
+echo
+
+# Iterate over the chosen tests and run them.
 for t; do
     TEST_RET=0
     RUN=0
@@ -3285,6 +3295,13 @@ for t; do
             TEST_RET=1
             if [[ "$RUN_RET" != 42 ]]; then
                 echo "FAIL: unknown error"
+            fi
+            if [[ -n "${VERBOSE:-}" ]]; then
+                echo -ne "\n\n"
+                echo "LOG ----------------------"
+                cat "${LOG}.${RUN}"
+                echo "--------------------------"
+                echo -ne "\n\n"
             fi
         fi
         remove_containers || true
