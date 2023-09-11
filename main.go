@@ -21,6 +21,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -104,6 +105,146 @@ const (
 )
 
 const defaultDirMode = os.FileMode(0775) // subject to umask
+
+type credential struct {
+	URL          string `json:"url"`
+	Username     string `json:"username"`
+	Password     string `json:"password,omitempty"`
+	PasswordFile string `json:"password-file,omitempty"`
+}
+
+func (c credential) String() string {
+	jb, err := json.Marshal(c)
+	if err != nil {
+		return fmt.Sprintf("<encoding error: %v>", err)
+	}
+	return string(jb)
+}
+
+// credentialSliceValue is for flags.
+type credentialSliceValue struct {
+	value   []credential
+	changed bool
+}
+
+var _ pflag.Value = &credentialSliceValue{}
+var _ pflag.SliceValue = &credentialSliceValue{}
+
+// pflagCredentialSlice is like pflag.StringSlice()
+func pflagCredentialSlice(name, def, usage string) *[]credential {
+	p := &credentialSliceValue{}
+	_ = p.Set(def)
+	pflag.Var(p, name, usage)
+	return &p.value
+}
+
+// unmarshal is like json.Unmarshal, but fails on unknown fields.
+func (cs credentialSliceValue) unmarshal(val string, out any) error {
+	dec := json.NewDecoder(strings.NewReader(val))
+	dec.DisallowUnknownFields()
+	return dec.Decode(out)
+}
+
+// decodeList handles a string-encoded JSON object.
+func (cs credentialSliceValue) decodeObject(val string) (credential, error) {
+	var cred credential
+	if err := cs.unmarshal(val, &cred); err != nil {
+		return credential{}, err
+	}
+	return cred, nil
+}
+
+// decodeList handles a string-encoded JSON list.
+func (cs credentialSliceValue) decodeList(val string) ([]credential, error) {
+	var creds []credential
+	if err := cs.unmarshal(val, &creds); err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+// decode handles a string-encoded JSON object or list.
+func (cs credentialSliceValue) decode(val string) ([]credential, error) {
+	s := strings.TrimSpace(val)
+	if s == "" {
+		return nil, nil
+	}
+	// If it tastes like an object...
+	if s[0] == '{' {
+		cred, err := cs.decodeObject(s)
+		return []credential{cred}, err
+	}
+	// If it tastes like a list...
+	if s[0] == '[' {
+		return cs.decodeList(s)
+	}
+	// Otherwise, bad
+	return nil, fmt.Errorf("not a JSON object or list")
+}
+
+func (cs *credentialSliceValue) Set(val string) error {
+	v, err := cs.decode(val)
+	if err != nil {
+		return err
+	}
+
+	if !cs.changed {
+		cs.value = v
+	} else {
+		cs.value = append(cs.value, v...)
+	}
+	cs.changed = true
+
+	return nil
+}
+
+func (cs credentialSliceValue) Type() string {
+	return "credentialSlice"
+}
+
+func (cs credentialSliceValue) String() string {
+	if len(cs.value) == 0 {
+		return "[]"
+	}
+	jb, err := json.Marshal(cs.value)
+	if err != nil {
+		return fmt.Sprintf("<encoding error: %v>", err)
+	}
+	return string(jb)
+}
+
+func (cs *credentialSliceValue) Append(val string) error {
+	v, err := cs.decodeObject(val)
+	if err != nil {
+		return err
+	}
+	cs.value = append(cs.value, v)
+	return nil
+}
+
+func (cs *credentialSliceValue) Replace(val []string) error {
+	creds := []credential{}
+	for _, s := range val {
+		v, err := cs.decodeObject(s)
+		if err != nil {
+			return err
+		}
+		creds = append(creds, v)
+	}
+	cs.value = creds
+	return nil
+}
+
+func (cs credentialSliceValue) GetSlice() []string {
+	if len(cs.value) == 0 {
+		return nil
+	}
+	ret := []string{}
+	for _, cred := range cs.value {
+		ret = append(ret, cred.String())
+	}
+	return ret
+}
 
 func envString(def string, key string, alts ...string) string {
 	if val := os.Getenv(key); val != "" {
@@ -450,6 +591,7 @@ func main() {
 	flPasswordFile := pflag.String("password-file",
 		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 		"the file from which the password or personal access token for git auth will be sourced")
+	flCredentials := pflagCredentialSlice("credential", envString("", "GITSYNC_CREDENTIAL"), "one or more credentials (see --man for details) available for authentication")
 
 	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
 		envStringArray("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
@@ -689,12 +831,36 @@ func main() {
 		}
 	}
 
-	if *flPassword != "" && *flPasswordFile != "" {
-		handleConfigError(log, true, "ERROR: only one of --password and --password-file may be specified")
-	}
 	if *flUsername != "" {
 		if *flPassword == "" && *flPasswordFile == "" {
-			handleConfigError(log, true, "ERROR: --password or --password-file must be set when --username is specified")
+			handleConfigError(log, true, "ERROR: --password or --password-file must be specified when --username is specified")
+		}
+		if *flPassword != "" && *flPasswordFile != "" {
+			handleConfigError(log, true, "ERROR: only one of --password and --password-file may be specified")
+		}
+	} else {
+		if *flPassword != "" {
+			handleConfigError(log, true, "ERROR: --password may only be specified when --username is specified")
+		}
+		if *flPasswordFile != "" {
+			handleConfigError(log, true, "ERROR: --password-file may only be specified when --username is specified")
+		}
+	}
+
+	if len(*flCredentials) > 0 {
+		for _, cred := range *flCredentials {
+			if cred.URL == "" {
+				handleConfigError(log, true, "ERROR: --credential URL must be specified")
+			}
+			if cred.Username == "" {
+				handleConfigError(log, true, "ERROR: --credential username must be specified")
+			}
+			if cred.Password == "" && cred.PasswordFile == "" {
+				handleConfigError(log, true, "ERROR: --credential password or password-file must be set")
+			}
+			if cred.Password != "" && cred.PasswordFile != "" {
+				handleConfigError(log, true, "ERROR: only one of --credential password and password-file may be specified")
+			}
 		}
 	}
 
@@ -754,6 +920,17 @@ func main() {
 	absLink := makeAbsPath(*flLink, absRoot)
 	absTouchFile := makeAbsPath(*flTouchFile, absRoot)
 
+	// Merge credential sources.
+	if *flUsername != "" {
+		cred := credential{
+			URL:          *flRepo,
+			Username:     *flUsername,
+			Password:     *flPassword,
+			PasswordFile: *flPasswordFile,
+		}
+		*flCredentials = append([]credential{cred}, (*flCredentials)...)
+	}
+
 	if *flAddUser {
 		if err := addUser(); err != nil {
 			log.Error(err, "ERROR: can't add user")
@@ -800,14 +977,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *flUsername != "" {
-		if *flPasswordFile != "" {
-			passwordFileBytes, err := os.ReadFile(*flPasswordFile)
+	// Finish populating credentials.
+	for i := range *flCredentials {
+		cred := &(*flCredentials)[i]
+		if cred.PasswordFile != "" {
+			passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
 			if err != nil {
-				log.Error(err, "can't read password file", "file", *flPasswordFile)
+				log.Error(err, "can't read password file", "file", cred.PasswordFile)
 				os.Exit(1)
 			}
-			*flPassword = string(passwordFileBytes)
+			cred.Password = string(passwordFileBytes)
 		}
 	}
 
@@ -931,8 +1110,8 @@ func main() {
 	// Craft a function that can be called to refresh credentials when needed.
 	refreshCreds := func(ctx context.Context) error {
 		// These should all be mutually-exclusive configs.
-		if *flUsername != "" {
-			if err := git.StoreCredentials(ctx, *flUsername, *flPassword); err != nil {
+		for _, cred := range *flCredentials {
+			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, cred.Password); err != nil {
 				return err
 			}
 		}
@@ -1109,6 +1288,11 @@ func logSafeFlags() []string {
 		arg := fl.Name
 		val := fl.Value.String()
 
+		// Don't log empty values
+		if val == "" {
+			return
+		}
+
 		// Handle --password
 		if arg == "password" {
 			val = redactedString
@@ -1117,9 +1301,19 @@ func logSafeFlags() []string {
 		if arg == "repo" {
 			val = redactURL(val)
 		}
-		// Don't log empty values
-		if val == "" {
-			return
+		// Handle --credential
+		if arg == "credential" {
+			orig := fl.Value.(*credentialSliceValue)
+			sl := []credential{} // make a copy of the slice so we can mutate it
+			for _, cred := range orig.value {
+				if cred.Password != "" {
+					cred.Password = redactedString
+				}
+				sl = append(sl, cred)
+			}
+			tmp := *orig // make a copy
+			tmp.value = sl
+			val = tmp.String()
 		}
 
 		ret = append(ret, "--"+arg+"="+val)
@@ -1904,12 +2098,12 @@ func md5sum(s string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// StoreCredentials stores the username and password for later use.
-func (git *repoSync) StoreCredentials(ctx context.Context, username, password string) error {
-	git.log.V(1).Info("storing git credentials")
-	git.log.V(9).Info("md5 of credentials", "username", md5sum(username), "password", md5sum(password))
+// StoreCredentials stores a username and password for later use.
+func (git *repoSync) StoreCredentials(ctx context.Context, url, username, password string) error {
+	git.log.V(1).Info("storing git credential", "url", url)
+	git.log.V(9).Info("md5 of credential", "url", url, "username", md5sum(username), "password", md5sum(password))
 
-	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", git.repo, username, password)
+	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", url, username, password)
 	_, _, err := git.RunWithStdin(ctx, "", creds, "credential", "approve")
 	if err != nil {
 		return fmt.Errorf("can't configure git credentials: %w", err)
@@ -2017,7 +2211,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 		}
 	}
 
-	if err := git.StoreCredentials(ctx, username, password); err != nil {
+	if err := git.StoreCredentials(ctx, git.repo, username, password); err != nil {
 		return err
 	}
 
@@ -2297,6 +2491,26 @@ OPTIONS
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
+    --credential <string>, $GITSYNC_CREDENTIAL
+            Make one or more credentials available for authentication (see git
+            help credential).  This is similar to --username and --password or
+            --password-file, but for specific URLs, for example when using
+            submodules.  The value for this flag is either a JSON-encoded
+            object (see the schema below) or a JSON-encoded list of that same
+            object type.  This flag may be specified more than once.
+
+            Object schema:
+              - url:            string, required
+              - username:       string, required
+              - password:       string, optional
+              - password-file:  string, optional
+
+            One of password or password-file must be specified.  Users should
+            prefer password-file for better security.
+
+            Example:
+              --credential='{"url":"https://github.com", "username":"myname", "password-file":"/creds/mypass"}'
+
     --depth <int>, $GITSYNC_DEPTH
             Create a shallow clone with history truncated to the specified
             number of commits.  If not specified, this defaults to syncing a
@@ -2494,7 +2708,8 @@ OPTIONS
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
-            --password).
+            --password).  If more than one username and password is required
+            (e.g. with submodules), use --credential.
 
     -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
@@ -2561,6 +2776,12 @@ AUTHENTICATION
             A variant of this is --askpass-url (GITSYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
+
+            When using submodules it may be necessary to specify more than one
+            username and password, which can be done with --credential
+            (GITSYNC_CREDENTIAL).  All of the username+password pairs, from
+            both --username/--password and --credential are fed into 'git
+            credential approve'.
 
     SSH
             When an SSH transport is specified, the key(s) defined in

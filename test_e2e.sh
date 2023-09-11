@@ -2739,6 +2739,87 @@ function e2e::submodule_sync_over_ssh_different_keys() {
 }
 
 ##############################################
+# Test submodules over HTTP with different passwords
+##############################################
+function e2e::submodule_sync_over_http_different_passwords() {
+    # Init nested submodule repo
+    NESTED_SUBMODULE_REPO_NAME="nested-sub"
+    NESTED_SUBMODULE="$WORK/$NESTED_SUBMODULE_REPO_NAME"
+    mkdir "$NESTED_SUBMODULE"
+
+    git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
+    config_repo "$NESTED_SUBMODULE"
+    echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
+    git -C "$NESTED_SUBMODULE" add nested-submodule.file
+    git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
+
+    # Run a git-over-SSH server.  Use password "test1".
+    echo 'test:$apr1$cXiFWR90$Pmoz7T8kEmlpC9Bpj4MX3.' > "$WORK/htpasswd.1"
+    CTR_SUBSUB=$(docker_run \
+        -v "$NESTED_SUBMODULE":/git/repo:ro \
+        -v "$WORK/htpasswd.1":/etc/htpasswd:ro \
+        e2e/test/httpd)
+    IP_SUBSUB=$(docker_ip "$CTR_SUBSUB")
+
+    # Init submodule repo
+    SUBMODULE_REPO_NAME="sub"
+    SUBMODULE="$WORK/$SUBMODULE_REPO_NAME"
+    mkdir "$SUBMODULE"
+
+    git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
+    config_repo "$SUBMODULE"
+    echo "submodule" > "$SUBMODULE/submodule.file"
+    git -C "$SUBMODULE" add submodule.file
+    git -C "$SUBMODULE" commit -aqm "init submodule.file"
+
+    # Add nested submodule to submodule repo
+    echo -ne "url=http://$IP_SUBSUB/repo\nusername=test\npassword=test1\n" | git credential approve
+    git -C "$SUBMODULE" submodule add -q "http://$IP_SUBSUB/repo" "$NESTED_SUBMODULE_REPO_NAME"
+    git -C "$SUBMODULE" commit -aqm "add nested submodule"
+
+    # Run a git-over-SSH server.  Use password "test2".
+    echo 'test:$apr1$vWBoWUBS$2H.WFxF8T7rH/gZF99Edl/' > "$WORK/htpasswd.2"
+    CTR_SUB=$(docker_run \
+        -v "$SUBMODULE":/git/repo:ro \
+        -v "$WORK/htpasswd.2":/etc/htpasswd:ro \
+        e2e/test/httpd)
+    IP_SUB=$(docker_ip "$CTR_SUB")
+
+    # Add the submodule to the main repo
+    echo -ne "url=http://$IP_SUB/repo\nusername=test\npassword=test2\n" | git credential approve
+    git -C "$REPO" submodule add -q "http://$IP_SUB/repo" "$SUBMODULE_REPO_NAME"
+    git -C "$REPO" commit -aqm "add submodule"
+    git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
+
+    # Run a git-over-SSH server.  Use password "test3".
+    echo 'test:$apr1$oKP2oGwp$ESJ4FESEP/8Sisy02B/vM/' > "$WORK/htpasswd.3"
+    CTR=$(docker_run \
+        -v "$REPO":/git/repo:ro \
+        -v "$WORK/htpasswd.3":/etc/htpasswd:ro \
+        e2e/test/httpd)
+    IP=$(docker_ip "$CTR")
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="http://$IP/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --credential="{ \"url\": \"http://$IP_SUBSUB/repo\", \"username\": \"test\", \"password\": \"test1\" }" \
+        --credential="{ \"url\": \"http://$IP_SUB/repo\", \"username\": \"test\", \"password\": \"test2\" }" \
+        --credential="{ \"url\": \"http://$IP/repo\", \"username\": \"test\", \"password\": \"test3\" }" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file"
+    assert_file_exists "$ROOT/link/$SUBMODULE_REPO_NAME/$NESTED_SUBMODULE_REPO_NAME/nested-submodule.file"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    rm -rf $SUBMODULE
+    rm -rf $NESTED_SUBMODULE
+}
+
+##############################################
 # Test sparse-checkout files
 ##############################################
 function e2e::sparse_checkout() {
@@ -3214,6 +3295,9 @@ umask 0002
 
 # Mark all repos as safe, to avoid "dubious ownership".
 git config --global --add safe.directory '*'
+
+# Store credentials for the test.
+git config --global credential.helper "store --file $DIR/gitcreds"
 
 FAILS=()
 FINAL_RET=0
