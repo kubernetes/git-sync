@@ -2073,6 +2073,10 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 		key: "credential.helper",
 		val: "cache --timeout 3600",
 	}, {
+		// Never prompt for a password.
+		key: "core.askPass",
+		val: "true",
+	}, {
 		// Mark repos as safe (avoid a "dubious ownership" error).
 		key: "safe.directory",
 		val: "*",
