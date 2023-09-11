@@ -161,6 +161,26 @@ OPTIONS
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.
 
+    --credential <string>, $GITSYNC_CREDENTIAL
+            Make one or more credentials available for authentication (see git
+            help credential).  This is similar to --username and --password or
+            --password-file, but for specific URLs, for example when using
+            submodules.  The value for this flag is either a JSON-encoded
+            object (see the schema below) or a JSON-encoded list of that same
+            object type.  This flag may be specified more than once.
+
+            Object schema:
+              - url:            string, required
+              - username:       string, required
+              - password:       string, optional
+              - password-file:  string, optional
+
+            One of password or password-file must be specified.  Users should
+            prefer password-file for better security.
+
+            Example:
+              --credential='{"url":"https://github.com", "username":"myname", "password-file":"/creds/mypass"}'
+
     --depth <int>, $GITSYNC_DEPTH
             Create a shallow clone with history truncated to the specified
             number of commits.  If not specified, this defaults to syncing a
@@ -358,7 +378,8 @@ OPTIONS
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
-            --password).
+            --password).  If more than one username and password is required
+            (e.g. with submodules), use --credential.
 
     -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
@@ -425,6 +446,12 @@ AUTHENTICATION
             A variant of this is --askpass-url (GITSYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
+
+            When using submodules it may be necessary to specify more than one
+            username and password, which can be done with --credential
+            (GITSYNC_CREDENTIAL).  All of the username+password pairs, from
+            both --username/--password and --credential are fed into 'git
+            credential approve'.
 
     SSH
             When an SSH transport is specified, the key(s) defined in
