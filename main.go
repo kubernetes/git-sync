@@ -136,7 +136,7 @@ func envStringArray(def string, key string, alts ...string) []string {
 }
 
 func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
-	parse := func(val string) (bool, error) {
+	parse := func(key, val string) (bool, error) {
 		parsed, err := strconv.ParseBool(val)
 		if err == nil {
 			return parsed, nil
@@ -145,12 +145,12 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 	}
 
 	if val := os.Getenv(key); val != "" {
-		return parse(val)
+		return parse(key, val)
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
 			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
-			return parse(val)
+			return parse(alt, val)
 		}
 	}
 	return def, nil
@@ -166,7 +166,7 @@ func envBool(def bool, key string, alts ...string) bool {
 }
 
 func envIntOrError(def int, key string, alts ...string) (int, error) {
-	parse := func(val string) (int, error) {
+	parse := func(key, val string) (int, error) {
 		parsed, err := strconv.ParseInt(val, 0, 0)
 		if err == nil {
 			return int(parsed), nil
@@ -175,12 +175,12 @@ func envIntOrError(def int, key string, alts ...string) (int, error) {
 	}
 
 	if val := os.Getenv(key); val != "" {
-		return parse(val)
+		return parse(key, val)
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(key); val != "" {
+		if val := os.Getenv(alt); val != "" {
 			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
-			return parse(val)
+			return parse(alt, val)
 		}
 	}
 	return def, nil
@@ -196,7 +196,7 @@ func envInt(def int, key string, alts ...string) int {
 }
 
 func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
-	parse := func(val string) (float64, error) {
+	parse := func(key, val string) (float64, error) {
 		parsed, err := strconv.ParseFloat(val, 64)
 		if err == nil {
 			return parsed, nil
@@ -205,12 +205,12 @@ func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
 	}
 
 	if val := os.Getenv(key); val != "" {
-		return parse(val)
+		return parse(key, val)
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(key); val != "" {
+		if val := os.Getenv(alt); val != "" {
 			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
-			return parse(val)
+			return parse(alt, val)
 		}
 	}
 	return def, nil
@@ -226,7 +226,7 @@ func envFloat(def float64, key string, alts ...string) float64 {
 }
 
 func envDurationOrError(def time.Duration, key string, alts ...string) (time.Duration, error) {
-	parse := func(val string) (time.Duration, error) {
+	parse := func(key, val string) (time.Duration, error) {
 		parsed, err := time.ParseDuration(val)
 		if err == nil {
 			return parsed, nil
@@ -235,12 +235,12 @@ func envDurationOrError(def time.Duration, key string, alts ...string) (time.Dur
 	}
 
 	if val := os.Getenv(key); val != "" {
-		return parse(val)
+		return parse(key, val)
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(key); val != "" {
+		if val := os.Getenv(alt); val != "" {
 			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
-			return parse(val)
+			return parse(alt, val)
 		}
 	}
 	return def, nil
