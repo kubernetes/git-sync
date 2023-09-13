@@ -342,7 +342,8 @@ func main() {
 	flHelp := pflag.BoolP("help", "h", false, "print help text and exit")
 	flManual := pflag.Bool("man", false, "print the full manual and exit")
 
-	flVerbose := pflag.IntP("verbose", "v", 0,
+	flVerbose := pflag.IntP("verbose", "v",
+		envInt(0, "GITSYNC_VERBOSE"),
 		"logs at this V level and lower will be printed")
 
 	flRepo := pflag.String("repo",
@@ -2506,7 +2507,7 @@ OPTIONS
             The username to use for git authentication (see --password-file or
             --password).
 
-    -v, --verbose <int>
+    -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
             printed.  Logs follow these guidelines:
 
