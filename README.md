@@ -361,7 +361,7 @@ OPTIONS
             The username to use for git authentication (see --password-file or
             --password).
 
-    -v, --verbose <int>
+    -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
             printed.  Logs follow these guidelines:
 
