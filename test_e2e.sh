@@ -1712,8 +1712,8 @@ function e2e::auth_ssh_wrong_key() {
         --root="$ROOT" \
         --link="link" \
         --ssh \
-        --ssh-key-file="/ssh/secret.2" \
         --ssh-known-hosts=false \
+        --ssh-key-file="/ssh/secret.2" \
       || true
 
     # check for failure
@@ -1741,10 +1741,10 @@ function e2e::auth_ssh() {
         --root="$ROOT" \
         --link="link" \
         --ssh \
+        --ssh-known-hosts=false \
         --ssh-key-file="/ssh/secret.1" \
         --ssh-key-file="/ssh/secret.2" \
-        --ssh-key-file="/ssh/secret.3" \
-        --ssh-known-hosts=false
+        --ssh-key-file="/ssh/secret.3"
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -1771,11 +1771,11 @@ function e2e::auth_askpass_url_wrong_password() {
 
     GIT_SYNC \
         --one-time \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
         || true
 
     # check for failure
@@ -1806,11 +1806,11 @@ function e2e::auth_askpass_url_correct_password() {
 
     GIT_SYNC \
         --one-time \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
         --repo="file://$REPO" \
         --root="$ROOT" \
-        --link="link"
+        --link="link" \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass"
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -1847,13 +1847,13 @@ function e2e::auth_askpass_url_sometimes_wrong() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
-        --max-failures=2 \
         --period=100ms \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-failures=2 \
         &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
@@ -1906,13 +1906,13 @@ function e2e::auth_askpass_url_flaky() {
     git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
-        --max-failures=2 \
         --period=100ms \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-failures=2 \
         &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
@@ -1960,13 +1960,13 @@ function e2e::auth_askpass_url_slow_start() {
     git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
-        --max-failures=5 \
         --period=1s \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
+        --git="/$ASKPASS_GIT" \
+        --askpass-url="http://$IP/git_askpass" \
+        --max-failures=5 \
         &
     sleep 1
     assert_file_absent "$ROOT/link"
