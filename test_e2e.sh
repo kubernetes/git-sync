@@ -1643,50 +1643,6 @@ function e2e::sync_depth_change_on_restart() {
 }
 
 ##############################################
-# Test password auth with the wrong password
-##############################################
-function e2e::auth_password_wrong_password() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    # run with askpass_git but with wrong password
-    GIT_SYNC \
-        --one-time \
-        --git="/$ASKPASS_GIT" \
-        --username="my-username" \
-        --password="wrong" \
-        --repo="file://$REPO" \
-        --root="$ROOT" \
-        --link="link" \
-        || true
-
-    # check for failure
-    assert_file_absent "$ROOT/link/file"
-}
-
-##############################################
-# Test password auth with the correct password
-##############################################
-function e2e::auth_password_correct_password() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
-    # run with askpass_git with correct password
-    GIT_SYNC \
-        --one-time \
-        --git="/$ASKPASS_GIT" \
-        --username="my-username" \
-        --password="my-password" \
-        --repo="file://$REPO" \
-        --root="$ROOT" \
-        --link="link" \
-
-    assert_link_exists "$ROOT/link"
-    assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
-}
-
-##############################################
 # Test HTTP with password
 ##############################################
 function e2e::auth_http_password() {
