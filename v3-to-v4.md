@@ -104,8 +104,15 @@ specified.
 
 The old `--change-permissions` flag was poorly designed and not able to express
 the real intentions (e.g. "allow group write" does not mean "set everything to
-0775").  The new `--group-write` flag should cover what people ACTUALLY are
-trying to do.  The `--change-permissions` flag is no longer supported.
+0775").  The new `--group-write` flag should cover what most people ACTUALLY
+are trying to do.
+
+There is one case where `--change-permissions` was useful and `--group-write`
+is not - making non-executable files in the repo executable so they can be run
+as exechooks.  The proper solution here is to make the file executable in the
+repo, rather than changing it after checkout.
+
+The `--change-permissions` flag is no longer supported.
 
 ### SSH: `--ssh`
 
