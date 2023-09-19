@@ -1734,20 +1734,20 @@ function e2e::auth_http_password_file() {
 }
 
 ##############################################
-# Test SSH with bad key
+# Test SSH
 ##############################################
-function e2e::auth_ssh_wrong_key() {
+function e2e::auth_ssh() {
     echo "$FUNCNAME" > "$REPO/file"
 
-    # Run a git-over-SSH server.  Use key #1.
+    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
     CTR=$(docker_run \
         -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/src:ro \
+        -v "$REPO":/git/repo:ro \
         e2e/test/sshd)
     IP=$(docker_ip "$CTR")
     git -C "$REPO" commit -qam "$FUNCNAME"
 
-    # Try to sync with key #2.
+    # Try to sync with key #1.
     GIT_SYNC \
         --one-time \
         --repo="test@$IP:/src" \
@@ -1757,26 +1757,9 @@ function e2e::auth_ssh_wrong_key() {
         --ssh-known-hosts=false \
         --ssh-key-file="/ssh/secret.2" \
       || true
-
-    # check for failure
     assert_file_absent "$ROOT/link/file"
-}
 
-##############################################
-# Test SSH
-##############################################
-function e2e::auth_ssh() {
-    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
-    CTR=$(docker_run \
-        -v "$DOT_SSH/server/3":/dot_ssh:ro \
-        -v "$REPO":/git/repo:ro \
-        e2e/test/sshd)
-    IP=$(docker_ip "$CTR")
-
-    # Configure the repo.
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
+    # Try to sync with multiple keys
     GIT_SYNC \
         --one-time \
         --repo="test@$IP:/git/repo" \
