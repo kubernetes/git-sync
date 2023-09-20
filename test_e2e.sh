@@ -126,6 +126,18 @@ function assert_metric_eq() {
     fail "metric $1 was expected to be '$2': ${val}"
 }
 
+function assert_fail() {
+    (
+        set +o errexit
+        "$@"
+        RET=$?
+        if [[ "$RET" != 0 ]]; then
+            return
+        fi
+        fail "expected non-zero exit code, got $RET"
+    )
+}
+
 # Helper: run a docker container.
 function docker_run() {
     RM="--rm"
@@ -447,21 +459,14 @@ function e2e::sync_subdir_link() {
 # Test non-zero exit with a bad ref
 ##############################################
 function e2e::bad_ref_non_zero_exit() {
-    (
-        set +o errexit
+    assert_fail \
         GIT_SYNC \
             --one-time \
             --repo="file://$REPO" \
             --ref=does-not-exist \
             --root="$ROOT" \
             --link="link"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-        assert_file_absent "$ROOT/link"
-        assert_file_absent "$ROOT/link/file"
-    )
+    assert_file_absent "$ROOT/link"
 }
 
 ##############################################
@@ -1312,16 +1317,14 @@ function e2e::sync_repo_switch() {
 # Test with slow git, short timeout
 ##############################################
 function e2e::error_slow_git_short_timeout() {
-    GIT_SYNC \
-        --git="/$SLOW_GIT_FETCH" \
-        --one-time \
-        --sync-timeout=1s \
-        --repo="file://$REPO" \
-        --root="$ROOT" \
-        --link="link" \
-        || true
-
-    # check for failure
+    assert_fail \
+        GIT_SYNC \
+            --git="/$SLOW_GIT_FETCH" \
+            --one-time \
+            --sync-timeout=1s \
+            --repo="file://$REPO" \
+            --root="$ROOT" \
+            --link="link"
     assert_file_absent "$ROOT/link/file"
 }
 
@@ -1618,25 +1621,25 @@ function e2e::auth_http_password() {
     IP=$(docker_ip "$CTR")
 
     # Try with wrong username
-    GIT_SYNC \
-        --one-time \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="wrong" \
-        --password="testpass" \
-        || true
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="http://$IP/repo" \
+            --root="$ROOT" \
+            --link="link" \
+            --username="wrong" \
+            --password="testpass"
     assert_file_absent "$ROOT/link/file"
 
     # Try with wrong password
-    GIT_SYNC \
-        --one-time \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="testuser" \
-        --password="wrong" \
-        || true
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="http://$IP/repo" \
+            --root="$ROOT" \
+            --link="link" \
+            --username="testuser" \
+            --password="wrong"
     assert_file_absent "$ROOT/link/file"
 
     # Try with the right password
@@ -1666,14 +1669,14 @@ function e2e::auth_http_password_file() {
     # Make a password file with a bad password.
     echo -n "wrong" > "$WORK/password-file"
 
-    GIT_SYNC \
-        --one-time \
-        --repo="http://$IP/repo" \
-        --root="$ROOT" \
-        --link="link" \
-        --username="testuser" \
-        --password-file="$WORK/password-file" \
-        || true
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="http://$IP/repo" \
+            --root="$ROOT" \
+            --link="link" \
+            --username="testuser" \
+            --password-file="$WORK/password-file"
     assert_file_absent "$ROOT/link/file"
 
     # Make a password file the right password.
@@ -1704,15 +1707,15 @@ function e2e::auth_ssh() {
     IP=$(docker_ip "$CTR")
 
     # Try to sync with key #1.
-    GIT_SYNC \
-        --one-time \
-        --repo="test@$IP:/src" \
-        --root="$ROOT" \
-        --link="link" \
-        --ssh \
-        --ssh-known-hosts=false \
-        --ssh-key-file="/ssh/secret.2" \
-      || true
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="test@$IP:/git/repo" \
+            --root="$ROOT" \
+            --link="link" \
+            --ssh \
+            --ssh-known-hosts=false \
+            --ssh-key-file="/ssh/secret.2"
     assert_file_absent "$ROOT/link/file"
 
     # Try to sync with multiple keys
@@ -1750,16 +1753,14 @@ function e2e::auth_askpass_url_wrong_password() {
             ')
     IP=$(docker_ip "$CTR")
 
-    GIT_SYNC \
-        --one-time \
-        --repo="file://$REPO" \
-        --root="$ROOT" \
-        --link="link" \
-        --git="/$ASKPASS_GIT" \
-        --askpass-url="http://$IP/git_askpass" \
-        || true
-
-    # check for failure
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="file://$REPO" \
+            --root="$ROOT" \
+            --link="link" \
+            --git="/$ASKPASS_GIT" \
+            --askpass-url="http://$IP/git_askpass"
     assert_file_absent "$ROOT/link/file"
 }
 
@@ -2036,9 +2037,7 @@ function e2e::exechook_success_once() {
 function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
 
-    # First sync - return a failure to ensure that we try again
-    (
-        set +o errexit
+    assert_fail \
         GIT_SYNC \
             --one-time \
             --repo="file://$REPO" \
@@ -2046,11 +2045,6 @@ function e2e::exechook_fail_once() {
             --link="link" \
             --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
             --exechook-backoff=1s
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-    )
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -2227,8 +2221,7 @@ function e2e::webhook_fail_retry_once() {
            ')
     IP=$(docker_ip "$CTR")
 
-    (
-        set +o errexit
+    assert_fail \
         GIT_SYNC \
             --period=100ms \
             --one-time \
@@ -2237,11 +2230,6 @@ function e2e::webhook_fail_retry_once() {
             --webhook-url="http://$IP" \
             --webhook-success-status=200 \
             --link="link"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
-    )
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -2801,22 +2789,16 @@ function e2e::additional_git_configs() {
 # Test export-error
 ##############################################
 function e2e::export_error() {
-    (
-        set +o errexit
+    assert_fail \
         GIT_SYNC \
             --repo="file://$REPO" \
             --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
             --error-file="error.json"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
         assert_file_absent "$ROOT/link"
         assert_file_absent "$ROOT/link/file"
         assert_file_contains "$ROOT/error.json" "unknown revision"
-    )
 
     # the error.json file should be removed if sync succeeds.
     GIT_SYNC \
@@ -2835,22 +2817,16 @@ function e2e::export_error() {
 # Test export-error with an absolute path
 ##############################################
 function e2e::export_error_abs_path() {
-    (
-        set +o errexit
+    assert_fail \
         GIT_SYNC \
             --repo="file://$REPO" \
             --ref=does-not-exit \
             --root="$ROOT" \
             --link="link" \
             --error-file="$ROOT/dir/error.json"
-        RET=$?
-        if [[ "$RET" != 1 ]]; then
-            fail "expected exit code 1, got $RET"
-        fi
         assert_file_absent "$ROOT/link"
         assert_file_absent "$ROOT/link/file"
         assert_file_contains "$ROOT/dir/error.json" "unknown revision"
-    )
 }
 
 ##############################################
