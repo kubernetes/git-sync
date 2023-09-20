@@ -201,11 +201,13 @@ REPO="$DIR/repo"
 REPO2="${REPO}2"
 MAIN_BRANCH="e2e-branch"
 function init_repo() {
+    arg="${1}"
+
     rm -rf "$REPO"
     mkdir -p "$REPO"
     git -C "$REPO" init -q -b "$MAIN_BRANCH"
     config_repo "$REPO"
-    touch "$REPO/file"
+    echo "$arg" > "$REPO/file"
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
 
@@ -317,9 +319,6 @@ function remove_containers() {
 # Test init when root doesn't exist
 ##############################################
 function e2e::init_root_doesnt_exist() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -334,9 +333,6 @@ function e2e::init_root_doesnt_exist() {
 # Test init when root exists and is empty
 ##############################################
 function e2e::init_root_exists_empty() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -351,9 +347,6 @@ function e2e::init_root_exists_empty() {
 # Test init with a weird --root flag
 ##############################################
 function e2e::init_root_flag_is_weird() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -368,8 +361,6 @@ function e2e::init_root_flag_is_weird() {
 # Test init with a symlink in --root
 ##############################################
 function e2e::init_root_flag_has_symlink() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
     mkdir -p "$ROOT/subdir"
     ln -s "$ROOT/subdir" "$ROOT/rootlink" # symlink to test
 
@@ -387,9 +378,6 @@ function e2e::init_root_flag_has_symlink() {
 # Test init when root is under a git repo
 ##############################################
 function e2e::init_root_is_under_another_repo() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     # Make a parent dir that is a git repo.
     mkdir -p "$ROOT/subdir/root"
     date > "$ROOT/subdir/root/file" # so it is not empty
@@ -410,10 +398,6 @@ function e2e::init_root_is_under_another_repo() {
 # Test init when root fails sanity
 ##############################################
 function e2e::init_root_fails_sanity() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-    SHA=$(git -C "$REPO" rev-parse HEAD)
-
     # Make an invalid git repo.
     git -C "$ROOT" init -q
     config_repo "$ROOT"
@@ -433,9 +417,6 @@ function e2e::init_root_fails_sanity() {
 # Test init with an absolute-path link
 ##############################################
 function e2e::sync_absolute_link() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -451,9 +432,6 @@ function e2e::sync_absolute_link() {
 # Test init with a subdir-path link
 ##############################################
 function e2e::sync_subdir_link() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -469,9 +447,6 @@ function e2e::sync_subdir_link() {
 # Test non-zero exit with a bad ref
 ##############################################
 function e2e::bad_ref_non_zero_exit() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     (
         set +o errexit
         GIT_SYNC \
@@ -577,9 +552,6 @@ function e2e::sync_head() {
 # Test worktree-cleanup
 ##############################################
 function e2e::worktree_cleanup() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -991,8 +963,8 @@ function e2e::sync_branch() {
 ##############################################
 function e2e::sync_branch_switch() {
     # First sync
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
         --one-time \
@@ -1003,7 +975,7 @@ function e2e::sync_branch_switch() {
         --link="link"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     OTHER_BRANCH="${MAIN_BRANCH}2"
     git -C "$REPO" checkout -q -b $OTHER_BRANCH
@@ -1182,9 +1154,6 @@ function e2e::sync_sha() {
 # Test SHA-sync one-time
 ##############################################
 function e2e::sync_sha_once() {
-    # First sync
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
     SHA=$(git -C "$REPO" rev-list -n1 HEAD)
 
     GIT_SYNC \
@@ -1343,10 +1312,6 @@ function e2e::sync_repo_switch() {
 # Test with slow git, short timeout
 ##############################################
 function e2e::error_slow_git_short_timeout() {
-    # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --git="/$SLOW_GIT_FETCH" \
         --one-time \
@@ -1674,10 +1639,7 @@ function e2e::auth_http_password() {
         || true
     assert_file_absent "$ROOT/link/file"
 
-    # Configure the repo.
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
+    # Try with the right password
     GIT_SYNC \
         --one-time \
         --repo="http://$IP/repo" \
@@ -1695,9 +1657,6 @@ function e2e::auth_http_password() {
 # Test HTTP basicauth with a password-file
 ##############################################
 function e2e::auth_http_password_file() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     # Run a git-over-HTTP server.
     CTR=$(docker_run \
         -v "$REPO":/git/repo:ro \
@@ -1737,15 +1696,12 @@ function e2e::auth_http_password_file() {
 # Test SSH
 ##############################################
 function e2e::auth_ssh() {
-    echo "$FUNCNAME" > "$REPO/file"
-
     # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
     CTR=$(docker_run \
         -v "$DOT_SSH/server/3":/dot_ssh:ro \
         -v "$REPO":/git/repo:ro \
         e2e/test/sshd)
     IP=$(docker_ip "$CTR")
-    git -C "$REPO" commit -qam "$FUNCNAME"
 
     # Try to sync with key #1.
     GIT_SYNC \
@@ -1824,10 +1780,6 @@ function e2e::auth_askpass_url_correct_password() {
             echo "password=my-password"
             ')
     IP=$(docker_ip "$CTR")
-
-    # First sync
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
 
     GIT_SYNC \
         --one-time \
@@ -1980,10 +1932,6 @@ function e2e::auth_askpass_url_slow_start() {
                 '")
     IP=$(docker_ip "$CTR")
 
-    # Sync
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --period=1s \
         --repo="file://$REPO" \
@@ -2048,9 +1996,6 @@ function e2e::exechook_fail_retry() {
     cat /dev/null > "$RUNLOG"
 
     # First sync - return a failure to ensure that we try again
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --period=100ms \
         --repo="file://$REPO" \
@@ -2069,10 +2014,6 @@ function e2e::exechook_fail_retry() {
 # Test exechook-success with --one-time
 ##############################################
 function e2e::exechook_success_once() {
-    # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -2084,8 +2025,8 @@ function e2e::exechook_success_once() {
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_exists "$ROOT/link/exechook"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
-    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_file_eq "$ROOT/link/exechook" "$FUNCNAME"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
@@ -2096,9 +2037,6 @@ function e2e::exechook_fail_once() {
     cat /dev/null > "$RUNLOG"
 
     # First sync - return a failure to ensure that we try again
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     (
         set +o errexit
         GIT_SYNC \
@@ -2116,7 +2054,7 @@ function e2e::exechook_fail_once() {
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
     assert_file_lines_eq "$RUNLOG" 1
 }
 
@@ -2124,10 +2062,6 @@ function e2e::exechook_fail_once() {
 # Test exechook at startup with correct SHA
 ##############################################
 function e2e::exechook_startup_after_crash() {
-    # First sync
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -2216,8 +2150,6 @@ function e2e::webhook_fail_retry() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
         --period=100ms \
@@ -2264,8 +2196,6 @@ function e2e::webhook_success_once() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
         --period=100ms \
@@ -2296,8 +2226,6 @@ function e2e::webhook_fail_retry_once() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     (
         set +o errexit
@@ -2317,7 +2245,7 @@ function e2e::webhook_fail_retry_once() {
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
     assert_file_lines_eq "$HITLOG" 1
 }
 
@@ -2336,10 +2264,6 @@ function e2e::webhook_fire_and_forget() {
             echo
            ')
     IP=$(docker_ip "$CTR")
-
-    # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
 
     GIT_SYNC \
         --period=100ms \
@@ -2360,10 +2284,6 @@ function e2e::webhook_fire_and_forget() {
 # Test http handler
 ##############################################
 function e2e::expose_http() {
-    # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --git="/$SLOW_GIT_FETCH" \
         --period=100ms \
@@ -2409,9 +2329,6 @@ function e2e::expose_http() {
 # Test http handler after restart
 ##############################################
 function e2e::expose_http_after_restart() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     # Sync once to set up the repo
     GIT_SYNC \
         --one-time \
@@ -2869,9 +2786,6 @@ function e2e::sparse_checkout() {
 # Test additional git configs
 ##############################################
 function e2e::additional_git_configs() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -2887,9 +2801,6 @@ function e2e::additional_git_configs() {
 # Test export-error
 ##############################################
 function e2e::export_error() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     (
         set +o errexit
         GIT_SYNC \
@@ -2924,9 +2835,6 @@ function e2e::export_error() {
 # Test export-error with an absolute path
 ##############################################
 function e2e::export_error_abs_path() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     (
         set +o errexit
         GIT_SYNC \
@@ -3055,7 +2963,6 @@ function e2e::touch_file_abs_path() {
 
 ##############################################
 # Test github HTTPS
-# TODO: it would be better if we set up a local HTTPS server
 ##############################################
 function e2e::github_https() {
     GIT_SYNC \
@@ -3157,9 +3064,6 @@ function e2e::gc_default() {
 # Test git-gc=auto
 ##############################################
 function e2e::gc_auto() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -3175,9 +3079,6 @@ function e2e::gc_auto() {
 # Test git-gc=always
 ##############################################
 function e2e::gc_always() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -3193,9 +3094,6 @@ function e2e::gc_always() {
 # Test git-gc=aggressive
 ##############################################
 function e2e::gc_aggressive() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -3211,9 +3109,6 @@ function e2e::gc_aggressive() {
 # Test git-gc=off
 ##############################################
 function e2e::gc_off() {
-    echo "$FUNCNAME" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -3366,12 +3261,13 @@ echo
 
 # Iterate over the chosen tests and run them.
 for t; do
+    TEST_FN="e2e::${t}"
     TEST_RET=0
     RUN=0
     while (( "${RUN}" < "${RUNS}" )); do
         clean_root
         clean_work
-        init_repo
+        init_repo "${TEST_FN}"
 
         sfx=""
         if (( "${RUNS}" > 1 )); then
@@ -3385,7 +3281,7 @@ for t; do
         # See comments on run_test for details.
         RUN_RET=0
         LOG="${DIR}/log.$t"
-        run_test RUN_RET "e2e::${t}" >"${LOG}.${RUN}" 2>&1
+        run_test RUN_RET "${TEST_FN}" >"${LOG}.${RUN}" 2>&1
         if [[ "$RUN_RET" == 0 ]]; then
             pass
         else
