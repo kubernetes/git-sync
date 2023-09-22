@@ -302,9 +302,18 @@ func main() {
 		handleError(true, "ERROR: --root must be specified")
 	}
 
+	parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
+	repoName := parts[len(parts)-1]
+
+	// cloneRoot is the root directory to clone the source repo to, it is a
+	// subdirectory under gitRoot so that the subdirectory can be removed in case
+	// of a previous crash. Otherwise, if the entire gitRoot is removed, the error
+	// file in the directory would be removed before the next run completes, which
+	// causes data loss.
+	cloneRoot := filepath.Join(*flRoot, repoName)
+
 	if *flDest == "" {
-		parts := strings.Split(strings.Trim(*flRepo, "/"), "/")
-		*flDest = parts[len(parts)-1]
+		*flDest = repoName
 	}
 	if !filepath.IsAbs(*flDest) {
 		*flDest = filepath.Join(*flRoot, *flDest)
@@ -498,7 +507,7 @@ func main() {
 		exechook := hook.NewExechook(
 			cmd.NewRunner(log),
 			*flExechookCommand,
-			*flRoot,
+			cloneRoot,
 			[]string{},
 			*flExechookTimeout,
 			log,
@@ -539,7 +548,7 @@ func main() {
 		log.V(1).Info("syncing repo")
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*flSyncTimeout))
-		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, *flRoot, *flDest, refreshCreds, *flSubmodules); err != nil {
+		if changed, hash, err := syncRepo(ctx, *flRepo, *flBranch, *flRev, *flDepth, cloneRoot, *flDest, refreshCreds, *flSubmodules); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxSyncFailures != -1 && failCount > *flMaxSyncFailures {
@@ -590,7 +599,7 @@ func main() {
 					log.DeleteErrorFile()
 					os.Exit(exitCode)
 				}
-				if isHash, err := revIsHash(ctx, *flRev, *flRoot); err != nil {
+				if isHash, err := revIsHash(ctx, *flRev, cloneRoot); err != nil {
 					log.Error(err, "can't tell if rev is a git hash, exiting", "rev", *flRev)
 					os.Exit(1)
 				} else if isHash {
@@ -611,25 +620,6 @@ func main() {
 		cancel()
 		time.Sleep(waitTime(*flWait))
 	}
-}
-
-func removeDirContents(dir string, log *logging.Logger) error {
-	dirents, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-
-	for _, fi := range dirents {
-		p := filepath.Join(dir, fi.Name())
-		if log != nil {
-			log.V(2).Info("removing path recursively", "path", p, "isDir", fi.IsDir())
-		}
-		if err := os.RemoveAll(p); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func updateSyncMetrics(key string, start time.Time) {
@@ -692,7 +682,7 @@ func addUser() error {
 // updateSymlink atomically swaps the symlink to point at the specified
 // directory and cleans up the previous worktree.  If there was a previous
 // worktree, this returns the path to it.
-func updateSymlink(ctx context.Context, gitRoot, link, newDir string) (string, error) {
+func updateSymlink(ctx context.Context, link, newDir string) (string, error) {
 	linkDir, linkFile := filepath.Split(link)
 
 	// Make sure the link directory exists. We do this here, rather than at
@@ -746,23 +736,23 @@ func setRepoReady() {
 }
 
 // cleanupWorkTree() is used to remove a worktree and its folder
-func cleanupWorkTree(ctx context.Context, gitRoot, worktree string) error {
+func cleanupWorkTree(ctx context.Context, cloneRoot, worktree string) error {
 	// Clean up worktree(s)
 	log.V(1).Info("removing worktree", "path", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		return fmt.Errorf("error removing directory: %v", err)
-	} else if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "worktree", "prune"); err != nil {
+	} else if _, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, "worktree", "prune"); err != nil {
 		return err
 	}
 	return nil
 }
 
 // addWorktreeAndSwap creates a new worktree and calls updateSymlink to swap the symlink to point to the new worktree
-func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
+func addWorktreeAndSwap(ctx context.Context, repo, cloneRoot, dest, branch, rev string, depth int, hash string, submoduleMode string) error {
 	log.V(0).Info("syncing git", "rev", rev, "hash", hash)
 
 	// If we don't have this hash, we need to fetch it.
-	if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
+	if _, err := revIsHash(ctx, hash, cloneRoot); err != nil {
 		log.V(2).Info("can't resolve commit, will try fetch", "rev", rev, "hash", hash)
 
 		args := []string{"fetch", "-f", "--tags"}
@@ -772,48 +762,48 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 		args = append(args, repo, branch)
 
 		// Update from the remote.
-		if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
+		if _, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, args...); err != nil {
 			return err
 		}
 
 		// With shallow fetches, it's possible to race with the upstream repo and
 		// end up NOT fetching the hash we wanted. If we can't resolve that hash
 		// to a commit we can just end early and leave it for the next sync period.
-		if _, err := revIsHash(ctx, hash, gitRoot); err != nil {
+		if _, err := revIsHash(ctx, hash, cloneRoot); err != nil {
 			log.Error(err, "can't resolve commit, will retry", "rev", rev, "hash", hash)
 			return nil
 		}
 	}
 
 	// Make a worktree for this exact git hash.
-	worktreePath := filepath.Join(gitRoot, hash)
+	worktreePath := filepath.Join(cloneRoot, hash)
 
 	// Avoid wedge cases where the worktree was created but this function error'd without cleaning the worktree.
 	// Next timearound, the sync loop fails to create the worktree and bails out.
 	// Error observed:
-	//   " Run(git worktree add /repo/root/rev-nnnn origin/develop):
-	//     exit status 128: { stdout: \"Preparing worktree (detached HEAD nnnn)\\n\", stderr: \"fatal: '/repo/root/rev-nnnn' already exists\\n\" }"
+	//   " Run(git worktree add /repo/root/repo-name/rev-nnnn origin/develop):
+	//     exit status 128: { stdout: \"Preparing worktree (detached HEAD nnnn)\\n\", stderr: \"fatal: '/repo/root/repo-name/rev-nnnn' already exists\\n\" }"
 	//.  "
-	if err := cleanupWorkTree(ctx, gitRoot, worktreePath); err != nil {
+	if err := cleanupWorkTree(ctx, cloneRoot, worktreePath); err != nil {
 		return err
 	}
 
-	_, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
+	_, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, "worktree", "add", "--detach", worktreePath, hash, "--no-checkout")
 	log.V(0).Info("adding worktree", "path", worktreePath, "branch", fmt.Sprintf("origin/%s", branch))
 	if err != nil {
 		return err
 	}
 
 	// The .git file in the worktree directory holds a reference to
-	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
+	// /git/repo-name/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
-	worktreePathRelative, err := filepath.Rel(gitRoot, worktreePath)
+	worktreePathRelative, err := filepath.Rel(cloneRoot, worktreePath)
 	if err != nil {
 		return err
 	}
 	gitDirRef := []byte(filepath.Join("gitdir: ../.git/worktrees", worktreePathRelative) + "\n")
-	if err = ioutil.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
+	if err = os.WriteFile(filepath.Join(worktreePath, ".git"), gitDirRef, 0644); err != nil {
 		return err
 	}
 
@@ -822,7 +812,7 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 		log.V(0).Info("configuring worktree sparse checkout")
 		checkoutFile := *flSparseCheckoutFile
 
-		gitInfoPath := filepath.Join(gitRoot, fmt.Sprintf(".git/worktrees/%s/info", hash))
+		gitInfoPath := filepath.Join(cloneRoot, fmt.Sprintf(".git/worktrees/%s/info", hash))
 		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
 
 		source, err := os.Open(checkoutFile)
@@ -889,7 +879,7 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 	}
 
 	// Flip the symlink.
-	oldWorktree, err := updateSymlink(ctx, gitRoot, dest, worktreePath)
+	oldWorktree, err := updateSymlink(ctx, dest, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -898,9 +888,19 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 	// From here on we have to save errors until the end.
 	var cleanupErrs multiError
 
-	// Clean up previous worktree(s).
+	// Clean up previous repo directory and worktree(s).
 	if oldWorktree != "" {
-		if err := cleanupWorkTree(ctx, gitRoot, oldWorktree); err != nil {
+		// Clean up previous repo directory in case the repoURL has changed
+		if !strings.HasPrefix(oldWorktree, cloneRoot) {
+			oldCloneRoot := filepath.Dir(oldWorktree)
+			log.V(1).Info("removing previous clone directory", "path", oldCloneRoot)
+			if err := os.RemoveAll(oldCloneRoot); err != nil {
+				cleanupErrs = append(cleanupErrs, fmt.Errorf("error removing previous clone directory: %v", err))
+			}
+		}
+
+		// Clean up previous worktree(s).
+		if err := cleanupWorkTree(ctx, cloneRoot, oldWorktree); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -916,7 +916,7 @@ func addWorktreeAndSwap(ctx context.Context, repo, gitRoot, dest, branch, rev st
 		case gcAggressive:
 			args = append(args, "--aggressive")
 		}
-		if _, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...); err != nil {
+		if _, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, args...); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -943,23 +943,21 @@ func (m multiError) Error() string {
 	return strings.Join(strs, "; ")
 }
 
-func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot string) error {
+func cloneRepo(ctx context.Context, repo, branch, cloneRoot string, depth int) error {
 	args := []string{"clone", "-v", "--no-checkout", "-b", branch}
 	if depth != 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	args = append(args, repo, gitRoot)
-	log.V(0).Info("cloning repo", "origin", repo, "path", gitRoot)
+	args = append(args, repo, cloneRoot)
+	log.V(0).Info("cloning repo", "origin", repo, "path", cloneRoot)
 
 	_, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists and is not an empty directory") {
 			// Maybe a previous run crashed?  Git won't use this dir.
-			log.V(0).Info("git root exists and is not empty (previous crash?), cleaning up", "path", gitRoot)
-			// We remove the contents rather than the dir itself, because a
-			// common use-case is to have a volume mounted at git.root, which
-			// makes removing it impossible.
-			err := removeDirContents(gitRoot, log)
+			log.V(0).Info("clone root exists and is not empty (previous crash?), cleaning up", "path", cloneRoot)
+			// It is safe to remove cloneRoot, because it is a subdirectory under git.root.
+			err := os.RemoveAll(cloneRoot)
 			if err != nil {
 				return err
 			}
@@ -976,7 +974,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		log.V(0).Info("configuring sparse checkout")
 		checkoutFile := *flSparseCheckoutFile
 
-		gitRepoPath := filepath.Join(gitRoot, ".git")
+		gitRepoPath := filepath.Join(cloneRoot, ".git")
 		gitInfoPath := filepath.Join(gitRepoPath, "info")
 		gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
 
@@ -1005,7 +1003,7 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 		}
 
 		args := []string{"sparse-checkout", "init"}
-		_, err = cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, args...)
+		_, err = cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, args...)
 		if err != nil {
 			return err
 		}
@@ -1015,30 +1013,30 @@ func cloneRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot
 }
 
 // localHashForRev returns the locally known hash for a given rev.
-func localHashForRev(ctx context.Context, rev, gitRoot string) (string, error) {
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "rev-parse", rev)
+func localHashForRev(ctx context.Context, rev, cloneRoot string) (string, error) {
+	output, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, "rev-parse", rev)
 	if err != nil {
 		return "", err
 	}
-	result := strings.Trim(string(output), "\n")
+	result := strings.Trim(output, "\n")
 	if result == rev {
 		// It appears to be a SHA, so we need to verify that we have it.  We
 		// don't care what cat-file says, just whether it succeeds or fails.
-		_, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "cat-file", "-t", rev)
+		_, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, "cat-file", "-t", rev)
 		if err != nil {
 			// Indicate that we do not have a local hash for this hash.
 			return "", err
 		}
 	}
-	return strings.Trim(string(output), "\n"), nil
+	return strings.Trim(output, "\n"), nil
 }
 
 // remoteHashForRef returns the upstream hash for a given ref.
-func remoteHashForRef(ctx context.Context, repo, ref, gitRoot string) (string, error) {
+func remoteHashForRef(ctx context.Context, repo, ref, localDir string) (string, error) {
 	// Fetch both the bare and dereferenced rev. git sorts the results and
 	// prints the dereferenced result, if present, after the bare result, so we
 	// always want the last result it produces.
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "ls-remote", "-q", repo, ref, ref+"^{}")
+	output, err := cmdRunner.Run(ctx, localDir, nil, *flGitCmd, "ls-remote", "-q", repo, ref, ref+"^{}")
 	if err != nil {
 		return "", err
 	}
@@ -1058,13 +1056,13 @@ func lastNonEmpty(lines []string) string {
 	return last
 }
 
-func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
+func revIsHash(ctx context.Context, rev, cloneRoot string) (bool, error) {
 	// If git doesn't identify rev as a commit, we're done.
-	output, err := cmdRunner.Run(ctx, gitRoot, nil, *flGitCmd, "cat-file", "-t", rev)
+	output, err := cmdRunner.Run(ctx, cloneRoot, nil, *flGitCmd, "cat-file", "-t", rev)
 	if err != nil {
 		return false, err
 	}
-	o := strings.Trim(string(output), "\n")
+	o := strings.Trim(output, "\n")
 	if o != "commit" {
 		return false, nil
 	}
@@ -1073,7 +1071,7 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 	// hash, the output will be the same hash as the input.  Of course, a user
 	// could specify "abc" and match "abcdef12345678", so we just do a prefix
 	// match.
-	output, err = localHashForRev(ctx, rev, gitRoot)
+	output, err = localHashForRev(ctx, rev, cloneRoot)
 	if err != nil {
 		return false, err
 	}
@@ -1082,27 +1080,30 @@ func revIsHash(ctx context.Context, rev, gitRoot string) (bool, error) {
 
 // syncRepo syncs the branch of a given repository to the destination at the given rev.
 // returns (1) whether a change occured, (2) the new hash, and (3) an error if one happened
-func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot, dest string, refreshCreds func(context.Context) error, submoduleMode string) (bool, string, error) {
+func syncRepo(ctx context.Context, repo, branch, rev string, depth int, cloneRoot, dest string, refreshCreds func(context.Context) error, submoduleMode string) (bool, string, error) {
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
 	}
 
 	currentWorktreeGit := filepath.Join(dest, ".git")
 	var hash string
-	_, err := os.Stat(currentWorktreeGit)
+	_, curWorktreeStatErr := os.Stat(currentWorktreeGit)
+	_, cloneRootStatErr := os.Stat(cloneRoot)
 	switch {
-	case os.IsNotExist(err):
+	case os.IsNotExist(curWorktreeStatErr) || os.IsNotExist(cloneRootStatErr):
 		// First time. Just clone it and get the hash.
-		err = cloneRepo(ctx, repo, branch, rev, depth, gitRoot)
+		err := cloneRepo(ctx, repo, branch, cloneRoot, depth)
 		if err != nil {
 			return false, "", err
 		}
-		hash, err = localHashForRev(ctx, rev, gitRoot)
+		hash, err = localHashForRev(ctx, rev, cloneRoot)
 		if err != nil {
 			return false, "", err
 		}
-	case err != nil:
-		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, err)
+	case curWorktreeStatErr != nil:
+		return false, "", fmt.Errorf("error checking if a worktree exists %q: %v", currentWorktreeGit, curWorktreeStatErr)
+	case cloneRootStatErr != nil:
+		return false, "", fmt.Errorf("error checking if a previous clone directory exists %q: %v", cloneRoot, cloneRootStatErr)
 	default:
 		// Not the first time. Figure out if the ref has changed.
 		local, remote, err := getRevs(ctx, repo, dest, branch, rev)
@@ -1117,7 +1118,7 @@ func syncRepo(ctx context.Context, repo, branch, rev string, depth int, gitRoot,
 		hash = remote
 	}
 
-	return true, hash, addWorktreeAndSwap(ctx, repo, gitRoot, dest, branch, rev, depth, hash, submoduleMode)
+	return true, hash, addWorktreeAndSwap(ctx, repo, cloneRoot, dest, branch, rev, depth, hash, submoduleMode)
 }
 
 // getRevs returns the current HEAD and upstream hash for rev.  Normally the

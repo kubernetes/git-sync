@@ -35,8 +35,8 @@ type Exechook struct {
 	command string
 	// Command args
 	args []string
-	// Git root path
-	gitRoot string
+	// Git clone root path
+	cloneRoot string
 	// Timeout for the command
 	timeout time.Duration
 	// Logger
@@ -44,11 +44,11 @@ type Exechook struct {
 }
 
 // NewExechook returns a new Exechook
-func NewExechook(cmdrunner *cmd.Runner, command, gitroot string, args []string, timeout time.Duration, l *logging.Logger) *Exechook {
+func NewExechook(cmdrunner *cmd.Runner, command, cloneRoot string, args []string, timeout time.Duration, l *logging.Logger) *Exechook {
 	return &Exechook{
 		cmdrunner: cmdrunner,
 		command:   command,
-		gitRoot:   gitroot,
+		cloneRoot: cloneRoot,
 		args:      args,
 		timeout:   timeout,
 		logger:    l,
@@ -65,7 +65,7 @@ func (h *Exechook) Do(ctx context.Context, hash string) error {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
-	worktreePath := filepath.Join(h.gitRoot, hash)
+	worktreePath := filepath.Join(h.cloneRoot, hash)
 
 	env := os.Environ()
 	env = append(env, envKV("GITSYNC_HASH", hash))

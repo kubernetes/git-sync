@@ -39,6 +39,11 @@ func New(root string, errorFile string) *Logger {
 	return &Logger{Logger: glogr.New(), root: root, errorFile: errorFile}
 }
 
+// ErrorFile returns the name of the error file.
+func (l *Logger) ErrorFile() string {
+	return l.errorFile
+}
+
 // Error implements logr.Logger.Error.
 func (l *Logger) Error(err error, msg string, kvList ...interface{}) {
 	l.Logger.WithCallDepth(1).Error(err, msg, kvList...)
@@ -100,7 +105,7 @@ func (l *Logger) DeleteErrorFile() {
 func (l *Logger) writeContent(content []byte) {
 	if _, err := os.Stat(l.root); os.IsNotExist(err) {
 		fileMode := os.FileMode(0775) // umask applies
-		if err := os.Mkdir(l.root, fileMode); err != nil {
+		if err := os.MkdirAll(l.root, fileMode); err != nil {
 			l.Logger.Error(err, "can't create the root directory", "root", l.root)
 			return
 		}

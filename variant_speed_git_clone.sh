@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright 2020 The Kubernetes Authors.
+# Copyright 2023 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use for e2e test of --exechook-command.
-# This option takes no command arguments, so requires a wrapper script.
+now=$(date +%s)
+start=${START_TIME:-$now}
 
-sleep 3
-cat file > exechook
-cat ../../link/file > link-exechook
-echo "ENVKEY=$ENVKEY" > exechook-env
+# if the git command is not clone, or it is invoked after a few times, use normal git
+if [ "$1" != "clone" ] || [ $((now-start)) -gt 4 ]; then
+  git "$@"
+  exit $?
+fi
+
+# use slow git for the first few git clones
+sleep 1.1
+git "$@"

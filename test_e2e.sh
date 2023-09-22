@@ -151,6 +151,7 @@ chmod -R g+r "$DOT_SSH"
 
 SLOW_GIT_CLONE=/slow_git_clone.sh
 SLOW_GIT_FETCH=/slow_git_fetch.sh
+VARIANT_SPEED_GIT_CLONE=/variant_git_clone.sh
 ASKPASS_GIT=/askpass_git.sh
 EXECHOOK_COMMAND=/test_exechook_command.sh
 EXECHOOK_COMMAND_FAIL=/test_exechook_command_fail.sh
@@ -181,12 +182,14 @@ function GIT_SYNC() {
         -v "$WORK":"$WORK":ro \
         -v "$(pwd)/slow_git_clone.sh":"$SLOW_GIT_CLONE":ro \
         -v "$(pwd)/slow_git_fetch.sh":"$SLOW_GIT_FETCH":ro \
+        -v "$(pwd)/variant_speed_git_clone.sh":"$VARIANT_SPEED_GIT_CLONE":ro \
         -v "$(pwd)/askpass_git.sh":"$ASKPASS_GIT":ro \
         -v "$(pwd)/test_exechook_command.sh":"$EXECHOOK_COMMAND":ro \
         -v "$(pwd)/test_exechook_command_fail.sh":"$EXECHOOK_COMMAND_FAIL":ro \
         -v "$(pwd)/test_exechook_command_with_sleep.sh":"$EXECHOOK_COMMAND_SLEEPY":ro \
         -v "$(pwd)/test_exechook_command_fail_with_sleep.sh":"$EXECHOOK_COMMAND_FAIL_SLEEPY":ro \
         --env "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL" \
+        --env "START_TIME=$(date +%s)" \
         -v "$RUNLOG":/var/log/runs \
         -v "$DOT_SSH/id_test":"/etc/git-secret/ssh":ro \
         e2e/git-sync:"${E2E_TAG}"__$(go env GOOS)_$(go env GOARCH) \
@@ -420,20 +423,20 @@ function e2e::readlink() {
         >> "$1" 2>&1 &
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_eq "$ROOT"/link repo/$(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD forward
     echo "$FUNCNAME 2" > "$REPO"/file
     git -C "$REPO" commit -qam "$FUNCNAME 2"
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_eq "$ROOT"/link repo/$(git -C "$REPO" rev-parse HEAD)
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     sleep 3
     assert_link_exists "$ROOT"/link
-    assert_link_eq "$ROOT"/link $(git -C "$REPO" rev-parse HEAD)
+    assert_link_eq "$ROOT"/link repo/$(git -C "$REPO" rev-parse HEAD)
 }
 
 ##############################################
@@ -2093,6 +2096,49 @@ function e2e::export_error() {
     assert_file_exists "$ROOT"/link/file
     assert_file_eq "$ROOT"/link/file "$FUNCNAME"
     assert_file_absent "$ROOT"/error.json
+}
+
+##############################################
+# Test export-error with previous error retained
+##############################################
+function e2e::export_error_with_variant_speed_git_error() {
+    echo "$FUNCNAME" > "$REPO"/file
+    git -C "$REPO" commit -qam "$FUNCNAME"
+    (
+        GIT_SYNC \
+            --git="$VARIANT_SPEED_GIT_CLONE" \
+            --timeout=1 \
+            --max-sync-failures=4 \
+            --repo="file://$REPO" \
+            --branch="$MAIN_BRANCH" \
+            --root="$ROOT" \
+            --dest="link" \
+            --error-file="error.json" \
+            >> "$1" 2>&1 &
+
+        # the error file hasn't been created yet because the first git-clone takes longer than one second
+        sleep 1
+        assert_file_absent "$ROOT"/link
+        assert_file_absent "$ROOT"/error.json
+
+        # sleep for 2 seconds, one for the wait time between syncs, and the other one indicates the second git clone hasn't finished yet
+        sleep 2
+        # the error file created by the first clone failure should not be deleted while the second git clone is still running
+        assert_file_absent "$ROOT"/link
+        assert_file_contains "$ROOT"/error.json "context deadline exceeded"
+
+        # sleep for another second to wait for the second git clone to finish. The error file should still exist.
+        sleep 1
+        assert_file_absent "$ROOT"/link
+        assert_file_contains "$ROOT"/error.json "context deadline exceeded"
+
+        # in variant_speed_git_clone.sh, git changes to normal after 4 seconds.
+        # after the 1s wait time and the clone time, `git clone` should succeed and delete the error file.
+        sleep 3
+        assert_file_exists "$ROOT"/link/file
+        assert_file_eq "$ROOT"/link/file "$FUNCNAME"
+        assert_file_absent "$ROOT"/error.json
+    )
 }
 
 ##############################################
