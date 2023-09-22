@@ -107,6 +107,11 @@ the real intentions (e.g. "allow group write" does not mean "set everything to
 0775").  The new `--group-write` flag should cover what people ACTUALLY are
 trying to do.  The `--change-permissions` flag is no longer supported.
 
+### SSH: `--ssh`
+
+The old `--ssh` flag is no longer needed - the value of `--repo` determines
+when SSH is used.  It is still accepted but does nothing.
+
 ### Manual: `--man`
 
 The new `--man` flag prints a man-page style help document and exits.

@@ -1713,7 +1713,6 @@ function e2e::auth_ssh() {
             --repo="test@$IP:/git/repo" \
             --root="$ROOT" \
             --link="link" \
-            --ssh \
             --ssh-known-hosts=false \
             --ssh-key-file="/ssh/secret.2"
     assert_file_absent "$ROOT/link/file"
@@ -1724,7 +1723,6 @@ function e2e::auth_ssh() {
         --repo="test@$IP:/git/repo" \
         --root="$ROOT" \
         --link="link" \
-        --ssh \
         --ssh-known-hosts=false \
         --ssh-key-file="/ssh/secret.1" \
         --ssh-key-file="/ssh/secret.2" \
@@ -2724,7 +2722,6 @@ function e2e::submodule_sync_over_ssh_different_keys() {
         --repo="test@$IP:/git/repo" \
         --root="$ROOT" \
         --link="link" \
-        --ssh \
         --ssh-key-file="/ssh/secret.1" \
         --ssh-key-file="/ssh/secret.2" \
         --ssh-key-file="/ssh/secret.3" \
