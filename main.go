@@ -451,9 +451,6 @@ func main() {
 		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 		"the file from which the password or personal access token for git auth will be sourced")
 
-	flSSH := pflag.Bool("ssh",
-		envBool(false, "GITSYNC_SSH", "GIT_SYNC_SSH"),
-		"use SSH for git operations")
 	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
 		envStringArray("/etc/git-secret/ssh", "GITSYNC_SSH_KEY_FILE", "GIT_SYNC_SSH_KEY_FILE", "GIT_SSH_KEY_FILE"),
 		"the SSH key(s) to use")
@@ -508,6 +505,9 @@ func main() {
 	flDeprecatedRev := pflag.String("rev", envString("", "GIT_SYNC_REV"),
 		"DEPRECATED: use --ref instead")
 	mustMarkDeprecated("rev", "use --ref instead")
+	_ = pflag.Bool("ssh", false,
+		"DEPRECATED: this flag is no longer necessary")
+	mustMarkDeprecated("ssh", "no longer necessary")
 	flDeprecatedSyncHookCommand := pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
 		"DEPRECATED: use --exechook-command instead")
 	mustMarkDeprecated("sync-hook-command", "use --exechook-command instead")
@@ -698,32 +698,6 @@ func main() {
 		}
 	}
 
-	if *flSSH {
-		if *flUsername != "" {
-			handleConfigError(log, true, "ERROR: only one of --ssh and --username may be specified")
-		}
-		if *flPassword != "" {
-			handleConfigError(log, true, "ERROR: only one of --ssh and --password may be specified")
-		}
-		if *flPasswordFile != "" {
-			handleConfigError(log, true, "ERROR: only one of --ssh and --password-file may be specified")
-		}
-		if *flAskPassURL != "" {
-			handleConfigError(log, true, "ERROR: only one of --ssh and --askpass-url may be specified")
-		}
-		if *flCookieFile {
-			handleConfigError(log, true, "ERROR: only one of --ssh and --cookie-file may be specified")
-		}
-		if len(*flSSHKeyFiles) == 0 {
-			handleConfigError(log, true, "ERROR: --ssh-key-file must be specified when --ssh is set")
-		}
-		if *flSSHKnownHosts {
-			if *flSSHKnownHostsFile == "" {
-				handleConfigError(log, true, "ERROR: --ssh-known-hosts-file must be specified when --ssh-known-hosts is set")
-			}
-		}
-	}
-
 	if *flHTTPBind == "" {
 		if *flHTTPMetrics {
 			handleConfigError(log, true, "ERROR: --http-bind must be specified when --http-metrics is set")
@@ -837,11 +811,10 @@ func main() {
 		}
 	}
 
-	if *flSSH {
-		if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
-			log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFiles, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
-			os.Exit(1)
-		}
+	// If the --repo or any submodule uses SSH, we need to know which keys.
+	if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
+		log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFiles, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
+		os.Exit(1)
 	}
 
 	if *flCookieFile {
@@ -1955,16 +1928,10 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathsToSSHSecrets []strin
 	}
 
 	for _, p := range pathsToSSHSecrets {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("can't access SSH key file %s: %w", p, err)
-		}
 		sshCmd += fmt.Sprintf(" -i %s", p)
 	}
 
 	if setupKnownHosts {
-		if _, err := os.Stat(pathToSSHKnownHosts); err != nil {
-			return fmt.Errorf("can't access SSH known_hosts file %s: %w", pathToSSHKnownHosts, err)
-		}
 		sshCmd += fmt.Sprintf(" -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s", pathToSSHKnownHosts)
 	} else {
 		sshCmd += " -o StrictHostKeyChecking=no"
@@ -2318,8 +2285,8 @@ OPTIONS
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
-            needed to use SSH with an arbitrary UID (see --ssh).  This assumes
-            that /etc/passwd is writable by the current UID.
+            needed to use SSH with an arbitrary UID.  This assumes that
+            /etc/passwd is writable by the current UID.
 
     --askpass-url <string>, $GITSYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
@@ -2482,18 +2449,15 @@ OPTIONS
             details) which controls which files and directories will be checked
             out.  If not specified, the default is to check out the entire repo.
 
-    --ssh, $GITSYNC_SSH
-            Use SSH for git authentication and operations.
-
     --ssh-key-file <string>, $GITSYNC_SSH_KEY_FILE
-            The SSH key(s) to use when using --ssh.  This flag may be specified
-            more than once and the environment variable will be parsed like
-            PATH - using a colon (':') to separate elements.  If not specified,
-            this defaults to "/etc/git-secret/ssh".
+            The SSH key(s) to use when using git over SSH.  This flag may be
+            specified more than once and the environment variable will be
+            parsed like PATH - using a colon (':') to separate elements.  If
+            not specified, this defaults to "/etc/git-secret/ssh".
 
     --ssh-known-hosts, $GITSYNC_SSH_KNOWN_HOSTS
-            Enable SSH known_hosts verification when using --ssh.  If not
-            specified, this defaults to true.
+            Enable SSH known_hosts verification when using git over SSH.  If
+            not specified, this defaults to true.
 
     --ssh-known-hosts-file <string>, $GITSYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
@@ -2599,11 +2563,11 @@ AUTHENTICATION
             sync.
 
     SSH
-            When --ssh (GITSYNC_SSH) is specified, the --ssh-key-file
-            (GITSYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
-            to also use --ssh-known-hosts (GITSYNC_SSH_KNOWN_HOSTS) and
-            --ssh-known-hosts-file (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using
-            SSH.
+            When an SSH transport is specified, the key(s) defined in
+            --ssh-key-file (GITSYNC_SSH_KEY_FILE) will be used.  Users are
+            strongly advised to also use --ssh-known-hosts
+            (GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
+            (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
 
     cookies
             When --cookie-file (GITSYNC_COOKIE_FILE) is specified, the

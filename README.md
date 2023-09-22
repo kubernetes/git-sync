@@ -149,8 +149,8 @@ OPTIONS
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
-            needed to use SSH with an arbitrary UID (see --ssh).  This assumes
-            that /etc/passwd is writable by the current UID.
+            needed to use SSH with an arbitrary UID.  This assumes that
+            /etc/passwd is writable by the current UID.
 
     --askpass-url <string>, $GITSYNC_ASKPASS_URL
             A URL to query for git credentials.  The query must return success
@@ -313,18 +313,15 @@ OPTIONS
             details) which controls which files and directories will be checked
             out.  If not specified, the default is to check out the entire repo.
 
-    --ssh, $GITSYNC_SSH
-            Use SSH for git authentication and operations.
-
     --ssh-key-file <string>, $GITSYNC_SSH_KEY_FILE
-            The SSH key(s) to use when using --ssh.  This flag may be specified
-            more than once and the environment variable will be parsed like
-            PATH - using a colon (':') to separate elements.  If not specified,
-            this defaults to "/etc/git-secret/ssh".
+            The SSH key(s) to use when using git over SSH.  This flag may be
+            specified more than once and the environment variable will be
+            parsed like PATH - using a colon (':') to separate elements.  If
+            not specified, this defaults to "/etc/git-secret/ssh".
 
     --ssh-known-hosts, $GITSYNC_SSH_KNOWN_HOSTS
-            Enable SSH known_hosts verification when using --ssh.  If not
-            specified, this defaults to true.
+            Enable SSH known_hosts verification when using git over SSH.  If
+            not specified, this defaults to true.
 
     --ssh-known-hosts-file <string>, $GITSYNC_SSH_KNOWN_HOSTS_FILE
             The known_hosts file to use when --ssh-known-hosts is specified.
@@ -430,11 +427,11 @@ AUTHENTICATION
             sync.
 
     SSH
-            When --ssh (GITSYNC_SSH) is specified, the --ssh-key-file
-            (GITSYNC_SSH_KEY_FILE) will be used.  Users are strongly advised
-            to also use --ssh-known-hosts (GITSYNC_SSH_KNOWN_HOSTS) and
-            --ssh-known-hosts-file (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using
-            SSH.
+            When an SSH transport is specified, the key(s) defined in
+            --ssh-key-file (GITSYNC_SSH_KEY_FILE) will be used.  Users are
+            strongly advised to also use --ssh-known-hosts
+            (GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
+            (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
 
     cookies
             When --cookie-file (GITSYNC_COOKIE_FILE) is specified, the
