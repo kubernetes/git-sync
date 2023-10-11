@@ -1271,7 +1271,8 @@ const redactedString = "REDACTED"
 func redactURL(urlstr string) string {
 	u, err := url.Parse(urlstr)
 	if err != nil {
-		return err.Error()
+		// May be something like user@git.example.com:path/to/repo
+		return urlstr
 	}
 	if u.User != nil {
 		if _, found := u.User.Password(); found {
