@@ -1274,7 +1274,9 @@ func redactURL(urlstr string) string {
 		return err.Error()
 	}
 	if u.User != nil {
-		u.User = url.UserPassword(u.User.Username(), redactedString)
+		if _, found := u.User.Password(); found {
+			u.User = url.UserPassword(u.User.Username(), redactedString)
+		}
 	}
 	return u.String()
 }
