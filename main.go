@@ -2035,7 +2035,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// Regular cleanup will happen in the outer loop, to catch stale
 		// worktrees.
 
-		if currentWorktree != git.worktreeFor(currentHash) {
+		if currentHash != "" && currentWorktree != git.worktreeFor(currentHash) {
 			// The old worktree might have come from a prior version, and so
 			// not get caught by the normal cleanup.
 			os.RemoveAll(currentWorktree.Path().String())

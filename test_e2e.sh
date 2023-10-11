@@ -609,6 +609,51 @@ function e2e::worktree_cleanup() {
 }
 
 ##############################################
+# Test worktree-unexpected-removal
+##############################################
+function e2e::worktree_unexpected_removal() {
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        &
+
+    # wait for first sync
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
+
+    # suspend time so we can fake corruption
+    docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+        | while read CTR; do
+            docker pause "$CTR" >/dev/null
+        done
+
+    # make a unexpected removal
+    WT=$(git -C "$REPO" rev-list -n1 HEAD)
+    rm -r "$ROOT/.worktrees/$WT"    
+
+    # resume time
+    docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+        | while read CTR; do
+            docker unpause "$CTR" >/dev/null
+        done
+
+    echo "$METRIC_GOOD_SYNC_COUNT"
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
+}
+
+##############################################
 # Test stale-worktree-timeout
 ##############################################
 function e2e::stale_worktree_timeout() {
