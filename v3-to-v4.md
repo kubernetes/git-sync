@@ -114,10 +114,12 @@ repo, rather than changing it after checkout.
 
 The `--change-permissions` flag is no longer supported.
 
-### SSH: `--ssh`
+### SSH: `--ssh` is optional (after v4.0.0)
 
 The old `--ssh` flag is no longer needed - the value of `--repo` determines
 when SSH is used.  It is still accepted but does nothing.
+
+NOTE: v4.0.0 still requires `--ssh` but all releases beyond that do not.
 
 ### Manual: `--man`
 
