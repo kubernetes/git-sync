@@ -763,7 +763,6 @@ function e2e::stale_worktree_timeout_restart() {
     git -C "$REPO" commit -qam "$FUNCNAME"
     WT1=$(git -C "$REPO" rev-list -n1 HEAD)
     GIT_SYNC \
-        --period=100ms \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
@@ -782,7 +781,6 @@ function e2e::stale_worktree_timeout_restart() {
 
     # restart git-sync
     GIT_SYNC \
-            --period=100ms \
             --repo="file://$REPO" \
             --root="$ROOT" \
             --link="link" \
@@ -806,7 +804,6 @@ function e2e::stale_worktree_timeout_restart() {
 
     # restart git-sync
     GIT_SYNC \
-                --period=100ms \
                 --repo="file://$REPO" \
                 --root="$ROOT" \
                 --link="link" \
@@ -832,7 +829,6 @@ function e2e::stale_worktree_timeout_restart() {
     # wait for WT1 to go stale and restart git-sync
     sleep 8
     GIT_SYNC \
-            --period=100ms \
             --repo="file://$REPO" \
             --root="$ROOT" \
             --link="link" \
@@ -858,7 +854,6 @@ function e2e::stale_worktree_timeout_restart() {
     # wait for WT2 to go stale and restart git-sync
     sleep 4
     GIT_SYNC \
-            --period=100ms \
             --repo="file://$REPO" \
             --root="$ROOT" \
             --link="link" \
