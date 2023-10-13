@@ -771,7 +771,7 @@ func main() {
 	}
 
 	failCount := 0
-	firstLoop := true
+	syncCount := uint64(0)
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -789,7 +789,7 @@ func main() {
 			// this might have been called before, but also might not have
 			setRepoReady()
 			// We treat the first loop as a sync, including sending hooks.
-			if changed || firstLoop {
+			if changed || syncCount == 0 {
 				if absTouchFile != "" {
 					if err := touch(absTouchFile); err != nil {
 						log.Error(err, "failed to touch touch-file", "path", absTouchFile)
@@ -807,7 +807,7 @@ func main() {
 			} else {
 				updateSyncMetrics(metricKeyNoOp, start)
 			}
-			firstLoop = false
+			syncCount++
 
 			// Clean up old worktree(s) and run GC.
 			if err := git.cleanup(ctx); err != nil {
@@ -852,7 +852,7 @@ func main() {
 			log.DeleteErrorFile()
 		}
 
-		log.V(3).Info("next sync", "waitTime", flPeriod.String())
+		log.V(3).Info("next sync", "waitTime", flPeriod.String(), "syncCount", syncCount)
 		cancel()
 
 		// Sleep until the next sync. If syncSig is set then the sleep may
@@ -1076,7 +1076,7 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 			// the contents rather than the dir itself, because a common use-case
 			// is to have a volume mounted at git.root, which makes removing it
 			// impossible.
-			git.log.V(0).Info("repo directory failed checks or was empty", "path", git.root)
+			git.log.V(0).Info("repo directory was empty or failed checks", "path", git.root)
 			if err := removeDirContents(git.root, git.log); err != nil {
 				return fmt.Errorf("can't wipe unusable root directory: %w", err)
 			}
