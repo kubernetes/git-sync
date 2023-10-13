@@ -1297,7 +1297,7 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
 ##############################################
 # Test syncing after a crash
 ##############################################
-function e2e::sync_crash_cleanup_retry() {
+function e2e::sync_crash_no_link_cleanup_retry() {
     # First sync
     echo "$FUNCNAME 1" > "$REPO/file"
     git -C "$REPO" commit -qam "$FUNCNAME 1"
@@ -1313,6 +1313,37 @@ function e2e::sync_crash_cleanup_retry() {
 
     # Corrupt it
     rm -f "$ROOT/link"
+
+    # Try again
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+}
+
+##############################################
+# Test syncing after a crash
+##############################################
+function e2e::sync_crash_no_worktree_cleanup_retry() {
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+
+    # Corrupt it
+    rm -rf "$ROOT/.worktrees/"
 
     # Try again
     GIT_SYNC \
