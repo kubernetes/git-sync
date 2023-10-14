@@ -197,17 +197,6 @@ function clean_work() {
     mkdir -p "$WORK"
 }
 
-# config_repo sets required git config, so we don't depend on (shared) global git config.
-#
-# Args:
-#  $1: directory of git repo
-function config_repo() {
-    local repo=$1
-
-    git -C "$repo" config user.email "git-sync-test@example.com"
-    git -C "$repo" config user.name "git-sync-test"
-}
-
 # REPO and REPO2 are the source repos under test.
 REPO="$DIR/repo"
 REPO2="${REPO}2"
@@ -218,7 +207,6 @@ function init_repo() {
     rm -rf "$REPO"
     mkdir -p "$REPO"
     git -C "$REPO" init -q -b "$MAIN_BRANCH"
-    config_repo "$REPO"
     echo "$arg" > "$REPO/file"
     git -C "$REPO" add file
     git -C "$REPO" commit -aqm "init file"
@@ -394,7 +382,6 @@ function e2e::init_root_is_under_another_repo() {
     mkdir -p "$ROOT/subdir/root"
     date > "$ROOT/subdir/root/file" # so it is not empty
     git -C "$ROOT/subdir" init -q
-    config_repo "$ROOT/subdir"
 
     GIT_SYNC \
         --one-time \
@@ -412,7 +399,6 @@ function e2e::init_root_is_under_another_repo() {
 function e2e::init_root_fails_sanity() {
     # Make an invalid git repo.
     git -C "$ROOT" init -q
-    config_repo "$ROOT"
     echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
 
     GIT_SYNC \
@@ -2473,7 +2459,6 @@ function e2e::submodule_sync_default() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule.file"
@@ -2484,7 +2469,6 @@ function e2e::submodule_sync_default() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$NESTED_SUBMODULE"
     echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
     git -C "$NESTED_SUBMODULE" add nested-submodule.file
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
@@ -2581,7 +2565,6 @@ function e2e::submodule_sync_depth() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
 
     # First sync
     expected_depth="1"
@@ -2662,7 +2645,6 @@ function e2e::submodule_sync_off() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -2693,7 +2675,6 @@ function e2e::submodule_sync_shallow() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -2704,7 +2685,6 @@ function e2e::submodule_sync_shallow() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$NESTED_SUBMODULE"
     echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
     git -C "$NESTED_SUBMODULE" add nested-submodule.file
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule file"
@@ -2741,7 +2721,6 @@ function e2e::submodule_sync_relative() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule file"
@@ -2778,7 +2757,6 @@ function e2e::submodule_sync_over_ssh_different_keys() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$NESTED_SUBMODULE"
     echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
     git -C "$NESTED_SUBMODULE" add nested-submodule.file
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
@@ -2799,7 +2777,6 @@ function e2e::submodule_sync_over_ssh_different_keys() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule.file"
@@ -2858,7 +2835,6 @@ function e2e::submodule_sync_over_http_different_passwords() {
     mkdir "$NESTED_SUBMODULE"
 
     git -C "$NESTED_SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$NESTED_SUBMODULE"
     echo "nested-submodule" > "$NESTED_SUBMODULE/nested-submodule.file"
     git -C "$NESTED_SUBMODULE" add nested-submodule.file
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
@@ -2877,7 +2853,6 @@ function e2e::submodule_sync_over_http_different_passwords() {
     mkdir "$SUBMODULE"
 
     git -C "$SUBMODULE" init -q -b "$MAIN_BRANCH"
-    config_repo "$SUBMODULE"
     echo "submodule" > "$SUBMODULE/submodule.file"
     git -C "$SUBMODULE" add submodule.file
     git -C "$SUBMODULE" commit -aqm "init submodule.file"
@@ -3399,6 +3374,8 @@ function run_test() {
 # Override local configs for predictability in this test.
 export GIT_CONFIG_GLOBAL="$DIR/gitconfig"
 export GIT_CONFIG_SYSTEM=/dev/null
+git config --global user.email "git-sync-test@example.com"
+git config --global user.name "git-sync-test"
 
 # Make sure files we create can be group writable.
 umask 0002
