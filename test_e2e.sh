@@ -609,7 +609,7 @@ function e2e::worktree_cleanup() {
 }
 
 ##############################################
-# Test worktree-unexpected-removal
+# Test worktree unexpected removal
 ##############################################
 function e2e::worktree_unexpected_removal() {
     GIT_SYNC \
@@ -635,7 +635,52 @@ function e2e::worktree_unexpected_removal() {
 
     # make a unexpected removal
     WT=$(git -C "$REPO" rev-list -n1 HEAD)
-    rm -r "$ROOT/.worktrees/$WT"    
+    rm -r "$ROOT/.worktrees/$WT"
+
+    # resume time
+    docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+        | while read CTR; do
+            docker unpause "$CTR" >/dev/null
+        done
+
+    echo "$METRIC_GOOD_SYNC_COUNT"
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
+}
+
+##############################################
+# Test syncing when the worktree is wrong hash
+##############################################
+function e2e::sync_recover_wrong_worktree_hash() {
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        &
+
+    # wait for first sync
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
+
+    # suspend time so we can fake corruption
+    docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
+        | while read CTR; do
+            docker pause "$CTR" >/dev/null
+        done
+
+    # Corrupt it
+    echo "unexpected" > "$ROOT/link/file"
+    git -C "$ROOT/link" commit -qam "corrupt it"
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
@@ -1294,9 +1339,6 @@ function e2e::sync_sha_once_sync_different_sha_unknown() {
 ##############################################
 function e2e::sync_crash_no_link_cleanup_retry() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -1304,7 +1346,7 @@ function e2e::sync_crash_no_link_cleanup_retry() {
         --link="link"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 
     # Corrupt it
     rm -f "$ROOT/link"
@@ -1317,7 +1359,7 @@ function e2e::sync_crash_no_link_cleanup_retry() {
         --link="link"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################
@@ -1325,9 +1367,6 @@ function e2e::sync_crash_no_link_cleanup_retry() {
 ##############################################
 function e2e::sync_crash_no_worktree_cleanup_retry() {
     # First sync
-    echo "$FUNCNAME 1" > "$REPO/file"
-    git -C "$REPO" commit -qam "$FUNCNAME 1"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -1335,7 +1374,7 @@ function e2e::sync_crash_no_worktree_cleanup_retry() {
         --link="link"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 
     # Corrupt it
     rm -rf "$ROOT/.worktrees/"
@@ -1348,7 +1387,7 @@ function e2e::sync_crash_no_worktree_cleanup_retry() {
         --link="link"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
-    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
 }
 
 ##############################################

@@ -1188,6 +1188,17 @@ func (git *repoSync) sanityCheckWorktree(ctx context.Context, worktree worktree)
 		return false
 	}
 
+	// Make sure it is synced to the right commmit.
+	stdout, _, err := git.Run(ctx, worktree.Path(), "rev-parse", "HEAD")
+	if err != nil {
+		git.log.Error(err, "can't get worktree HEAD", "path", worktree.Path())
+		return false
+	}
+	if stdout != worktree.Hash() {
+		git.log.V(0).Info("worktree HEAD does not match worktree", "path", worktree.Path(), "head", stdout)
+		return false
+	}
+
 	// Consistency-check the worktree.  Don't use --verbose because it can be
 	// REALLY verbose.
 	if _, _, err := git.Run(ctx, worktree.Path(), "fsck", "--no-progress", "--connectivity-only"); err != nil {
