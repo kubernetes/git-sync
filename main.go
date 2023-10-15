@@ -525,7 +525,7 @@ func main() {
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
 		"home", os.Getenv("HOME"),
-		"flags", logSafeFlags())
+		"flags", logSafeFlags(*flVerbose))
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
@@ -928,14 +928,19 @@ func redactURL(urlstr string) string {
 // logSafeFlags makes sure any sensitive args (e.g. passwords) are redacted
 // before logging.  This returns a slice rather than a map so it is always
 // sorted.
-func logSafeFlags() []string {
+func logSafeFlags(v int) []string {
 	ret := []string{}
 	pflag.VisitAll(func(fl *pflag.Flag) {
+		// Don't log unchanged values
+		if !fl.Changed && v <= 3 {
+			return
+		}
+
 		arg := fl.Name
 		val := fl.Value.String()
 
-		// Don't log empty values
-		if val == "" {
+		// Don't log empty, unchanged values
+		if val == "" && !fl.Changed && v < 6 {
 			return
 		}
 
