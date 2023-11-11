@@ -64,6 +64,15 @@ and try to set `--ref` from them.
     |   other  |  other  |   ""    | error                        |
     |----------|---------|---------|------------------------------|
 
+#### Default target
+
+In git-sync v3, if neither `--branch` nor `--rev` were specified, the default
+was to sync the HEAD of the branch named "master".  Many git repos have changed
+to "main" or something else as the default branch name, so git-sync v4 changes
+the default target to be the HEAD of whatever the `--repo`'s default branch is.
+If that default branch is not "master", then the default target will be
+different in v4 than in v3.
+
 #### Abbreviated hashes
 
 Because of the fetch loop, git-sync v3 allowed a user to specify `--branch` and
