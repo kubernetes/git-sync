@@ -64,6 +64,17 @@ and try to set `--ref` from them.
     |   other  |  other  |   ""    | error                        |
     |----------|---------|---------|------------------------------|
 
+#### Abbreviated hashes
+
+Because of the fetch loop, git-sync v3 allowed a user to specify `--branch` and
+`--rev`, where the rev was a shortened hash (aka SHA), which would be locally
+expanded to the full hash.  v4 tries hard not to pull extra stuff, which means
+we don't have enough information locally to do that resolution, and there no
+way to ask the server to do it for us (at least, not as far as we know).
+
+The net result is that, when using a hash for `--ref`, it must be a full hash,
+and not an abbreviated form.
+
 ### Log-related flags
 
 git-sync v3 exposed a number of log-related flags (e.g. `-logtostderr`).  These
