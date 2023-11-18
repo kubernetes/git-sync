@@ -3021,7 +3021,7 @@ function e2e::export_error() {
             --error-file="error.json"
         assert_file_absent "$ROOT/link"
         assert_file_absent "$ROOT/link/file"
-        assert_file_contains "$ROOT/error.json" "unknown revision"
+        assert_file_contains "$ROOT/error.json" "couldn't find remote ref"
 
     # the error.json file should be removed if sync succeeds.
     GIT_SYNC \
@@ -3049,7 +3049,7 @@ function e2e::export_error_abs_path() {
             --error-file="$ROOT/dir/error.json"
         assert_file_absent "$ROOT/link"
         assert_file_absent "$ROOT/link/file"
-        assert_file_contains "$ROOT/dir/error.json" "unknown revision"
+        assert_file_contains "$ROOT/dir/error.json" "couldn't find remote ref"
 }
 
 ##############################################
