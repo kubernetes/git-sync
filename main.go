@@ -836,10 +836,7 @@ func main() {
 				os.Exit(exitCode)
 			}
 
-			if isHash, err := git.IsKnownHash(ctx, git.ref); err != nil {
-				log.Error(err, "can't tell if ref is a git hash, exiting", "ref", git.ref)
-				os.Exit(1)
-			} else if isHash {
+			if hash == git.ref {
 				log.V(0).Info("ref appears to be a git hash, no further sync needed", "ref", git.ref)
 				log.DeleteErrorFile()
 				sleepForever()
@@ -1493,49 +1490,6 @@ func (m multiError) Error() string {
 	return strings.Join(strs, "; ")
 }
 
-// remoteHashForRef returns the upstream hash for a given ref.
-func (git *repoSync) remoteHashForRef(ctx context.Context, ref string) (string, error) {
-	// Fetch both the bare and dereferenced ref. git sorts the results and
-	// prints the dereferenced result, if present, after the bare result, so we
-	// always want the last result it produces.
-	output, _, err := git.Run(ctx, git.root, "ls-remote", "-q", git.repo, ref, ref+"^{}")
-	if err != nil {
-		return "", err
-	}
-	line := lastNonEmptyLine(output)
-	parts := strings.Split(line, "\t") // guaranteed to have at least 1 element
-	return parts[0], nil
-}
-
-func lastNonEmptyLine(text string) string {
-	lines := strings.Split(text, "\n") // guaranteed to have at least 1 element
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" {
-			return line
-		}
-	}
-	return ""
-}
-
-// IsKnownHash returns true if ref is the hash of a commit which is known to this
-// repo.  In the event that ref is an abbreviated hash (e.g. "abcd" which
-// resolves to "abcdef1234567890"), this will return true by prefix-matching.
-// If ref is ambiguous, it will consider whatever result git returns.  If ref
-// is not a hash or is not known to this repo, even if it appears to be a hash,
-// this will return false.
-func (git *repoSync) IsKnownHash(ctx context.Context, ref string) (bool, error) {
-	stdout, stderr, err := git.Run(ctx, git.root, "rev-parse", ref+"^{commit}")
-	if err != nil {
-		if strings.Contains(stderr, "unknown revision") {
-			return false, nil
-		}
-		return false, err
-	}
-	line := lastNonEmptyLine(stdout)
-	return strings.HasPrefix(line, ref), nil
-}
-
 // worktree represents a git worktree (which may or may not exist on disk).
 type worktree absPath
 
@@ -1592,26 +1546,6 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		return false, "", err
 	}
 
-	// Figure out what hash the remote resolves to.
-	remoteHash, err := git.remoteHashForRef(ctx, git.ref)
-	if err != nil {
-		return false, "", err
-	}
-
-	// If we couldn't find a remote commit, it might have been a hash literal.
-	if remoteHash == "" {
-		// If git thinks it tastes like a hash, we just use that and if it
-		// is wrong, we will fail later.
-		output, _, err := git.Run(ctx, git.root, "rev-parse", git.ref)
-		if err != nil {
-			return false, "", err
-		}
-		result := strings.Trim(output, "\n")
-		if result == git.ref {
-			remoteHash = git.ref
-		}
-	}
-
 	// Find out what we currently have synced, if anything.
 	var currentWorktree worktree
 	if wt, err := git.currentWorktree(); err != nil {
@@ -1621,6 +1555,22 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	}
 	currentHash := currentWorktree.Hash()
 	git.log.V(3).Info("current state", "hash", currentHash, "worktree", currentWorktree)
+
+	// This should be very fast if we already have the hash we need. Parameters
+	// like depth are set at fetch time.
+	if err := git.fetch(ctx, git.ref); err != nil {
+		return false, "", err
+	}
+
+	// Figure out what we got.  The ^{} syntax "peels" annotated tags to
+	// their underlying commit hashes, but has no effect if we fetched a
+	// branch, plain tag, or hash.
+	remoteHash := ""
+	if output, _, err := git.Run(ctx, git.root, "rev-parse", "FETCH_HEAD^{}"); err != nil {
+		return false, "", err
+	} else {
+		remoteHash = strings.Trim(output, "\n")
+	}
 
 	if currentHash == remoteHash {
 		// We seem to have the right hash already.  Let's be sure it's good.
@@ -1643,17 +1593,12 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// are set properly.  This is cheap when we already have the target hash.
 	if changed || git.syncCount == 0 {
 		git.log.V(0).Info("update required", "ref", git.ref, "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
-
-		// Parameters like depth are set at fetch time.
-		if err := git.fetch(ctx, remoteHash); err != nil {
-			return false, "", err
-		}
 		metricFetchCount.Inc()
 
 		// Reset the repo (note: not the worktree - that happens later) to the new
 		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
 		// so no files are checked out.
-		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", "FETCH_HEAD"); err != nil {
+		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", remoteHash); err != nil {
 			return false, "", err
 		}
 
@@ -1715,7 +1660,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 // fetch retrieves the specified ref from the upstream repo.
 func (git *repoSync) fetch(ctx context.Context, ref string) error {
-	git.log.V(1).Info("fetching", "ref", ref, "repo", git.repo)
+	git.log.V(2).Info("fetching", "ref", ref, "repo", git.repo)
 
 	// Fetch the ref and do some cleanup, setting or un-setting the repo's
 	// shallow flag as appropriate.

@@ -31,6 +31,14 @@ commit (by SHA) it needs.  This transfers less data and closes the race
 condition where a symbolic name can change after `git ls-remote` but before
 `git fetch`.
 
+### The v4.2+ loop
+
+The v4.2 loop refines the v4 loop even further.  Instead of using ls-remote to
+see what the upstream has and then fetching it, git-sync sill just fetch it by
+ref.  If the local sync already has the corresponding hash, nothing more will
+be synced.  If it did not have that hash before, then it does now and can
+update the worktree.
+
 ## Flags
 
 The flag syntax parsing has changed in v4.  git-sync v3 accept flags in Go's
