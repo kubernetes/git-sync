@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -315,7 +316,7 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 }
 
-func TestRemoveDirContents(t *testing.T) {
+func TestRemoveDirContentsIf(t *testing.T) {
 	root := absPath(t.TempDir())
 
 	// Brand new should be empty.
@@ -325,8 +326,12 @@ func TestRemoveDirContents(t *testing.T) {
 		t.Errorf("expected %q to be deemed empty", root)
 	}
 
+	fn := func(fi fs.FileInfo) (bool, error) {
+		return true, nil
+	}
+
 	// Test removal.
-	if err := removeDirContents(root, nil); err != nil {
+	if err := removeDirContentsIf(root, nil, fn); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
@@ -352,12 +357,12 @@ func TestRemoveDirContents(t *testing.T) {
 	}
 
 	// Test removal.
-	if err := removeDirContents(root, nil); err != nil {
+	if err := removeDirContentsIf(root, nil, fn); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
 	// Test error path.
-	if err := removeDirContents(root.Join("does-not-exist"), nil); err == nil {
+	if err := removeDirContentsIf(root.Join("does-not-exist"), nil, fn); err == nil {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
