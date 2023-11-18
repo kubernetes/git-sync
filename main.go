@@ -117,7 +117,7 @@ const defaultDirMode = os.FileMode(0775) // subject to umask
 type repoSync struct {
 	cmd            string         // the git command to run
 	root           absPath        // absolute path to the root directory
-	repo           string         // remote repo to sync
+	remoteRepo     string         // remote repo to sync
 	ref            string         // the ref to sync
 	depth          int            // for shallow sync
 	submodules     submodulesMode // how to handle submodules
@@ -706,7 +706,7 @@ func main() {
 	git := &repoSync{
 		cmd:          *flGitCmd,
 		root:         absRoot,
-		repo:         *flRepo,
+		remoteRepo:   *flRepo,
 		ref:          *flRef,
 		depth:        *flDepth,
 		submodules:   submodulesMode(*flSubmodules),
@@ -1260,12 +1260,12 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 			return err
 		}
 		// It doesn't exist - make it.
-		if _, _, err := git.Run(ctx, git.root, "remote", "add", "origin", git.repo); err != nil {
+		if _, _, err := git.Run(ctx, git.root, "remote", "add", "origin", git.remoteRepo); err != nil {
 			return err
 		}
-	} else if strings.TrimSpace(stdout) != git.repo {
+	} else if strings.TrimSpace(stdout) != git.remoteRepo {
 		// It exists, but is wrong.
-		if _, _, err := git.Run(ctx, git.root, "remote", "set-url", "origin", git.repo); err != nil {
+		if _, _, err := git.Run(ctx, git.root, "remote", "set-url", "origin", git.remoteRepo); err != nil {
 			return err
 		}
 	}
@@ -1715,7 +1715,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
-	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
+	git.log.V(3).Info("syncing", "repo", redactURL(git.remoteRepo))
 
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
@@ -1840,11 +1840,11 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 // fetch retrieves the specified ref from the upstream repo.
 func (git *repoSync) fetch(ctx context.Context, ref string) error {
-	git.log.V(2).Info("fetching", "ref", ref, "repo", redactURL(git.repo))
+	git.log.V(2).Info("fetching", "ref", ref, "repo", redactURL(git.remoteRepo))
 
 	// Fetch the ref and do some cleanup, setting or un-setting the repo's
 	// shallow flag as appropriate.
-	args := []string{"fetch", git.repo, ref, "--verbose", "--no-progress", "--prune", "--no-auto-gc"}
+	args := []string{"fetch", git.remoteRepo, ref, "--verbose", "--no-progress", "--prune", "--no-auto-gc"}
 	if git.depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(git.depth))
 	} else {
@@ -2014,7 +2014,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 		}
 	}
 
-	if err := git.StoreCredentials(ctx, git.repo, username, password); err != nil {
+	if err := git.StoreCredentials(ctx, git.remoteRepo, username, password); err != nil {
 		return err
 	}
 
@@ -2102,7 +2102,7 @@ func (git *repoSync) RefreshGitHubAppToken(ctx context.Context, githubBaseURL, p
 	username := "-"
 	password := tokenResponse.Token
 
-	if err := git.StoreCredentials(ctx, git.repo, username, password); err != nil {
+	if err := git.StoreCredentials(ctx, git.remoteRepo, username, password); err != nil {
 		return err
 	}
 
