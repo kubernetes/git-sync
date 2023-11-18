@@ -118,6 +118,7 @@ type repoSync struct {
 	cmd            string         // the git command to run
 	root           absPath        // absolute path to the root directory
 	remoteRepo     string         // remote repo to sync
+	localRepo      absPath        // absolute path to the local repo
 	ref            string         // the ref to sync
 	depth          int            // for shallow sync
 	submodules     submodulesMode // how to handle submodules
@@ -707,6 +708,7 @@ func main() {
 		cmd:          *flGitCmd,
 		root:         absRoot,
 		remoteRepo:   *flRepo,
+		localRepo:    absRoot.Join(".repo"),
 		ref:          *flRef,
 		depth:        *flDepth,
 		submodules:   submodulesMode(*flSubmodules),
@@ -1212,13 +1214,13 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 	needGitInit := false
 
 	// Check out the git root, and see if it is already usable.
-	_, err := os.Stat(git.root.String())
+	_, err := os.Stat(git.localRepo.String())
 	switch {
 	case os.IsNotExist(err):
 		// Probably the first sync.  defaultDirMode ensures that this is usable
 		// as a volume when the consumer isn't running as the same UID.
-		git.log.V(1).Info("repo directory does not exist, creating it", "path", git.root)
-		if err := os.MkdirAll(git.root.String(), defaultDirMode); err != nil {
+		git.log.V(1).Info("repo directory does not exist, creating it", "path", git.localRepo)
+		if err := os.MkdirAll(git.localRepo.String(), defaultDirMode); err != nil {
 			return err
 		}
 		needGitInit = true
@@ -1226,17 +1228,14 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 		return err
 	default:
 		// Make sure the directory we found is actually usable.
-		git.log.V(3).Info("repo directory exists", "path", git.root)
+		git.log.V(3).Info("repo directory exists", "path", git.localRepo)
 		if git.sanityCheckRepo(ctx) {
-			git.log.V(4).Info("repo directory is valid", "path", git.root)
+			git.log.V(4).Info("repo directory is valid", "path", git.localRepo)
 		} else {
-			// Maybe a previous run crashed?  Git won't use this dir.  We remove
-			// the contents rather than the dir itself, because a common use-case
-			// is to have a volume mounted at git.root, which makes removing it
-			// impossible.
-			git.log.V(0).Info("repo directory was empty or failed checks", "path", git.root)
-			if err := removeDirContents(git.root, git.log); err != nil {
-				return fmt.Errorf("can't wipe unusable root directory: %w", err)
+			// Maybe a previous run crashed?  Git won't use this dir.
+			git.log.V(0).Info("repo directory was empty or failed checks", "path", git.localRepo)
+			if err := os.RemoveAll(git.localRepo.String()); err != nil {
+				return fmt.Errorf("can't remove unusable repo directory: %w", err)
 			}
 			needGitInit = true
 		}
@@ -1244,8 +1243,8 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 
 	if needGitInit {
 		// Running `git init` in an existing repo is safe (according to git docs).
-		git.log.V(0).Info("initializing repo directory", "path", git.root)
-		if _, _, err := git.Run(ctx, git.root, "init", "-b", "git-sync"); err != nil {
+		git.log.V(0).Info("initializing repo directory", "path", git.localRepo)
+		if _, _, err := git.Run(ctx, git.localRepo, "init", "-b", "git-sync"); err != nil {
 			return err
 		}
 		if !git.sanityCheckRepo(ctx) {
@@ -1255,17 +1254,17 @@ func (git *repoSync) initRepo(ctx context.Context) error {
 
 	// The "origin" remote has special meaning, like in relative-path
 	// submodules.
-	if stdout, stderr, err := git.Run(ctx, git.root, "remote", "get-url", "origin"); err != nil {
+	if stdout, stderr, err := git.Run(ctx, git.localRepo, "remote", "get-url", "origin"); err != nil {
 		if !strings.Contains(stderr, "No such remote") {
 			return err
 		}
 		// It doesn't exist - make it.
-		if _, _, err := git.Run(ctx, git.root, "remote", "add", "origin", git.remoteRepo); err != nil {
+		if _, _, err := git.Run(ctx, git.localRepo, "remote", "add", "origin", git.remoteRepo); err != nil {
 			return err
 		}
 	} else if strings.TrimSpace(stdout) != git.remoteRepo {
 		// It exists, but is wrong.
-		if _, _, err := git.Run(ctx, git.root, "remote", "set-url", "origin", git.remoteRepo); err != nil {
+		if _, _, err := git.Run(ctx, git.localRepo, "remote", "set-url", "origin", git.remoteRepo); err != nil {
 			return err
 		}
 	}
@@ -1312,32 +1311,32 @@ func hasGitLockFile(gitRoot absPath) (string, error) {
 
 // sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
 func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
-	git.log.V(3).Info("sanity-checking git repo", "repo", git.root)
+	git.log.V(3).Info("sanity-checking git repo", "repo", git.localRepo)
 	// If it is empty, we are done.
-	if empty, err := dirIsEmpty(git.root); err != nil {
-		git.log.Error(err, "can't list repo directory", "path", git.root)
+	if empty, err := dirIsEmpty(git.localRepo); err != nil {
+		git.log.Error(err, "can't list repo directory", "path", git.localRepo)
 		return false
 	} else if empty {
-		git.log.V(3).Info("repo directory is empty", "path", git.root)
+		git.log.V(3).Info("repo directory is empty", "path", git.localRepo)
 		return false
 	}
 
 	// Check that this is actually the root of the repo.
-	if root, _, err := git.Run(ctx, git.root, "rev-parse", "--show-toplevel"); err != nil {
-		git.log.Error(err, "can't get repo toplevel", "path", git.root)
+	if root, _, err := git.Run(ctx, git.localRepo, "rev-parse", "--show-toplevel"); err != nil {
+		git.log.Error(err, "can't get repo toplevel", "path", git.localRepo)
 		return false
 	} else {
 		root = strings.TrimSpace(root)
-		if root != git.root.String() {
-			git.log.Error(nil, "repo directory is under another repo", "path", git.root, "parent", root)
+		if root != git.localRepo.String() {
+			git.log.Error(nil, "repo directory is under another repo", "path", git.localRepo, "parent", root)
 			return false
 		}
 	}
 
 	// Consistency-check the repo.  Don't use --verbose because it can be
 	// REALLY verbose.
-	if _, _, err := git.Run(ctx, git.root, "fsck", "--no-progress", "--connectivity-only"); err != nil {
-		git.log.Error(err, "repo fsck failed", "path", git.root)
+	if _, _, err := git.Run(ctx, git.localRepo, "fsck", "--no-progress", "--connectivity-only"); err != nil {
+		git.log.Error(err, "repo fsck failed", "path", git.localRepo)
 		return false
 	}
 
@@ -1359,7 +1358,7 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 // files checked out - git could have died halfway through and the repo will
 // still pass this check.
 func (git *repoSync) sanityCheckWorktree(ctx context.Context, worktree worktree) bool {
-	git.log.V(3).Info("sanity-checking worktree", "repo", git.root, "worktree", worktree)
+	git.log.V(3).Info("sanity-checking worktree", "repo", git.localRepo, "worktree", worktree)
 
 	// If it is empty, we are done.
 	if empty, err := dirIsEmpty(worktree.Path()); err != nil {
@@ -1397,13 +1396,6 @@ func dirIsEmpty(dir absPath) (bool, error) {
 		return false, err
 	}
 	return len(dirents) == 0, nil
-}
-
-// removeDirContents iterated the specified dir and removes all contents
-func removeDirContents(dir absPath, log *logging.Logger) error {
-	return removeDirContentsIf(dir, log, func(fi os.FileInfo) (bool, error) {
-		return true, nil
-	})
 }
 
 func removeDirContentsIf(dir absPath, log *logging.Logger, fn func(fi os.FileInfo) (bool, error)) error {
@@ -1489,7 +1481,7 @@ func (git *repoSync) removeWorktree(ctx context.Context, worktree worktree) erro
 	if err := os.RemoveAll(worktree.Path().String()); err != nil {
 		return fmt.Errorf("error removing directory: %w", err)
 	}
-	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
+	if _, _, err := git.Run(ctx, git.localRepo, "worktree", "prune", "--verbose"); err != nil {
 		return err
 	}
 	return nil
@@ -1510,7 +1502,7 @@ func (git *repoSync) createWorktree(ctx context.Context, hash string) (worktree,
 	}
 
 	git.log.V(1).Info("adding worktree", "path", worktree.Path(), "hash", hash)
-	_, _, err := git.Run(ctx, git.root, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
+	_, _, err := git.Run(ctx, git.localRepo, "worktree", "add", "--force", "--detach", worktree.Path().String(), hash, "--no-checkout")
 	if err != nil {
 		return "", err
 	}
@@ -1528,7 +1520,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
 	rootDotGit := ""
-	if rel, err := filepath.Rel(worktree.Path().String(), git.root.String()); err != nil {
+	if rel, err := filepath.Rel(worktree.Path().String(), git.localRepo.String()); err != nil {
 		return err
 	} else {
 		rootDotGit = filepath.Join(rel, ".git")
@@ -1540,7 +1532,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 
 	// If sparse checkout is requested, configure git for it, otherwise
 	// unconfigure it.
-	gitInfoPath := filepath.Join(git.root.String(), ".git/worktrees", hash, "info")
+	gitInfoPath := filepath.Join(git.localRepo.String(), ".git/worktrees", hash, "info")
 	gitSparseConfigPath := filepath.Join(gitInfoPath, "sparse-checkout")
 	if git.sparseFile == "" {
 		os.RemoveAll(gitSparseConfigPath)
@@ -1621,13 +1613,13 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 
 	// Let git know we don't need those old commits any more.
 	git.log.V(3).Info("pruning worktrees")
-	if _, _, err := git.Run(ctx, git.root, "worktree", "prune", "--verbose"); err != nil {
+	if _, _, err := git.Run(ctx, git.localRepo, "worktree", "prune", "--verbose"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
 	// Expire old refs.
 	git.log.V(3).Info("expiring unreachable refs")
-	if _, _, err := git.Run(ctx, git.root, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
+	if _, _, err := git.Run(ctx, git.localRepo, "reflog", "expire", "--expire-unreachable=all", "--all"); err != nil {
 		cleanupErrs = append(cleanupErrs, err)
 	}
 
@@ -1643,7 +1635,7 @@ func (git *repoSync) cleanup(ctx context.Context) error {
 			args = append(args, "--aggressive")
 		}
 		git.log.V(3).Info("running git garbage collection")
-		if _, _, err := git.Run(ctx, git.root, args...); err != nil {
+		if _, _, err := git.Run(ctx, git.localRepo, args...); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
@@ -1746,7 +1738,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// their underlying commit hashes, but has no effect if we fetched a
 	// branch, plain tag, or hash.
 	remoteHash := ""
-	if output, _, err := git.Run(ctx, git.root, "rev-parse", "FETCH_HEAD^{}"); err != nil {
+	if output, _, err := git.Run(ctx, git.localRepo, "rev-parse", "FETCH_HEAD^{}"); err != nil {
 		return false, "", err
 	} else {
 		remoteHash = strings.Trim(output, "\n")
@@ -1778,14 +1770,14 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// Reset the repo (note: not the worktree - that happens later) to the new
 		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
 		// so no files are checked out.
-		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", remoteHash); err != nil {
+		if _, _, err := git.Run(ctx, git.localRepo, "reset", "--soft", remoteHash); err != nil {
 			return false, "", err
 		}
 
 		// If we have a new hash, make a new worktree
 		newWorktree := currentWorktree
 		if changed {
-			// Create a worktree for this hash in git.root.
+			// Create a worktree for this hash.
 			if wt, err := git.createWorktree(ctx, remoteHash); err != nil {
 				return false, "", err
 			} else {
@@ -1858,7 +1850,7 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 			args = append(args, "--unshallow")
 		}
 	}
-	if _, _, err := git.Run(ctx, git.root, args...); err != nil {
+	if _, _, err := git.Run(ctx, git.localRepo, args...); err != nil {
 		return err
 	}
 
@@ -1866,7 +1858,7 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 }
 
 func (git *repoSync) isShallow(ctx context.Context) (bool, error) {
-	boolStr, _, err := git.Run(ctx, git.root, "rev-parse", "--is-shallow-repository")
+	boolStr, _, err := git.Run(ctx, git.localRepo, "rev-parse", "--is-shallow-repository")
 	if err != nil {
 		return false, fmt.Errorf("can't determine repo shallowness: %w", err)
 	}
