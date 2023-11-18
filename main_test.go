@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -424,7 +425,7 @@ func TestDirIsEmpty(t *testing.T) {
 	}
 }
 
-func TestRemoveDirContents(t *testing.T) {
+func TestRemoveDirContentsIf(t *testing.T) {
 	root := absPath(t.TempDir())
 
 	// Brand new should be empty.
@@ -434,8 +435,12 @@ func TestRemoveDirContents(t *testing.T) {
 		t.Errorf("expected %q to be deemed empty", root)
 	}
 
+	fn := func(fi fs.FileInfo) (bool, error) {
+		return true, nil
+	}
+
 	// Test removal.
-	if err := removeDirContents(root, nil); err != nil {
+	if err := removeDirContentsIf(root, nil, fn); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
@@ -461,12 +466,12 @@ func TestRemoveDirContents(t *testing.T) {
 	}
 
 	// Test removal.
-	if err := removeDirContents(root, nil); err != nil {
+	if err := removeDirContentsIf(root, nil, fn); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
 	// Test error path.
-	if err := removeDirContents(root.Join("does-not-exist"), nil); err == nil {
+	if err := removeDirContentsIf(root.Join("does-not-exist"), nil, fn); err == nil {
 		t.Errorf("unexpected success for non-existent dir")
 	}
 }
@@ -571,5 +576,30 @@ func TestHasGitLockFile(t *testing.T) {
 				t.Fatalf("expected hasGitLockFile to return %v, but got %v", tc.expectLockFile, hasLock)
 			}
 		})
+	}
+}
+
+func TestInternalDirFor(t *testing.T) {
+	root := absPath("/root")
+	cases := []struct {
+		path absPath
+		exp  string
+	}{
+		{"", ""},
+		{"/root/link", ""},
+		{"/root/.repository", ""},
+		{"/root/.worktreesX", ""},
+		{"/other/.repo", ""},
+		{"/root/.repo", localRepoDirName},
+		{"/root/.repo/", localRepoDirName},
+		{"/root/.repo/x", localRepoDirName},
+		{"/root/sub/../.repo", localRepoDirName},
+		{"/root/.worktrees", worktreesDirName},
+		{"/root/.worktrees/abc", worktreesDirName},
+	}
+	for _, tc := range cases {
+		if got := internalDirFor(tc.path, root); got != tc.exp {
+			t.Errorf("internalDirFor(%q): expected %q, got %q", tc.path, tc.exp, got)
+		}
 	}
 }

@@ -471,9 +471,12 @@ function e2e::init_root_is_under_another_repo() {
 # Test init when root fails sanity
 ##############################################
 function e2e::init_root_fails_sanity() {
-    # Make an invalid git repo.
-    git -C "$ROOT" init -q
-    echo "ref: refs/heads/nonexist" > "$ROOT/.git/HEAD"
+    # Make an invalid git repo where git-sync keeps its local repo.  Note
+    # that a HEAD which refers to a nonexistent branch is still valid (it is
+    # just an unborn branch), so use garbage.
+    mkdir -p "$ROOT/.repo"
+    git -C "$ROOT/.repo" init -q
+    echo "garbage" > "$ROOT/.repo/.git/HEAD"
 
     GIT_SYNC \
         --one-time \
@@ -483,6 +486,73 @@ function e2e::init_root_fails_sanity() {
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+}
+
+##############################################
+# Test init when the local repo has a stale lock file
+##############################################
+function e2e::init_repo_has_stale_lock_file() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+
+    # Fake a crashed git process.
+    touch "$ROOT/.repo/.git/shallow.lock"
+
+    # Make a second commit, so we know it actually synced.
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 2"
+    assert_file_absent "$ROOT/.repo/.git/shallow.lock"
+}
+
+##############################################
+# Test in-place upgrade from the legacy layout (repo in --root itself)
+##############################################
+function e2e::init_upgrade_from_legacy_layout() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+
+    # Convert it to the legacy layout: the repo lives in $ROOT/.git and the
+    # worktree points there.
+    local wt
+    wt=$(git -C "$REPO" rev-list -n1 HEAD)
+    mv "$ROOT/.repo/.git" "$ROOT/.git"
+    rm -rf "$ROOT/.repo"
+    echo "gitdir: ../../.git/worktrees/$wt" > "$ROOT/.worktrees/$wt/.git"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+
+    # Same hash as before, so this exercises the "current worktree" path.
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    if [[ -e "$ROOT/.git" ]]; then
+        fail "$ROOT/.git exists but should not"
+    fi
+    if ! [[ -d "$ROOT/.repo/.git" ]]; then
+        fail "$ROOT/.repo/.git does not exist"
+    fi
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/.worktrees/$wt/.git" "gitdir: ../../.repo/.git/worktrees/$wt"
 }
 
 ##############################################
