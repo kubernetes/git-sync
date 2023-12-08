@@ -130,7 +130,7 @@ func TestAbsPathJoin(t *testing.T) {
 func TestAbsPathSplit(t *testing.T) {
 	testCases := []struct {
 		in      absPath
-		expDir  string
+		expDir  absPath
 		expBase string
 	}{{
 		in:      "",

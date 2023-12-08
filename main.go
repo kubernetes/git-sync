@@ -347,7 +347,7 @@ func main() {
 	}
 	log := func() *logging.Logger {
 		dir, file := makeAbsPath(*flErrorFile, absRoot).Split()
-		return logging.New(dir, file, *flVerbose)
+		return logging.New(dir.String(), file, *flVerbose)
 	}()
 	cmdRunner := cmd.NewRunner(log)
 
@@ -1273,25 +1273,25 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 	linkDir, linkFile := git.link.Split()
 
 	// Make sure the link directory exists.
-	if err := os.MkdirAll(linkDir, defaultDirMode); err != nil {
+	if err := os.MkdirAll(linkDir.String(), defaultDirMode); err != nil {
 		return fmt.Errorf("error making symlink dir: %w", err)
 	}
 
 	// linkDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
-	targetRelative, err := filepath.Rel(linkDir, targetPath.String())
+	targetRelative, err := filepath.Rel(linkDir.String(), targetPath.String())
 	if err != nil {
 		return fmt.Errorf("error converting to relative path: %w", err)
 	}
 
 	const tmplink = "tmp-link"
 	git.log.V(2).Info("creating tmp symlink", "dir", linkDir, "link", tmplink, "target", targetRelative)
-	if err := os.Symlink(targetRelative, filepath.Join(linkDir, tmplink)); err != nil {
+	if err := os.Symlink(targetRelative, filepath.Join(linkDir.String(), tmplink)); err != nil {
 		return fmt.Errorf("error creating symlink: %w", err)
 	}
 
 	git.log.V(2).Info("renaming symlink", "root", linkDir, "oldName", tmplink, "newName", linkFile)
-	if err := os.Rename(filepath.Join(linkDir, tmplink), git.link.String()); err != nil {
+	if err := os.Rename(filepath.Join(linkDir.String(), tmplink), git.link.String()); err != nil {
 		return fmt.Errorf("error replacing symlink: %w", err)
 	}
 
@@ -1574,7 +1574,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 		return worktree(target), nil
 	}
 	linkDir, _ := git.link.Split()
-	return worktree(absPath(linkDir).Join(target)), nil
+	return worktree(linkDir.Join(target)), nil
 }
 
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,

@@ -60,7 +60,7 @@ func (abs absPath) Join(elems ...string) absPath {
 // Split breaks abs into stem and leaf parts (often directory and file, but not
 // necessarily), similar to filepath.Split.  Unlike filepath.Split, the
 // resulting stem part does not have any trailing path separators.
-func (abs absPath) Split() (string, string) {
+func (abs absPath) Split() (absPath, string) {
 	if abs == "" {
 		return "", ""
 	}
@@ -74,13 +74,13 @@ func (abs absPath) Split() (string, string) {
 		dir = string(os.PathSeparator)
 	}
 
-	return dir, base
+	return absPath(dir), base
 }
 
 // Dir returns the stem part of abs without the leaf, like filepath.Dir.
 func (abs absPath) Dir() string {
 	dir, _ := abs.Split()
-	return dir
+	return string(dir)
 }
 
 // Base returns the leaf part of abs without the stem, like filepath.Base.
