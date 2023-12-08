@@ -48,7 +48,8 @@ func (abs absPath) Canonical() (absPath, error) {
 	return absPath(result), nil
 }
 
-// Join appends more path elements to abs, like filepath.Join.
+// Join appends more path elements to abs, like filepath.Join. This will clean
+// the final path (e.g. resolve ".." elements).
 func (abs absPath) Join(elems ...string) absPath {
 	all := make([]string, 0, 1+len(elems))
 	all = append(all, abs.String())

@@ -412,36 +412,6 @@ function e2e::init_root_fails_sanity() {
 }
 
 ##############################################
-# Test init with an absolute-path link
-##############################################
-function e2e::sync_absolute_link() {
-    GIT_SYNC \
-        --one-time \
-        --repo="file://$REPO" \
-        --root="$ROOT/root" \
-        --link="$ROOT/other/dir/link"
-    assert_file_absent "$ROOT/root/link"
-    assert_link_exists "$ROOT/other/dir/link"
-    assert_file_exists "$ROOT/other/dir/link/file"
-    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME"
-}
-
-##############################################
-# Test init with a subdir-path link
-##############################################
-function e2e::sync_subdir_link() {
-    GIT_SYNC \
-        --one-time \
-        --repo="file://$REPO" \
-        --root="$ROOT" \
-        --link="other/dir/link"
-    assert_file_absent "$ROOT/link"
-    assert_link_exists "$ROOT/other/dir/link"
-    assert_file_exists "$ROOT/other/dir/link/file"
-    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME"
-}
-
-##############################################
 # Test non-zero exit with a bad ref
 ##############################################
 function e2e::bad_ref_non_zero_exit() {
@@ -535,6 +505,96 @@ function e2e::sync_head() {
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
+}
+
+##############################################
+# Test sync with an absolute-path link
+##############################################
+function e2e::sync_head_absolute_link() {
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --ref=HEAD \
+        --root="$ROOT/root" \
+        --link="$ROOT/other/dir/link" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/root/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/root/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 2"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/root/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 3
+}
+
+##############################################
+# Test sync with a subdir-path link
+##############################################
+function e2e::sync_head_subdir_link() {
+    # First sync
+    echo "$FUNCNAME 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --ref=HEAD \
+        --root="$ROOT" \
+        --link="other/dir/link" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
+
+    # Move HEAD forward
+    echo "$FUNCNAME 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "$FUNCNAME 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 2"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
+
+    # Move HEAD backward
+    git -C "$REPO" reset -q --hard HEAD^
+    wait_for_sync "${MAXWAIT}"
+    assert_file_absent "$ROOT/link"
+    assert_link_exists "$ROOT/other/dir/link"
+    assert_file_exists "$ROOT/other/dir/link/file"
+    assert_file_eq "$ROOT/other/dir/link/file" "$FUNCNAME 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
 }
