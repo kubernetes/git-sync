@@ -1277,7 +1277,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 		return fmt.Errorf("error making symlink dir: %w", err)
 	}
 
-	// newDir is absolute, so we need to change it to a relative path.  This is
+	// linkDir is absolute, so we need to change it to a relative path.  This is
 	// so it can be volume-mounted at another path and the symlink still works.
 	targetRelative, err := filepath.Rel(linkDir, targetPath.String())
 	if err != nil {
@@ -1573,7 +1573,8 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 	if filepath.IsAbs(target) {
 		return worktree(target), nil
 	}
-	return worktree(git.root.Join(target)), nil
+	linkDir, _ := git.link.Split()
+	return worktree(absPath(linkDir).Join(target)), nil
 }
 
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,
