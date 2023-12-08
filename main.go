@@ -1619,7 +1619,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		currentWorktree = wt
 	}
 	currentHash := currentWorktree.Hash()
-	git.log.V(3).Info("current hash", "hash", currentHash)
+	git.log.V(3).Info("current state", "hash", currentHash, "worktree", currentWorktree)
 
 	if currentHash == remoteHash {
 		// We seem to have the right hash already.  Let's be sure it's good.
