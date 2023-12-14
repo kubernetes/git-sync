@@ -1813,6 +1813,46 @@ function e2e::auth_http_password() {
 }
 
 ##############################################
+# Test HTTP basicauth with a password in the URL
+##############################################
+function e2e::auth_http_password_in_url() {
+    # Run a git-over-HTTP server.
+    CTR=$(docker_run \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/httpd)
+    IP=$(docker_ip "$CTR")
+
+    # Try with wrong username
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="http://wrong:testpass@$IP/repo" \
+            --root="$ROOT" \
+            --link="link"
+    assert_file_absent "$ROOT/link/file"
+
+    # Try with wrong password
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="http://testuser:wrong@$IP/repo" \
+            --root="$ROOT" \
+            --link="link"
+    assert_file_absent "$ROOT/link/file"
+
+    # Try with the right password
+    GIT_SYNC \
+        --one-time \
+        --repo="http://testuser:testpass@$IP/repo" \
+        --root="$ROOT" \
+        --link="link"
+
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+}
+
+##############################################
 # Test HTTP basicauth with a password-file
 ##############################################
 function e2e::auth_http_password_file() {
