@@ -481,6 +481,11 @@ func main() {
 		if *flPassword != "" && *flPasswordFile != "" {
 			handleConfigError(log, true, "ERROR: only one of --password and --password-file may be specified")
 		}
+		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
+			if u.User != nil {
+				handleConfigError(log, true, "ERROR: credentials may not be specified in --repo when --username is specified")
+			}
+		}
 	} else {
 		if *flPassword != "" {
 			handleConfigError(log, true, "ERROR: --password may only be specified when --username is specified")
@@ -564,6 +569,21 @@ func main() {
 	absTouchFile := makeAbsPath(*flTouchFile, absRoot)
 
 	// Merge credential sources.
+	if *flUsername == "" {
+		// username and user@host URLs are validated as mutually exclusive
+		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
+			if u.User != nil {
+				if user := u.User.Username(); user != "" {
+					*flUsername = user
+				}
+				if pass, found := u.User.Password(); found {
+					*flPassword = pass
+				}
+				u.User = nil
+				*flRepo = u.String()
+			}
+		}
+	}
 	if *flUsername != "" {
 		cred := credential{
 			URL:          *flRepo,
@@ -1535,7 +1555,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
-	git.log.V(3).Info("syncing", "repo", git.repo)
+	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
 
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
@@ -1660,7 +1680,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 // fetch retrieves the specified ref from the upstream repo.
 func (git *repoSync) fetch(ctx context.Context, ref string) error {
-	git.log.V(2).Info("fetching", "ref", ref, "repo", git.repo)
+	git.log.V(2).Info("fetching", "ref", ref, "repo", redactURL(git.repo))
 
 	// Fetch the ref and do some cleanup, setting or un-setting the repo's
 	// shallow flag as appropriate.
@@ -1711,7 +1731,7 @@ func md5sum(s string) string {
 
 // StoreCredentials stores a username and password for later use.
 func (git *repoSync) StoreCredentials(ctx context.Context, url, username, password string) error {
-	git.log.V(1).Info("storing git credential", "url", url)
+	git.log.V(1).Info("storing git credential", "url", redactURL(url))
 	git.log.V(9).Info("md5 of credential", "url", url, "username", md5sum(username), "password", md5sum(password))
 
 	creds := fmt.Sprintf("url=%v\nusername=%v\npassword=%v\n", url, username, password)
