@@ -2869,7 +2869,7 @@ function e2e::submodule_sync_over_ssh_different_keys() {
     IP_SUBSUB=$(docker_ip "$CTR_SUBSUB")
 
     # Tell local git not to do host checking and to use the test keys.
-    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $DOT_SSH/1/id_local -i $DOT_SSH/2/id_local"
+    export GIT_SSH_COMMAND="ssh -F none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $DOT_SSH/1/id_local -i $DOT_SSH/2/id_local"
 
     # Init submodule repo
     SUBMODULE_REPO_NAME="sub"
