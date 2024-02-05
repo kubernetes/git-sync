@@ -25,6 +25,26 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# Dump the call stack.
+#
+# $1: frames to skip
+function stack() {
+  local frame="${1:-0}"
+  frame="$((frame+1))" # for this frame
+  local indent=""
+  while [[ -n "${FUNCNAME["${frame}"]:-}" ]]; do
+      if [[ -n "$indent" ]]; then
+          echo -ne "  from "
+      fi
+      indent="true"
+      local file="$(basename "${BASH_SOURCE["${frame}"]}")"
+      local line="${BASH_LINENO["$((frame-1))"]}" # ???
+      local func="${FUNCNAME["${frame}"]:-}"
+      echo -e "${func}() ${file}:${line}"
+      frame="$((frame+1))"
+  done
+}
+
 # A handler for when we exit automatically on an error.
 # Borrowed from kubernetes, which was borrowed from
 # https://gist.github.com/ahendrix/7030300
@@ -33,10 +53,13 @@ function errexit() {
   # don't dump stacks.
   set +o | grep -qe "-o errexit" || return
 
-  local file="$(basename "${BASH_SOURCE[1]}")"
-  local line="${BASH_LINENO[0]}"
-  local func="${FUNCNAME[1]:-}"
-  echo "FATAL: error at ${func}() ${file}:${line}" >&2
+  # Dump stack
+  echo -n "FATAL: error at " >&2
+  stack 1 >&2 # skip this frame
+
+  # Exit, really, right now.
+  local pgid="$(cat /proc/self/stat | awk '{print $5}')"
+  kill -- -"${pgid}"
 }
 
 # trap ERR to provide an error handler whenever a command exits nonzero  this
@@ -68,10 +91,13 @@ function _indent() {
 }
 
 # run "$@" and indent the output
+#
+# See the workaround in errexit before you rename this.
 function indent() {
     # This lets us process stderr and stdout without merging them, without
-    # bash-isms.
-    { "$@" 2>&1 1>&3 | _indent; } 3>&1 1>&2 | _indent
+    # bash-isms.  This MUST NOT be wrapped in a conditional, or else errexit no
+    # longer applies to the executed command.
+    { set -o errexit; "$@" 2>&1 1>&3 | _indent; } 3>&1 1>&2 | _indent
 }
 
 # Track these globally so we only load it once.
@@ -189,6 +215,7 @@ function stage_file_and_deps() {
 
     # stage dependencies of binaries
     if [[ -x "$file" ]]; then
+        DBG "staging deps of file ${file}"
         while read -r lib; do
             indent stage_file_and_deps "${staging}" "${lib}"
         done < <( binary_to_libraries "${file}" )
@@ -300,9 +327,9 @@ function binary_to_libraries() {
     ldd "${bin}" \
         `# skip static binaries` \
         | grep_allow_nomatch -v "statically linked" \
-        `# linux-vdso.so.1 is a special virtual shared object from the kernel` \
+        `# linux-vdso is a special virtual shared object from the kernel` \
         `# see: http://man7.org/linux/man-pages/man7/vdso.7.html` \
-        | grep_allow_nomatch -v 'linux-vdso.so.1' \
+        | grep_allow_nomatch -v 'linux-vdso' \
         `# strip the leading '${name} => ' if any so only '/lib-foo.so (0xf00)' remains` \
         | sed -E 's#.* => /#/#' \
         `# we want only the path remaining, not the (0x${LOCATION})` \
