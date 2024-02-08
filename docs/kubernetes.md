@@ -39,7 +39,7 @@ spec:
           args:
             - --repo=https://github.com/kubernetes/git-sync
             - --depth=1
-            - --period=60
+            - --period=60s
             - --link=current
             - --root=/git
           volumeMounts:
