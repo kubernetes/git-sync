@@ -572,7 +572,7 @@ func main() {
 	if *flUsername == "" {
 		// username and user@host URLs are validated as mutually exclusive
 		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
-			if u.User != nil {
+			if u.User != nil && u.Scheme != "ssh" {
 				if user := u.User.Username(); user != "" {
 					*flUsername = user
 				}
