@@ -1892,7 +1892,7 @@ function e2e::auth_http_password_file() {
 }
 
 ##############################################
-# Test SSH
+# Test SSH (user@host:path syntax)
 ##############################################
 function e2e::auth_ssh() {
     # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
@@ -1917,6 +1917,44 @@ function e2e::auth_ssh() {
     GIT_SYNC \
         --one-time \
         --repo="test@$IP:/git/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --ssh-known-hosts=false \
+        --ssh-key-file="/ssh/secret.1" \
+        --ssh-key-file="/ssh/secret.2" \
+        --ssh-key-file="/ssh/secret.3"
+
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME"
+}
+
+##############################################
+# Test SSH (ssh://user@host/path syntax)
+##############################################
+function e2e::auth_ssh_url() {
+    # Run a git-over-SSH server.  Use key #3 to exercise the multi-key logic.
+    CTR=$(docker_run \
+        -v "$DOT_SSH/server/3":/dot_ssh:ro \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/sshd)
+    IP=$(docker_ip "$CTR")
+
+    # Try to sync with key #1.
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="ssh://test@$IP/git/repo" \
+            --root="$ROOT" \
+            --link="link" \
+            --ssh-known-hosts=false \
+            --ssh-key-file="/ssh/secret.2"
+    assert_file_absent "$ROOT/link/file"
+
+    # Try to sync with multiple keys
+    GIT_SYNC \
+        --one-time \
+        --repo="ssh://test@$IP/git/repo" \
         --root="$ROOT" \
         --link="link" \
         --ssh-known-hosts=false \
