@@ -61,8 +61,6 @@ export DIR="/tmp/git-data"
 mkdir -p $DIR
 
 # run the container (as your own UID)
-
-# run the container
 docker run -d \
     -v $DIR:/tmp/git \
     -u$(id -u):$(id -g) \
