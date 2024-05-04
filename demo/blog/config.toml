@@ -1,3 +1,8 @@
 baseurl = "http://example.com"
 languageCode = "en-us"
 title = "example blog"
+
+[module]
+[[module.imports]]
+  path = "github.com/spf13/hyde"
+  disabled=false
