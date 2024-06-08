@@ -141,6 +141,8 @@ func main() {
 
 	flVersion := pflag.Bool("version", false, "print the version and exit")
 	flHelp := pflag.BoolP("help", "h", false, "print help text and exit")
+	pflag.BoolVarP(flHelp, "__?", "?", false, "print help text and exit") // support -? as an alias to -h
+	pflag.CommandLine.MarkHidden("__?")
 	flManual := pflag.Bool("man", false, "print the full manual and exit")
 
 	flVerbose := pflag.IntP("verbose", "v",
@@ -306,6 +308,23 @@ func main() {
 		"DEPRECATED: use --period instead")
 	mustMarkDeprecated("wait", "use --period instead")
 
+	// For whatever reason pflag hardcodes stderr for the "usage" line when
+	// using the default FlagSet.  We tweak the output a bit anyway.
+	usage := func(out io.Writer, msg string) {
+		// When pflag parsing hits an error, it prints a message before and
+		// after the usage, which makes for nice reading.
+		if msg != "" {
+			fmt.Fprintln(out, msg)
+		}
+		fmt.Fprintln(out, "Usage:")
+		pflag.CommandLine.SetOutput(out)
+		pflag.PrintDefaults()
+		if msg != "" {
+			fmt.Fprintln(out, msg)
+		}
+	}
+	pflag.Usage = func() { usage(os.Stderr, "") }
+
 	//
 	// Parse and verify flags.  Errors here are fatal.
 	//
@@ -318,8 +337,7 @@ func main() {
 		os.Exit(0)
 	}
 	if *flHelp {
-		pflag.CommandLine.SetOutput(os.Stdout)
-		pflag.PrintDefaults()
+		usage(os.Stdout, "")
 		os.Exit(0)
 	}
 	if *flManual {
@@ -329,7 +347,7 @@ func main() {
 
 	// Make sure we have a root dir in which to work.
 	if *flRoot == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: --root must be specified\n")
+		usage(os.Stderr, "required flag: --root must be specified")
 		os.Exit(1)
 	}
 	var absRoot absPath
@@ -1029,6 +1047,8 @@ func handleConfigError(log *logging.Logger, printUsage bool, format string, a ..
 	fmt.Fprintln(os.Stderr, s)
 	if printUsage {
 		pflag.Usage()
+		// pflag prints flag errors both before and after usage
+		fmt.Fprintln(os.Stderr, s)
 	}
 	log.ExportError(s)
 	os.Exit(1)
