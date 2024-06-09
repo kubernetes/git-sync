@@ -42,6 +42,8 @@ RUN htpasswd -b -c /etc/htpasswd testuser testpass
 
 # Callers should mount a directory with git repos here.
 VOLUME /git
+# sshd runs as root, and the repo directory might be owned by anyone.
+RUN git config --system safe.directory '*'
 
 COPY nginx.conf /etc/nginx/
 COPY run.sh /
