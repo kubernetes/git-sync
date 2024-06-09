@@ -141,7 +141,7 @@ func main() {
 
 	flVersion := pflag.Bool("version", false, "print the version and exit")
 	flHelp := pflag.BoolP("help", "h", false, "print help text and exit")
-	pflag.BoolVarP(flHelp, "__?", "?", false, "print help text and exit") // support -? as an alias to -h
+	pflag.BoolVarP(flHelp, "__?", "?", false, "") // support -? as an alias to -h
 	mustMarkHidden("__?")
 	flManual := pflag.Bool("man", false, "print the full manual and exit")
 
@@ -230,9 +230,9 @@ func main() {
 	flUsername := pflag.String("username",
 		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
 		"the username to use for git auth")
-	flPassword := pflag.String("password",
-		envString("", "GITSYNC_PASSWORD", "GIT_SYNC_PASSWORD"),
-		"the password or personal access token to use for git auth (prefer --password-file or this env var)")
+	flPassword := envFlagString("GITSYNC_PASSWORD", "",
+		"the password or personal access token to use for git auth",
+		"GIT_SYNC_PASSWORD")
 	flPasswordFile := pflag.String("password-file",
 		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 		"the file from which the password or personal access token for git auth will be sourced")
@@ -280,30 +280,43 @@ func main() {
 	flDeprecatedBranch := pflag.String("branch", envString("", "GIT_SYNC_BRANCH"),
 		"DEPRECATED: use --ref instead")
 	mustMarkDeprecated("branch", "use --ref instead")
+
 	flDeprecatedChmod := pflag.Int("change-permissions", envInt(0, "GIT_SYNC_PERMISSIONS"),
 		"DEPRECATED: use --group-write instead")
 	mustMarkDeprecated("change-permissions", "use --group-write instead")
+
 	flDeprecatedDest := pflag.String("dest", envString("", "GIT_SYNC_DEST"),
 		"DEPRECATED: use --link instead")
 	mustMarkDeprecated("dest", "use --link instead")
+
 	flDeprecatedMaxSyncFailures := pflag.Int("max-sync-failures", envInt(0, "GIT_SYNC_MAX_SYNC_FAILURES"),
 		"DEPRECATED: use --max-failures instead")
 	mustMarkDeprecated("max-sync-failures", "use --max-failures instead")
+
+	flDeprecatedPassword := pflag.String("password", "", // the env vars are not deprecated
+		"DEPRECATED: use --password-file or $GITSYNC_PASSWORD instead")
+	mustMarkDeprecated("password", "use --password-file or $GITSYNC_PASSWORD instead")
+
 	flDeprecatedRev := pflag.String("rev", envString("", "GIT_SYNC_REV"),
 		"DEPRECATED: use --ref instead")
 	mustMarkDeprecated("rev", "use --ref instead")
+
 	_ = pflag.Bool("ssh", false,
 		"DEPRECATED: this flag is no longer necessary")
 	mustMarkDeprecated("ssh", "no longer necessary")
+
 	flDeprecatedSyncHookCommand := pflag.String("sync-hook-command", envString("", "GIT_SYNC_HOOK_COMMAND"),
 		"DEPRECATED: use --exechook-command instead")
 	mustMarkDeprecated("sync-hook-command", "use --exechook-command instead")
+
 	flDeprecatedTimeout := pflag.Int("timeout", envInt(0, "GIT_SYNC_TIMEOUT"),
 		"DEPRECATED: use --sync-timeout instead")
 	mustMarkDeprecated("timeout", "use --sync-timeout instead")
+
 	flDeprecatedV := pflag.Int("v", -1,
 		"DEPRECATED: use -v or --verbose instead")
 	mustMarkDeprecated("v", "use -v or --verbose instead")
+
 	flDeprecatedWait := pflag.Float64("wait", envFloat(0, "GIT_SYNC_WAIT"),
 		"DEPRECATED: use --period instead")
 	mustMarkDeprecated("wait", "use --period instead")
@@ -316,9 +329,14 @@ func main() {
 		if msg != "" {
 			fmt.Fprintln(out, msg)
 		}
-		fmt.Fprintln(out, "Usage:")
+		fmt.Fprintf(out, "Usage: %s [FLAGS...]\n", filepath.Base(os.Args[0]))
+		fmt.Fprintln(out, "")
+		fmt.Fprintln(out, " FLAGS:")
 		pflag.CommandLine.SetOutput(out)
 		pflag.PrintDefaults()
+		fmt.Fprintln(out, "")
+		fmt.Fprintln(out, " ENVIRONMENT VARIABLES:")
+		printEnvFlags(out)
 		if msg != "" {
 			fmt.Fprintln(out, msg)
 		}
@@ -492,12 +510,16 @@ func main() {
 		}
 	}
 
+	if *flDeprecatedPassword != "" {
+		log.V(0).Info("setting $GITSYNC_PASSWORD from deprecated --password")
+		*flPassword = *flDeprecatedPassword
+	}
 	if *flUsername != "" {
 		if *flPassword == "" && *flPasswordFile == "" {
-			fatalConfigError(log, true, "required flag: --password or --password-file must be specified when --username is specified")
+			fatalConfigError(log, true, "required flag: $GITSYNC_PASSWORD or --password-file must be specified when --username is specified")
 		}
 		if *flPassword != "" && *flPasswordFile != "" {
-			fatalConfigError(log, true, "invalid flag: only one of --password and --password-file may be specified")
+			fatalConfigError(log, true, "invalid flag: only one of $GITSYNC_PASSWORD and --password-file may be specified")
 		}
 		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
 			if u.User != nil {
@@ -506,7 +528,7 @@ func main() {
 		}
 	} else {
 		if *flPassword != "" {
-			fatalConfigError(log, true, "invalid flag: --password may only be specified when --username is specified")
+			fatalConfigError(log, true, "invalid flag: $GITSYNC_PASSWORD may only be specified when --username is specified")
 		}
 		if *flPasswordFile != "" {
 			fatalConfigError(log, true, "invalid flag: --password-file may only be specified when --username is specified")
@@ -1807,7 +1829,7 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathsToSSHSecrets []strin
 		sshCmd += " -o StrictHostKeyChecking=no"
 	}
 
-	git.log.V(9).Info("setting GIT_SSH_COMMAND", "value", sshCmd)
+	git.log.V(9).Info("setting $GIT_SSH_COMMAND", "value", sshCmd)
 	if err := os.Setenv("GIT_SSH_COMMAND", sshCmd); err != nil {
 		return fmt.Errorf("can't set $GIT_SSH_COMMAND: %w", err)
 	}
@@ -2151,7 +2173,8 @@ OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
     variable, but flags are preferred because a misspelled flag is a fatal
-    error while a misspelled environment variable is silently ignored.
+    error while a misspelled environment variable is silently ignored.  Some
+    options can only be specified as an environment variable.
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
@@ -2169,11 +2192,12 @@ OPTIONS
 
     --credential <string>, $GITSYNC_CREDENTIAL
             Make one or more credentials available for authentication (see git
-            help credential).  This is similar to --username and --password or
-            --password-file, but for specific URLs, for example when using
-            submodules.  The value for this flag is either a JSON-encoded
-            object (see the schema below) or a JSON-encoded list of that same
-            object type.  This flag may be specified more than once.
+            help credential).  This is similar to --username and
+            $GITSYNC_PASSWORD or --password-file, but for specific URLs, for
+            example when using submodules.  The value for this flag is either a
+            JSON-encoded object (see the schema below) or a JSON-encoded list
+            of that same object type.  This flag may be specified more than
+            once.
 
             Object schema:
               - url:            string, required
@@ -2302,16 +2326,14 @@ OPTIONS
     --one-time, $GITSYNC_ONE_TIME
             Exit after one sync.
 
-    --password <string>, $GITSYNC_PASSWORD
+    $GITSYNC_PASSWORD
             The password or personal access token (see github docs) to use for
-            git authentication (see --username).  NOTE: for security reasons,
-            users should prefer --password-file or $GITSYNC_PASSWORD_FILE for
-            specifying the password.
+            git authentication (see --username).  See also --password-file.
 
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.
+            read.  See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
@@ -2384,8 +2406,8 @@ OPTIONS
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
-            --password).  If more than one username and password is required
-            (e.g. with submodules), use --credential.
+            $GITSYNC_PASSWORD).  If more than one username and password is
+            required (e.g. with submodules), use --credential.
 
     -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
@@ -2443,31 +2465,31 @@ AUTHENTICATION
     and "git@example.com:repo" will try to use SSH.
 
     username/password
-            The --username (GITSYNC_USERNAME) and --password-file
-            (GITSYNC_PASSWORD_FILE) or --password (GITSYNC_PASSWORD) flags
-            will be used.  To prevent password leaks, the --password-file flag
-            or GITSYNC_PASSWORD environment variable is almost always
-            preferred to the --password flag.
+            The --username ($GITSYNC_USERNAME) and $GITSYNC_PASSWORD or
+            --password-file ($GITSYNC_PASSWORD_FILE) flags will be used.  To
+            prevent password leaks, the --password-file flag or
+            $GITSYNC_PASSWORD environment variable is almost always preferred
+            to the --password flag, which is deprecated.
 
-            A variant of this is --askpass-url (GITSYNC_ASKPASS_URL), which
+            A variant of this is --askpass-url ($GITSYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
 
             When using submodules it may be necessary to specify more than one
             username and password, which can be done with --credential
-            (GITSYNC_CREDENTIAL).  All of the username+password pairs, from
-            both --username/--password and --credential are fed into 'git
-            credential approve'.
+            ($GITSYNC_CREDENTIAL).  All of the username+password pairs, from
+            both --username/$GITSYNC_PASSWORD and --credential are fed into
+            'git credential approve'.
 
     SSH
             When an SSH transport is specified, the key(s) defined in
-            --ssh-key-file (GITSYNC_SSH_KEY_FILE) will be used.  Users are
+            --ssh-key-file ($GITSYNC_SSH_KEY_FILE) will be used.  Users are
             strongly advised to also use --ssh-known-hosts
-            (GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
-            (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
+            ($GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
+            ($GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
 
     cookies
-            When --cookie-file (GITSYNC_COOKIE_FILE) is specified, the
+            When --cookie-file ($GITSYNC_COOKIE_FILE) is specified, the
             associated cookies can contain authentication information.
 
 HOOKS

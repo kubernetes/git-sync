@@ -1784,7 +1784,7 @@ function e2e::auth_http_password() {
             --root="$ROOT" \
             --link="link" \
             --username="wrong" \
-            --password="testpass"
+            --__env__GITSYNC_PASSWORD="testpass"
     assert_file_absent "$ROOT/link/file"
 
     # Try with wrong password
@@ -1795,7 +1795,7 @@ function e2e::auth_http_password() {
             --root="$ROOT" \
             --link="link" \
             --username="testuser" \
-            --password="wrong"
+            --__env__GITSYNC_PASSWORD="wrong"
     assert_file_absent "$ROOT/link/file"
 
     # Try with the right password
@@ -1805,7 +1805,7 @@ function e2e::auth_http_password() {
         --root="$ROOT" \
         --link="link" \
         --username="testuser" \
-        --password="testpass" \
+        --__env__GITSYNC_PASSWORD="testpass" \
 
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -3528,6 +3528,14 @@ git config --global --add safe.directory '*'
 # Store credentials for the test.
 git config --global credential.helper "store --file $DIR/gitcreds"
 
+# Log some info
+if [[ -n "${VERBOSE:-}" ]]; then
+    git version
+    echo
+    docker version
+    echo
+fi
+
 FAILS=()
 FINAL_RET=0
 RUNS="${RUNS:-1}"
@@ -3544,14 +3552,6 @@ if [[ -n "${VERBOSE:-}" ]]; then
     echo "  VERBOSE enabled"
 fi
 echo
-
-# Log some info
-if [[ -n "${VERBOSE:-}" ]]; then
-    git version
-    echo
-    docker version
-    echo
-fi
 
 # Iterate over the chosen tests and run them.
 for t; do

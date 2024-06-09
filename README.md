@@ -143,7 +143,8 @@ OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
     variable, but flags are preferred because a misspelled flag is a fatal
-    error while a misspelled environment variable is silently ignored.
+    error while a misspelled environment variable is silently ignored.  Some
+    options can only be specified as an environment variable.
 
     --add-user, $GITSYNC_ADD_USER
             Add a record to /etc/passwd for the current UID/GID.  This is
@@ -161,11 +162,12 @@ OPTIONS
 
     --credential <string>, $GITSYNC_CREDENTIAL
             Make one or more credentials available for authentication (see git
-            help credential).  This is similar to --username and --password or
-            --password-file, but for specific URLs, for example when using
-            submodules.  The value for this flag is either a JSON-encoded
-            object (see the schema below) or a JSON-encoded list of that same
-            object type.  This flag may be specified more than once.
+            help credential).  This is similar to --username and
+            $GITSYNC_PASSWORD or --password-file, but for specific URLs, for
+            example when using submodules.  The value for this flag is either a
+            JSON-encoded object (see the schema below) or a JSON-encoded list
+            of that same object type.  This flag may be specified more than
+            once.
 
             Object schema:
               - url:            string, required
@@ -294,16 +296,14 @@ OPTIONS
     --one-time, $GITSYNC_ONE_TIME
             Exit after one sync.
 
-    --password <string>, $GITSYNC_PASSWORD
+    $GITSYNC_PASSWORD
             The password or personal access token (see github docs) to use for
-            git authentication (see --username).  NOTE: for security reasons,
-            users should prefer --password-file or $GITSYNC_PASSWORD_FILE for
-            specifying the password.
+            git authentication (see --username).  See also --password-file.
 
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.
+            read.  See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
@@ -376,8 +376,8 @@ OPTIONS
 
     --username <string>, $GITSYNC_USERNAME
             The username to use for git authentication (see --password-file or
-            --password).  If more than one username and password is required
-            (e.g. with submodules), use --credential.
+            $GITSYNC_PASSWORD).  If more than one username and password is
+            required (e.g. with submodules), use --credential.
 
     -v, --verbose <int>, $GITSYNC_VERBOSE
             Set the log verbosity level.  Logs at this level and lower will be
@@ -435,31 +435,31 @@ AUTHENTICATION
     and "git@example.com:repo" will try to use SSH.
 
     username/password
-            The --username (GITSYNC_USERNAME) and --password-file
-            (GITSYNC_PASSWORD_FILE) or --password (GITSYNC_PASSWORD) flags
-            will be used.  To prevent password leaks, the --password-file flag
-            or GITSYNC_PASSWORD environment variable is almost always
-            preferred to the --password flag.
+            The --username ($GITSYNC_USERNAME) and $GITSYNC_PASSWORD or
+            --password-file ($GITSYNC_PASSWORD_FILE) flags will be used.  To
+            prevent password leaks, the --password-file flag or
+            $GITSYNC_PASSWORD environment variable is almost always preferred
+            to the --password flag, which is deprecated.
 
-            A variant of this is --askpass-url (GITSYNC_ASKPASS_URL), which
+            A variant of this is --askpass-url ($GITSYNC_ASKPASS_URL), which
             consults a URL (e.g. http://metadata) to get credentials on each
             sync.
 
             When using submodules it may be necessary to specify more than one
             username and password, which can be done with --credential
-            (GITSYNC_CREDENTIAL).  All of the username+password pairs, from
-            both --username/--password and --credential are fed into 'git
-            credential approve'.
+            ($GITSYNC_CREDENTIAL).  All of the username+password pairs, from
+            both --username/$GITSYNC_PASSWORD and --credential are fed into
+            'git credential approve'.
 
     SSH
             When an SSH transport is specified, the key(s) defined in
-            --ssh-key-file (GITSYNC_SSH_KEY_FILE) will be used.  Users are
+            --ssh-key-file ($GITSYNC_SSH_KEY_FILE) will be used.  Users are
             strongly advised to also use --ssh-known-hosts
-            (GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
-            (GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
+            ($GITSYNC_SSH_KNOWN_HOSTS) and --ssh-known-hosts-file
+            ($GITSYNC_SSH_KNOWN_HOSTS_FILE) when using SSH.
 
     cookies
-            When --cookie-file (GITSYNC_COOKIE_FILE) is specified, the
+            When --cookie-file ($GITSYNC_COOKIE_FILE) is specified, the
             associated cookies can contain authentication information.
 
 HOOKS
