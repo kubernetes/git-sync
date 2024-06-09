@@ -142,7 +142,7 @@ func main() {
 	flVersion := pflag.Bool("version", false, "print the version and exit")
 	flHelp := pflag.BoolP("help", "h", false, "print help text and exit")
 	pflag.BoolVarP(flHelp, "__?", "?", false, "print help text and exit") // support -? as an alias to -h
-	pflag.CommandLine.MarkHidden("__?")
+	mustMarkHidden("__?")
 	flManual := pflag.Bool("man", false, "print the full manual and exit")
 
 	flVerbose := pflag.IntP("verbose", "v",
@@ -920,6 +920,16 @@ func mustMarkDeprecated(name string, usageMessage string) {
 	err := pflag.CommandLine.MarkDeprecated(name, usageMessage)
 	if err != nil {
 		panic(fmt.Sprintf("error marking flag %q as deprecated: %v", name, err))
+	}
+}
+
+// mustMarkHidden is a helper around pflag.CommandLine.MarkHidden.
+// It panics if there is an error (as these indicate a coding issue).
+// This makes it easier to keep the linters happy.
+func mustMarkHidden(name string) {
+	err := pflag.CommandLine.MarkHidden(name)
+	if err != nil {
+		panic(fmt.Sprintf("error marking flag %q as hidden: %v", name, err))
 	}
 }
 
