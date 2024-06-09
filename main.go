@@ -622,18 +622,6 @@ func main() {
 		}
 	}
 
-	// Don't pollute the user's .gitconfig if this is being run directly.
-	if f, err := os.CreateTemp("", "git-sync.gitconfig.*"); err != nil {
-		log.Error(err, "ERROR: can't create gitconfig file")
-		os.Exit(1)
-	} else {
-		gitConfig := f.Name()
-		f.Close()
-		os.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
-		os.Setenv("GIT_CONFIG_NOSYSTEM", "true")
-		log.V(2).Info("created private gitconfig file", "path", gitConfig)
-	}
-
 	// Capture the various git parameters.
 	git := &repoSync{
 		cmd:          *flGitCmd,
@@ -654,6 +642,26 @@ func main() {
 	// This context is used only for git credentials initialization. There are
 	// no long-running operations like `git fetch`, so hopefully 30 seconds will be enough.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	// Log the git version.
+	if ver, _, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "version"); err != nil {
+		log.Error(err, "can't get git version")
+		os.Exit(1)
+	} else {
+		log.V(0).Info("git version", "version", ver)
+	}
+
+	// Don't pollute the user's .gitconfig if this is being run directly.
+	if f, err := os.CreateTemp("", "git-sync.gitconfig.*"); err != nil {
+		log.Error(err, "ERROR: can't create gitconfig file")
+		os.Exit(1)
+	} else {
+		gitConfig := f.Name()
+		f.Close()
+		os.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
+		os.Setenv("GIT_CONFIG_NOSYSTEM", "true")
+		log.V(2).Info("created private gitconfig file", "path", gitConfig)
+	}
 
 	// Set various configs we want, but users might override.
 	if err := git.SetupDefaultGitConfigs(ctx); err != nil {
