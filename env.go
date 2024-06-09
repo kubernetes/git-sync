@@ -17,11 +17,16 @@ limitations under the License.
 package main
 
 import (
+	"cmp"
 	"fmt"
+	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/pflag"
 )
 
 func envString(def string, key string, alts ...string) string {
@@ -30,11 +35,24 @@ func envString(def string, key string, alts ...string) string {
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return val
 		}
 	}
 	return def
+}
+func envFlagString(key string, def string, usage string, alts ...string) *string {
+	registerEnvFlag(key, "string", usage)
+	val := envString(def, key, alts...)
+	// also expose it as a flag, for easier testing
+	flName := "__env__" + key
+	flHelp := "DO NOT SET THIS FLAG EXCEPT IN TESTS; use $" + key
+	newExplicitFlag(&val, flName, flHelp, pflag.String)
+	if err := pflag.CommandLine.MarkHidden(flName); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		os.Exit(1)
+	}
+	return &val
 }
 
 func envStringArray(def string, key string, alts ...string) []string {
@@ -47,7 +65,7 @@ func envStringArray(def string, key string, alts ...string) []string {
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return parse(val)
 		}
 	}
@@ -68,7 +86,7 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return parse(alt, val)
 		}
 	}
@@ -98,7 +116,7 @@ func envIntOrError(def int, key string, alts ...string) (int, error) {
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return parse(alt, val)
 		}
 	}
@@ -128,7 +146,7 @@ func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return parse(alt, val)
 		}
 	}
@@ -158,7 +176,7 @@ func envDurationOrError(def time.Duration, key string, alts ...string) (time.Dur
 	}
 	for _, alt := range alts {
 		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env %s has been deprecated, use %s instead\n", alt, key)
+			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
 			return parse(alt, val)
 		}
 	}
@@ -172,4 +190,75 @@ func envDuration(def time.Duration, key string, alts ...string) time.Duration {
 		return 0
 	}
 	return val
+}
+
+// explicitFlag is a pflag.Value which only sets the real value if the flag is
+// set to a non-zero-value.
+type explicitFlag[T comparable] struct {
+	pflag.Value
+	realPtr *T
+	flagPtr *T
+}
+
+// newExplicitFlag allocates an explicitFlag
+func newExplicitFlag[T comparable](ptr *T, name, usage string, fn func(name string, value T, usage string) *T) {
+	h := &explicitFlag[T]{
+		realPtr: ptr,
+	}
+	var zero T
+	h.flagPtr = fn(name, zero, usage)
+	fl := pflag.CommandLine.Lookup(name)
+	// wrap the original pflag.Value with our own
+	h.Value = fl.Value
+	fl.Value = h
+}
+
+func (h *explicitFlag[T]) Set(val string) error {
+	if err := h.Value.Set(val); err != nil {
+		return err
+	}
+	var zero T
+	if v := *h.flagPtr; v != zero {
+		*h.realPtr = v
+	}
+	return nil
+}
+
+// envFlag is like a flag in that it is declared with a type, validated, and
+// shows up in help messages, but can only be set by env-var, not on the CLI.
+// This is useful for things like passwords, which should not be on the CLI
+// because it can be seen in `ps`.
+type envFlag struct {
+	name string
+	typ  string
+	help string
+}
+
+var allEnvFlags = []envFlag{}
+
+// registerEnvFlag is internal.  Use functions like envFlagString to actually
+// create envFlags.
+func registerEnvFlag(name, typ, help string) {
+	for _, ef := range allEnvFlags {
+		if ef.name == name {
+			fmt.Fprintf(os.Stderr, "FATAL: duplicate env var declared: %q\n", name)
+			os.Exit(1)
+		}
+	}
+	allEnvFlags = append(allEnvFlags, envFlag{name, typ, help})
+}
+
+// printEnvFlags prints "usage" for all registered envFlags.
+func printEnvFlags(out io.Writer) {
+	width := 0
+	for _, ef := range allEnvFlags {
+		if n := len(ef.name); n > width {
+			width = n
+		}
+	}
+	slices.SortFunc(allEnvFlags, func(l, r envFlag) int { return cmp.Compare(l.name, r.name) })
+
+	for _, ef := range allEnvFlags {
+		fmt.Fprintf(out, "% *s %s %*s%s\n", width+2, ef.name, ef.typ, max(8, 32-width), "", ef.help)
+	}
 }
