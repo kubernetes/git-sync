@@ -544,6 +544,7 @@ func main() {
 	//
 
 	log.V(0).Info("starting up",
+		"version", version.VERSION,
 		"pid", os.Getpid(),
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
