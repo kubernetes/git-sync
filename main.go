@@ -968,6 +968,10 @@ func redactURL(urlstr string) string {
 func logSafeFlags(v int) []string {
 	ret := []string{}
 	pflag.VisitAll(func(fl *pflag.Flag) {
+		// Don't log hidden flags
+		if fl.Hidden {
+			return
+		}
 		// Don't log unchanged values
 		if !fl.Changed && v <= 3 {
 			return
