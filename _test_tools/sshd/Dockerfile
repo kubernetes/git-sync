@@ -49,6 +49,8 @@ VOLUME /dot_ssh
 
 # Callers should mount a directory with git repos here.
 VOLUME /git
+# sshd runs as root, and the repo directory might be owned by anyone.
+RUN git config --system safe.directory '*'
 
 # Callers can SSH as user "test"
 RUN echo "test:x:65533:65533::/home/test:/usr/bin/git-shell" >> /etc/passwd
