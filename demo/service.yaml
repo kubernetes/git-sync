@@ -1,10 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: blog-service
+  name: static-server
 spec:
+  selector:
+    app: static-server
   type: LoadBalancer
   ports:
   - port: 80
-  selector:
-    name: blog
+    targetPort: 8000

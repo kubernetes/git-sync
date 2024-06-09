@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: static-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: static-server
+  template:
+    metadata:
+      labels:
+        app: static-server
+    spec:
+      volumes:
+        - name: content
+          emptyDir: {}
+      containers:
+        # This container pulls a git repo into the "content" volume.  If this
+        # were a "real" app it would probably have livenessProbe and resources,
+        # and maybe a secret to get credentials for your git server.
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          args:
+            - --repo=https://github.com/kubernetes/git-sync
+            - --root=/git
+            - --period=60s
+            - --link=head
+            - --max-failures=1000000000
+            - -v=2
+          volumeMounts:
+            - name: content
+              mountPath: /git
+        # This container is a trivial HTTP server for the content.
+        # If this were a "real" app it would not be so trivial.  For example,
+        # nginx or apache are much more robust web servers!  It's missing a
+        # livenessProbe, resources, and many other things you would want for
+        # running in production.  Also, you would probably have a git repo
+        # dedicated to holding your content.
+        - name: http
+          image: python:alpine
+          args:
+            - python3
+            - -m
+            - http.server
+            - -d=/git/head/demo/html
+          volumeMounts:
+            - name: content
+              mountPath: /git
+              readOnly: true
