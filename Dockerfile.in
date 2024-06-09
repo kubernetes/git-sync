@@ -60,6 +60,7 @@ RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-p git \
 	-p openssh-client \
 	-p ca-certificates \
+	-p curl \
 	-p socat \
 	-b /bin/grep \
 	-b /bin/sed \
