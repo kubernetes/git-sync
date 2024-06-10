@@ -60,7 +60,7 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 		if err == nil {
 			return parsed, nil
 		}
-		return false, fmt.Errorf("ERROR: invalid bool env %s=%q: %w", key, val, err)
+		return false, fmt.Errorf("invalid bool env %s=%q: %w", key, val, err)
 	}
 
 	if val := os.Getenv(key); val != "" {
@@ -77,7 +77,7 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 func envBool(def bool, key string, alts ...string) bool {
 	val, err := envBoolOrError(def, key, alts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
 		os.Exit(1)
 		return false
 	}
@@ -90,7 +90,7 @@ func envIntOrError(def int, key string, alts ...string) (int, error) {
 		if err == nil {
 			return int(parsed), nil
 		}
-		return 0, fmt.Errorf("ERROR: invalid int env %s=%q: %w", key, val, err)
+		return 0, fmt.Errorf("invalid int env %s=%q: %w", key, val, err)
 	}
 
 	if val := os.Getenv(key); val != "" {
@@ -107,7 +107,7 @@ func envIntOrError(def int, key string, alts ...string) (int, error) {
 func envInt(def int, key string, alts ...string) int {
 	val, err := envIntOrError(def, key, alts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
 		os.Exit(1)
 		return 0
 	}
@@ -120,7 +120,7 @@ func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
 		if err == nil {
 			return parsed, nil
 		}
-		return 0, fmt.Errorf("ERROR: invalid float env %s=%q: %w", key, val, err)
+		return 0, fmt.Errorf("invalid float env %s=%q: %w", key, val, err)
 	}
 
 	if val := os.Getenv(key); val != "" {
@@ -137,7 +137,7 @@ func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
 func envFloat(def float64, key string, alts ...string) float64 {
 	val, err := envFloatOrError(def, key, alts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
 		os.Exit(1)
 		return 0
 	}
@@ -150,7 +150,7 @@ func envDurationOrError(def time.Duration, key string, alts ...string) (time.Dur
 		if err == nil {
 			return parsed, nil
 		}
-		return 0, fmt.Errorf("ERROR: invalid duration env %s=%q: %w", key, val, err)
+		return 0, fmt.Errorf("invalid duration env %s=%q: %w", key, val, err)
 	}
 
 	if val := os.Getenv(key); val != "" {
@@ -167,7 +167,7 @@ func envDurationOrError(def time.Duration, key string, alts ...string) (time.Dur
 func envDuration(def time.Duration, key string, alts ...string) time.Duration {
 	val, err := envDurationOrError(def, key, alts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
 		os.Exit(1)
 		return 0
 	}

@@ -131,7 +131,7 @@ func main() {
 		if err == nil {
 			os.Exit(code)
 		}
-		fmt.Fprintf(os.Stderr, "ERROR: unhandled pid1 error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "FATAL: unhandled pid1 error: %v\n", err)
 		os.Exit(127)
 	}
 
@@ -352,7 +352,7 @@ func main() {
 	}
 	var absRoot absPath
 	if abs, err := absPath(*flRoot).Canonical(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: can't absolutize --root: %v\n", err)
+		fmt.Fprintf(os.Stderr, "FATAL: can't absolutize --root: %v\n", err)
 		os.Exit(1)
 	} else {
 		absRoot = abs
@@ -370,7 +370,7 @@ func main() {
 	cmdRunner := cmd.NewRunner(log)
 
 	if *flRepo == "" {
-		handleConfigError(log, true, "ERROR: --repo must be specified")
+		fatalConfigError(log, true, "required flag: --repo must be specified")
 	}
 
 	switch {
@@ -378,32 +378,32 @@ func main() {
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --branch")
 		*flRef = *flDeprecatedBranch
-	case *flDeprecatedRev != "":
+	case *flDeprecatedRev != "" && *flDeprecatedBranch == "":
 		// Back-compat
 		log.V(0).Info("setting --ref from deprecated --rev")
 		*flRef = *flDeprecatedRev
 	case *flDeprecatedBranch != "" && *flDeprecatedRev != "":
-		handleConfigError(log, true, "ERROR: can't set --ref from deprecated --branch and --rev")
+		fatalConfigError(log, true, "deprecated flag combo: can't set --ref from deprecated --branch and --rev (one or the other is OK)")
 	}
 
 	if *flRef == "" {
-		handleConfigError(log, true, "ERROR: --ref must be specified")
+		fatalConfigError(log, true, "required flag: --ref must be specified")
 	}
 
 	if *flDepth < 0 { // 0 means "no limit"
-		handleConfigError(log, true, "ERROR: --depth must be greater than or equal to 0")
+		fatalConfigError(log, true, "invalid flag: --depth must be greater than or equal to 0")
 	}
 
 	switch submodulesMode(*flSubmodules) {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
-		handleConfigError(log, true, "ERROR: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+		fatalConfigError(log, true, "invalid flag: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
 	}
 
 	switch *flGitGC {
 	case gcAuto, gcAlways, gcAggressive, gcOff:
 	default:
-		handleConfigError(log, true, "ERROR: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
+		fatalConfigError(log, true, "invalid flag: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
 	if *flDeprecatedDest != "" {
@@ -422,11 +422,11 @@ func main() {
 		*flPeriod = time.Duration(int(*flDeprecatedWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
-		handleConfigError(log, true, "ERROR: --period must be at least 10ms")
+		fatalConfigError(log, true, "invalid flag: --period must be at least 10ms")
 	}
 
 	if *flDeprecatedChmod != 0 {
-		handleConfigError(log, true, "ERROR: --change-permissions is no longer supported")
+		fatalConfigError(log, true, "deprecated flag: --change-permissions is no longer supported")
 	}
 
 	var syncSig syscall.Signal
@@ -443,7 +443,7 @@ func main() {
 			}
 		}
 		if syncSig == 0 {
-			handleConfigError(log, true, "ERROR: --sync-on-signal must be a valid signal name or number")
+			fatalConfigError(log, true, "invalid flag: --sync-on-signal must be a valid signal name or number")
 		}
 	}
 
@@ -453,7 +453,7 @@ func main() {
 		*flSyncTimeout = time.Duration(*flDeprecatedTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
-		handleConfigError(log, true, "ERROR: --sync-timeout must be at least 10ms")
+		fatalConfigError(log, true, "invalid flag: --sync-timeout must be at least 10ms")
 	}
 
 	if *flDeprecatedMaxSyncFailures != 0 {
@@ -469,10 +469,10 @@ func main() {
 	}
 	if *flExechookCommand != "" {
 		if *flExechookTimeout < time.Second {
-			handleConfigError(log, true, "ERROR: --exechook-timeout must be at least 1s")
+			fatalConfigError(log, true, "invalid flag: --exechook-timeout must be at least 1s")
 		}
 		if *flExechookBackoff < time.Second {
-			handleConfigError(log, true, "ERROR: --exechook-backoff must be at least 1s")
+			fatalConfigError(log, true, "invalid flag: --exechook-backoff must be at least 1s")
 		}
 	}
 
@@ -482,60 +482,60 @@ func main() {
 			*flWebhookStatusSuccess = 0
 		}
 		if *flWebhookStatusSuccess < 0 {
-			handleConfigError(log, true, "ERROR: --webhook-success-status must be a valid HTTP code or 0")
+			fatalConfigError(log, true, "invalid flag: --webhook-success-status must be a valid HTTP code or 0")
 		}
 		if *flWebhookTimeout < time.Second {
-			handleConfigError(log, true, "ERROR: --webhook-timeout must be at least 1s")
+			fatalConfigError(log, true, "invalid flag: --webhook-timeout must be at least 1s")
 		}
 		if *flWebhookBackoff < time.Second {
-			handleConfigError(log, true, "ERROR: --webhook-backoff must be at least 1s")
+			fatalConfigError(log, true, "invalid flag: --webhook-backoff must be at least 1s")
 		}
 	}
 
 	if *flUsername != "" {
 		if *flPassword == "" && *flPasswordFile == "" {
-			handleConfigError(log, true, "ERROR: --password or --password-file must be specified when --username is specified")
+			fatalConfigError(log, true, "required flag: --password or --password-file must be specified when --username is specified")
 		}
 		if *flPassword != "" && *flPasswordFile != "" {
-			handleConfigError(log, true, "ERROR: only one of --password and --password-file may be specified")
+			fatalConfigError(log, true, "invalid flag: only one of --password and --password-file may be specified")
 		}
 		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
 			if u.User != nil {
-				handleConfigError(log, true, "ERROR: credentials may not be specified in --repo when --username is specified")
+				fatalConfigError(log, true, "invalid flag: credentials may not be specified in --repo when --username is specified")
 			}
 		}
 	} else {
 		if *flPassword != "" {
-			handleConfigError(log, true, "ERROR: --password may only be specified when --username is specified")
+			fatalConfigError(log, true, "invalid flag: --password may only be specified when --username is specified")
 		}
 		if *flPasswordFile != "" {
-			handleConfigError(log, true, "ERROR: --password-file may only be specified when --username is specified")
+			fatalConfigError(log, true, "invalid flag: --password-file may only be specified when --username is specified")
 		}
 	}
 
 	if len(*flCredentials) > 0 {
 		for _, cred := range *flCredentials {
 			if cred.URL == "" {
-				handleConfigError(log, true, "ERROR: --credential URL must be specified")
+				fatalConfigError(log, true, "invalid flag: --credential URL must be specified")
 			}
 			if cred.Username == "" {
-				handleConfigError(log, true, "ERROR: --credential username must be specified")
+				fatalConfigError(log, true, "invalid flag: --credential username must be specified")
 			}
 			if cred.Password == "" && cred.PasswordFile == "" {
-				handleConfigError(log, true, "ERROR: --credential password or password-file must be set")
+				fatalConfigError(log, true, "invalid flag: --credential password or password-file must be specified")
 			}
 			if cred.Password != "" && cred.PasswordFile != "" {
-				handleConfigError(log, true, "ERROR: only one of --credential password and password-file may be specified")
+				fatalConfigError(log, true, "invalid flag: only one of --credential password and password-file may be specified")
 			}
 		}
 	}
 
 	if *flHTTPBind == "" {
 		if *flHTTPMetrics {
-			handleConfigError(log, true, "ERROR: --http-bind must be specified when --http-metrics is set")
+			fatalConfigError(log, true, "required flag: --http-bind must be specified when --http-metrics is set")
 		}
 		if *flHTTPprof {
-			handleConfigError(log, true, "ERROR: --http-bind must be specified when --http-pprof is set")
+			fatalConfigError(log, true, "required flag: --http-bind must be specified when --http-pprof is set")
 		}
 	}
 
@@ -552,7 +552,7 @@ func main() {
 		"flags", logSafeFlags(*flVerbose))
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
-		log.Error(err, "ERROR: git executable not found", "git", *flGitCmd)
+		log.Error(err, "FATAL: git executable not found", "git", *flGitCmd)
 		os.Exit(1)
 	}
 
@@ -568,13 +568,13 @@ func main() {
 	// very early so that we can normalize the path even when there are
 	// symlinks in play.
 	if err := os.MkdirAll(absRoot.String(), defaultDirMode); err != nil {
-		log.Error(err, "ERROR: can't make root dir", "path", absRoot)
+		log.Error(err, "FATAL: can't make root dir", "path", absRoot)
 		os.Exit(1)
 	}
 	// Get rid of symlinks in the root path to avoid getting confused about
 	// them later.  The path must exist for EvalSymlinks to work.
 	if delinked, err := filepath.EvalSymlinks(absRoot.String()); err != nil {
-		log.Error(err, "ERROR: can't normalize root path", "path", absRoot)
+		log.Error(err, "FATAL: can't normalize root path", "path", absRoot)
 		os.Exit(1)
 	} else {
 		absRoot = absPath(delinked)
@@ -617,7 +617,7 @@ func main() {
 
 	if *flAddUser {
 		if err := addUser(); err != nil {
-			log.Error(err, "ERROR: can't add user")
+			log.Error(err, "FATAL: can't add user")
 			os.Exit(1)
 		}
 	}
@@ -653,7 +653,7 @@ func main() {
 
 	// Don't pollute the user's .gitconfig if this is being run directly.
 	if f, err := os.CreateTemp("", "git-sync.gitconfig.*"); err != nil {
-		log.Error(err, "ERROR: can't create gitconfig file")
+		log.Error(err, "FATAL: can't create gitconfig file")
 		os.Exit(1)
 	} else {
 		gitConfig := f.Name()
@@ -1062,10 +1062,10 @@ func sleepForever() {
 	os.Exit(0)
 }
 
-// handleConfigError prints the error to the standard error, prints the usage
+// fatalConfigError prints the error to the standard error, prints the usage
 // if the `printUsage` flag is true, exports the error to the error file and
 // exits the process with the exit code.
-func handleConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
+func fatalConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
 	s := fmt.Sprintf(format, a...)
 	fmt.Fprintln(os.Stderr, s)
 	if printUsage {
