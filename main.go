@@ -2283,7 +2283,7 @@ OPTIONS
             useful in cases where data produced by git-sync is used by a
             different UID.  This replaces the older --change-permissions flag.
 
-    -h, --help
+    -?, -h, --help
             Print help text and exit.
 
     --http-bind <string>, $GITSYNC_HTTP_BIND
