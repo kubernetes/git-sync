@@ -3541,6 +3541,14 @@ if [[ -n "${VERBOSE:-}" ]]; then
 fi
 echo
 
+# Log some info
+if [[ -n "${VERBOSE:-}" ]]; then
+    git version
+    echo
+    docker version
+    echo
+fi
+
 # Iterate over the chosen tests and run them.
 for t; do
     TEST_FN="e2e::${t}"
