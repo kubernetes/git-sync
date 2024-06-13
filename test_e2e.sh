@@ -2365,16 +2365,23 @@ function e2e::webhook_success() {
 ##############################################
 function e2e::webhook_fail_retry() {
     HITLOG="$WORK/hitlog"
+    SCRIPT="$WORK/http_resp.sh"
+    touch "$SCRIPT"
+    chmod 755 "$SCRIPT"
 
     # First sync - return a failure to ensure that we try again
     cat /dev/null > "$HITLOG"
+    cat > "$SCRIPT" << __EOF__
+#!/bin/sh
+read X
+echo "HTTP/1.1 500 Internal Server Error"
+echo
+__EOF__
     CTR=$(docker_run \
         -v "$HITLOG":/var/log/hits \
+        -v "$SCRIPT":/http_resp.sh \
         e2e/test/ncsvr \
-        80 'read X
-            echo "HTTP/1.1 500 Internal Server Error"
-            echo
-           ')
+        80 '/http_resp.sh')
     IP=$(docker_ip "$CTR")
 
     GIT_SYNC \
@@ -2392,16 +2399,13 @@ function e2e::webhook_fail_retry() {
     assert_file_lines_ge "$HITLOG" 1
 
     # Now return 200, ensure that it gets called
-    docker_kill "$CTR"
     cat /dev/null > "$HITLOG"
-    CTR=$(docker_run \
-        --ip="$IP" \
-        -v "$HITLOG":/var/log/hits \
-        e2e/test/ncsvr \
-        80 'read X
-            echo "HTTP/1.1 200 OK"
-            echo
-           ')
+    cat > "$SCRIPT" << __EOF__
+#!/bin/sh
+read X
+echo "HTTP/1.1 200 OK"
+echo
+__EOF__
     sleep 2 # webhooks are async
     assert_file_lines_eq "$HITLOG" 1
 }
