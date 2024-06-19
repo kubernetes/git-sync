@@ -72,7 +72,7 @@ function assert_link_basename_eq() {
     if [[ $(basename $(readlink "$1")) == "$2" ]]; then
         return
     fi
-    fail "$1 does not point to $2: $(readlink $1)"
+    fail "$1 does not point to $2: $(readlink "$1")"
 }
 
 function assert_file_exists() {
@@ -91,14 +91,14 @@ function assert_file_eq() {
     if [[ $(cat "$1") == "$2" ]]; then
         return
     fi
-    fail "$1 does not contain '$2': $(cat $1)"
+    fail "$1 does not contain '$2': $(cat "$1")"
 }
 
 function assert_file_contains() {
     if grep -q "$2" "$1"; then
         return
     fi
-    fail "$1 does not contain '$2': $(cat $1)"
+    fail "$1 does not contain '$2': $(cat "$1")"
 }
 
 function assert_file_lines_eq() {
@@ -2869,7 +2869,7 @@ function e2e::submodule_sync_relative() {
 
     # Add submodule
     REL="$(realpath --relative-to "$REPO" "$WORK/$SUBMODULE_REPO_NAME")"
-    echo $REL
+    echo "$REL"
     git -C "$REPO" -c protocol.file.allow=always submodule add -q "$REL" "$SUBMODULE_REPO_NAME"
     git -C "$REPO" commit -aqm "add submodule"
 
@@ -3411,7 +3411,7 @@ function list_tests() {
         declare -F \
             | cut -f3 -d' ' \
             | grep "^e2e::" \
-            | while read X; do declare -F $X; done \
+            | while read X; do declare -F "$X"; done \
             | sort -n -k2 \
             | cut -f1 -d' ' \
             | sed 's/^e2e:://'
