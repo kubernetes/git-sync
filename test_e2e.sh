@@ -761,9 +761,9 @@ function e2e::stale_worktree_timeout() {
 
     # wait for first sync
     wait_for_sync "${MAXWAIT}"
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # wait 2 seconds and make another commit
     sleep 2
@@ -776,11 +776,11 @@ function e2e::stale_worktree_timeout() {
     wait_for_sync "${MAXWAIT}"
     # at this point both WT1 and WT2 should exist, with
     # link pointing to the new WT2
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
 
     # wait 2 seconds and make a third commit
     sleep 2
@@ -793,57 +793,57 @@ function e2e::stale_worktree_timeout() {
 
     # at this point WT1, WT2, WT3 should exist, with
     # link pointing to WT3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 
     # wait for WT1 to go stale
     sleep 4
 
     # now WT1 should be stale and deleted,
     # WT2 and WT3 should still exist
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 
     # wait for WT2 to go stale
     sleep 2
 
     # now both WT1 and WT2 are stale, WT3 should be the only
     # worktree left
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 }
 
 ##############################################
@@ -859,9 +859,9 @@ function e2e::stale_worktree_timeout_restart() {
         --link="link" \
         --one-time
 
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_eq "$ROOT"/link/file "$FUNCNAME 1"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "$FUNCNAME 1"
 
     # wait 2 seconds and make another commit
     sleep 2
@@ -880,11 +880,11 @@ function e2e::stale_worktree_timeout_restart() {
 
     # at this point both WT1 and WT2 should exist, with
     # link pointing to the new WT2
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
 
     # wait 2 seconds and make a third commit
     sleep 4
@@ -903,19 +903,19 @@ function e2e::stale_worktree_timeout_restart() {
 
     # at this point WT1, WT2, WT3 should exist, with
     # link pointing to WT3
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 
     # wait for WT1 to go stale and restart git-sync
     sleep 8
@@ -928,19 +928,19 @@ function e2e::stale_worktree_timeout_restart() {
 
     # now WT1 should be stale and deleted,
     # WT2 and WT3 should still exist
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file
-    assert_file_exists "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file"
+    assert_file_exists "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 
     # wait for WT2 to go stale and restart git-sync
     sleep 4
@@ -953,19 +953,19 @@ function e2e::stale_worktree_timeout_restart() {
 
     # now both WT1 and WT2 are stale, WT3 should be the only
     # worktree left
-    assert_link_exists "$ROOT"/link
-    assert_file_exists "$ROOT"/link/file
-    assert_file_exists "$ROOT"/link/file2
-    assert_file_exists "$ROOT"/link/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT1/file3
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file2
-    assert_file_absent "$ROOT"/.worktrees/$WT2/file3
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file2
-    assert_file_exists "$ROOT"/.worktrees/$WT3/file3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_exists "$ROOT/link/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT1/file3"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file2"
+    assert_file_absent "$ROOT/.worktrees/$WT2/file3"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file2"
+    assert_file_exists "$ROOT/.worktrees/$WT3/file3"
 }
 
 ##############################################
