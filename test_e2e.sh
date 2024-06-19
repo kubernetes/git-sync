@@ -689,8 +689,6 @@ function e2e::worktree_unexpected_removal() {
             docker unpause "$CTR" >/dev/null
         done
 
-    echo "$METRIC_GOOD_SYNC_COUNT"
-
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
@@ -733,8 +731,6 @@ function e2e::sync_recover_wrong_worktree_hash() {
         | while read CTR; do
             docker unpause "$CTR" >/dev/null
         done
-
-    echo "$METRIC_GOOD_SYNC_COUNT"
 
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
@@ -2869,7 +2865,6 @@ function e2e::submodule_sync_relative() {
 
     # Add submodule
     REL="$(realpath --relative-to "$REPO" "$WORK/$SUBMODULE_REPO_NAME")"
-    echo "$REL"
     git -C "$REPO" -c protocol.file.allow=always submodule add -q "$REL" "$SUBMODULE_REPO_NAME"
     git -C "$REPO" commit -aqm "add submodule"
 
