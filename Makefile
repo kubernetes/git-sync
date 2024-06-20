@@ -51,7 +51,7 @@ IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)
 OS_ARCH_TAG := $(TAG)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.22-alpine
+BUILD_IMAGE ?= golang:1.22
 
 DBG_MAKEFILE ?=
 ifneq ($(DBG_MAKEFILE),1)
