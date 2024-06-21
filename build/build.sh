@@ -34,7 +34,7 @@ export CGO_ENABLED=0
 export GOARCH="${ARCH}"
 export GOOS="${OS}"
 
-if [ "${BUILD_DEBUG:-}" -eq 1 ]; then
+if [ "${BUILD_DEBUG:-0}" -eq 1 ]; then
     # Debugging - disable optimizations and inlining
     gogcflags="all=-N -l"
     goasmflags=""
