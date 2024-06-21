@@ -16,7 +16,6 @@
 
 set -o errexit
 set -o nounset
-set -o pipefail
 
 export CGO_ENABLED=0
 export GOFLAGS="-mod=vendor"
@@ -25,7 +24,7 @@ echo "Running tests:"
 go test -installsuffix "static" "$@"
 echo
 
-echo -n "Checking gofmt: "
+echo "Checking gofmt: "
 ERRS="$(go fmt "$@")"
 if [ -n "${ERRS}" ]; then
     echo "FAIL - the following files need to be gofmt'ed:"
@@ -38,7 +37,7 @@ fi
 echo "PASS"
 echo
 
-echo -n "Checking go vet: "
+echo "Checking go vet: "
 ERRS="$(go vet "$@" 2>&1 || true)"
 if [ -n "${ERRS}" ]; then
     echo "FAIL"
