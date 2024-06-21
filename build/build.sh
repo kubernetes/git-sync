@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright 2016 The Kubernetes Authors.
 #
@@ -16,6 +16,7 @@
 
 set -o errexit
 set -o nounset
+set -o pipefail
 
 if [ -z "${ARCH:-}" ]; then
     echo "ARCH must be set"
@@ -34,7 +35,7 @@ export CGO_ENABLED=0
 export GOARCH="${ARCH}"
 export GOOS="${OS}"
 
-if [ "${BUILD_DEBUG:-0}" -eq 1 ]; then
+if [[ "${BUILD_DEBUG:-0}" == 1 ]]; then
     # Debugging - disable optimizations and inlining
     gogcflags="all=-N -l"
     goasmflags=""
