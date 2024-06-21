@@ -37,7 +37,8 @@ function stack() {
           echo -ne "  from "
       fi
       indent="true"
-      local file="$(basename "${BASH_SOURCE["${frame}"]}")"
+      local file
+      file="$(basename "${BASH_SOURCE["${frame}"]}")"
       local line="${BASH_LINENO["$((frame-1))"]}" # ???
       local func="${FUNCNAME["${frame}"]:-}"
       echo -e "${func}() ${file}:${line}"
@@ -58,7 +59,8 @@ function errexit() {
   stack 1 >&2 # skip this frame
 
   # Exit, really, right now.
-  local pgid="$(cat /proc/self/stat | awk '{print $5}')"
+  local pgid
+  pgid="$(awk '{print $5}' /proc/self/stat)"
   kill -- -"${pgid}"
 }
 
@@ -133,22 +135,24 @@ function file_to_package() {
         fwd="${ROOT_FWD_LINKS[i]}"
         rev="${ROOT_REV_LINKS[i]}"
         if [[ "${file}" =~ ^"${fwd}/" ]]; then
-            alt="$(echo "${file}" | sed "s|^${fwd}|${rev}|")"
+            alt="${file/#"${fwd}"/"${rev}"}"
             break
         elif [[ "${file}" =~ ^"${rev}/" ]]; then
-            alt="$(echo "${file}" | sed "s|^${rev}|${fwd}|")"
+            alt="${file/#"${rev}"/"${fwd}"}"
             break
         fi
-        i=$(($i+1))
+        i=$((i+1))
     done
 
     local out=""
     local result=""
     out="$(dpkg-query --search "${file}" 2>&1)"
+    # shellcheck disable=SC2181
     if [[ $? == 0 ]]; then
         result="${out}"
     elif [[ -n "${alt}" ]]; then
         out="$(dpkg-query --search "${alt}" 2>&1)"
+        # shellcheck disable=SC2181
         if [[ $? == 0 ]]; then
             result="${out}"
         fi
@@ -171,7 +175,8 @@ function ensure_dir_in_staging() {
     local dir="$2"
 
     if [[ ! -e "${staging}/${dir}" ]]; then
-        local rel="$(echo "${dir}" | sed 's|^/||')"
+        # Stript the leading /
+        local rel="${dir/#\//}"
         tar -C / -c --no-recursion --dereference "${rel}" | tar -C "${staging}" -x
     fi
 }
@@ -182,13 +187,15 @@ function stage_one_file() {
     local file="$2"
 
     # copy the real form of the named path
-    local real="$(realpath "${file}")"
+    local real
+    real="$(realpath "${file}")"
     cp -a --parents "${real}" "${staging}"
 
     # recreate symlinks, even on intermediate path elements
     if [[ "${file}" != "${real}" ]]; then
         if [[ ! -e "${staging}/${file}" ]]; then
-            local dir="$(dirname "${file}")"
+            local dir
+            dir="$(dirname "${file}")"
             ensure_dir_in_staging "${staging}" "${dir}"
             ln -s "${real}" "${staging}/${file}"
         fi
@@ -252,7 +259,8 @@ function stage_one_package() {
                 local i=0
                 for s in "${sums[@]}"; do
                     if [[ "${sum}" == "${s}" ]]; then
-                        local dir="$(dirname "${file}")"
+                        local dir
+                        dir="$(dirname "${file}")"
                         ensure_dir_in_staging "${staging}" "$(dirname "${file}")"
                         ln -s "${names[$i]}" "${staging}/${file}"
                         found="true"
@@ -296,15 +304,17 @@ function stage_packages() {
     local pkg
     for pkg; do
         echo "staging package ${pkg}"
-        local du_before="$(du -sk "${staging}" | cut -f1)"
+        local du_before
+        du_before="$(du -sk "${staging}" | cut -f1)"
         indent apt-get -y -qq -o Dpkg::Use-Pty=0 --no-install-recommends install "${pkg}"
         stage_one_package "$staging" "${pkg}"
         while read -r dep; do
             DBG "staging dependent package ${dep}"
             indent stage_one_package "${staging}" "${dep}"
         done < <( get_dependent_packages "${pkg}" )
-        local du_after="$(du -sk "${staging}" | cut -f1)"
-        indent echo "package ${pkg} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+        local du_after
+        du_after="$(du -sk "${staging}" | cut -f1)"
+        indent echo "package ${pkg} size: +$(( du_after - du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -355,10 +365,12 @@ function stage_binaries() {
     local bin
     for bin; do
         echo "staging binary ${bin}"
-        local du_before="$(du -sk "${staging}" | cut -f1)"
+        local du_before
+        du_before="$(du -sk "${staging}" | cut -f1)"
         stage_one_binary "${staging}" "${bin}"
-        local du_after="$(du -sk "${staging}" | cut -f1)"
-        indent echo "binary ${bin} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+        local du_after
+        du_after="$(du -sk "${staging}" | cut -f1)"
+        indent echo "binary ${bin} size: +$(( du_after - du_before )) kB (of ${du_after} kB)"
     done
 }
 
@@ -369,10 +381,12 @@ function stage_files() {
     local bin
     for file; do
         echo "staging file ${file}"
-        local du_before="$(du -sk "${staging}" | cut -f1)"
+        local du_before
+        du_before="$(du -sk "${staging}" | cut -f1)"
         stage_one_file "${staging}" "${file}"
-        local du_after="$(du -sk "${staging}" | cut -f1)"
-        indent echo "file ${file} size: +$(( $du_after - $du_before )) kB (of ${du_after} kB)"
+        local du_after
+        du_after="$(du -sk "${staging}" | cut -f1)"
+        indent echo "file ${file} size: +$(( du_after - du_before )) kB (of ${du_after} kB)"
     done
 }
 
