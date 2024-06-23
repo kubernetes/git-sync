@@ -2524,23 +2524,23 @@ function e2e::expose_http() {
     done
 
     # check that health endpoint fails
-    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 503 ]] ; then
-        fail "health endpoint should have failed: $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT)"
+    if [[ $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 503 ]] ; then
+        fail "health endpoint should have failed: $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT)"
     fi
     wait_for_sync "${MAXWAIT}"
 
     # check that health endpoint is alive
-    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 200 ]] ; then
+    if [[ $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 200 ]] ; then
         fail "health endpoint failed"
     fi
 
     # check that the metrics endpoint exists
-    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT/metrics) -ne 200 ]] ; then
+    if [[ $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT/metrics) -ne 200 ]] ; then
         fail "metrics endpoint failed"
     fi
 
     # check that the pprof endpoint exists
-    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT/debug/pprof/) -ne 200 ]] ; then
+    if [[ $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT/debug/pprof/) -ne 200 ]] ; then
         fail "pprof endpoint failed"
     fi
 }
@@ -2579,7 +2579,7 @@ function e2e::expose_http_after_restart() {
     sleep 2 # wait for first loop to confirm synced
 
     # check that health endpoint is alive
-    if [[ $(curl --write-out %{http_code} --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 200 ]] ; then
+    if [[ $(curl --write-out '%{http_code}' --silent --output /dev/null http://localhost:$HTTP_PORT) -ne 200 ]] ; then
         fail "health endpoint failed"
     fi
     assert_link_exists "$ROOT/link"
