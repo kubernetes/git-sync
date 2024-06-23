@@ -69,7 +69,7 @@ function assert_link_exists() {
 }
 
 function assert_link_basename_eq() {
-    if [[ $(basename $(readlink "$1")) == "$2" ]]; then
+    if [[ $(basename "$(readlink "$1")") == "$2" ]]; then
         return
     fi
     fail "$1 does not point to $2: $(readlink "$1")"
@@ -279,7 +279,7 @@ function GIT_SYNC() {
         ${RM} \
         --label git-sync-e2e="$RUNID" \
         --network="host" \
-        -u git-sync:$(id -g) `# rely on GID, triggering "dubious ownership"` \
+        -u git-sync:"$(id -g)" `# rely on GID, triggering "dubious ownership"` \
         -v "$ROOT":"$ROOT":rw \
         -v "$REPO":"$REPO":ro \
         -v "$REPO2":"$REPO2":ro \
@@ -1024,20 +1024,20 @@ function e2e::readlink() {
         &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT/link" "$(git -C "$REPO" rev-parse HEAD)"
 
     # Move HEAD forward
     echo "${FUNCNAME[0]} 2" > "$REPO/file"
     git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT/link" "$(git -C "$REPO" rev-parse HEAD)"
 
     # Move HEAD backward
     git -C "$REPO" reset -q --hard HEAD^
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
-    assert_link_basename_eq "$ROOT/link" $(git -C "$REPO" rev-parse HEAD)
+    assert_link_basename_eq "$ROOT/link" "$(git -C "$REPO" rev-parse HEAD)"
 }
 
 ##############################################
