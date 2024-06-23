@@ -3444,7 +3444,7 @@ for arg; do
         if [[ "${t}" =~ ${arg} ]]; then
             nmatches=$((nmatches+1))
             # Don't run tests twice, just keep the first match.
-            if [[ " ${tests_to_run[*]} " =~ " ${t} " ]]; then
+            if [[ " ${tests_to_run[*]} " == *" ${t} "* ]]; then
                 continue
             fi
             tests_to_run+=("${t}")
