@@ -3417,7 +3417,7 @@ function list_tests() {
 }
 
 # Figure out which, if any, tests to run.
-all_tests=($(list_tests))
+mapfile -t all_tests < <(list_tests)
 tests_to_run=()
 
 function print_tests() {
