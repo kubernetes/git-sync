@@ -102,14 +102,14 @@ function assert_file_contains() {
 }
 
 function assert_file_lines_eq() {
-    N=$(cat "$1" | wc -l)
+    N=$(wc -l < "$1")
     if (( "$N" != "$2" )); then
         fail "$1 is not $2 lines: $N"
     fi
 }
 
 function assert_file_lines_ge() {
-    N=$(cat "$1" | wc -l)
+    N=$(wc -l < "$1")
     if (( "$N" < "$2" )); then
         fail "$1 is not at least $2 lines: $N"
     fi
