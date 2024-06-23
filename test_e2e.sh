@@ -2977,6 +2977,7 @@ function e2e::submodule_sync_over_http_different_passwords() {
     git -C "$NESTED_SUBMODULE" commit -aqm "init nested-submodule.file"
 
     # Run a git-over-SSH server.  Use password "test1".
+    # shellcheck disable=SC2016
     echo 'test:$apr1$cXiFWR90$Pmoz7T8kEmlpC9Bpj4MX3.' > "$WORK/htpasswd.1"
     CTR_SUBSUB=$(docker_run \
         -v "$NESTED_SUBMODULE":/git/repo:ro \
@@ -3000,6 +3001,7 @@ function e2e::submodule_sync_over_http_different_passwords() {
     git -C "$SUBMODULE" commit -aqm "add nested submodule"
 
     # Run a git-over-SSH server.  Use password "test2".
+    # shellcheck disable=SC2016
     echo 'test:$apr1$vWBoWUBS$2H.WFxF8T7rH/gZF99Edl/' > "$WORK/htpasswd.2"
     CTR_SUB=$(docker_run \
         -v "$SUBMODULE":/git/repo:ro \
@@ -3014,6 +3016,7 @@ function e2e::submodule_sync_over_http_different_passwords() {
     git -C "$REPO" submodule update --recursive --remote > /dev/null 2>&1
 
     # Run a git-over-SSH server.  Use password "test3".
+    # shellcheck disable=SC2016
     echo 'test:$apr1$oKP2oGwp$ESJ4FESEP/8Sisy02B/vM/' > "$WORK/htpasswd.3"
     CTR=$(docker_run \
         -v "$REPO":/git/repo:ro \
