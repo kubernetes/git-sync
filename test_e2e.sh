@@ -305,7 +305,7 @@ function GIT_SYNC() {
 function remove_containers() {
     sleep 2 # Let docker finish saving container metadata
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker kill "$CTR" >/dev/null
         done
 }
@@ -620,7 +620,7 @@ function e2e::worktree_cleanup() {
 
     # suspend time so we can fake corruption
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker pause "$CTR" >/dev/null
         done
 
@@ -640,7 +640,7 @@ function e2e::worktree_cleanup() {
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker unpause "$CTR" >/dev/null
         done
 
@@ -675,7 +675,7 @@ function e2e::worktree_unexpected_removal() {
 
     # suspend time so we can fake corruption
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker pause "$CTR" >/dev/null
         done
 
@@ -685,7 +685,7 @@ function e2e::worktree_unexpected_removal() {
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker unpause "$CTR" >/dev/null
         done
 
@@ -718,7 +718,7 @@ function e2e::sync_recover_wrong_worktree_hash() {
 
     # suspend time so we can fake corruption
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker pause "$CTR" >/dev/null
         done
 
@@ -728,7 +728,7 @@ function e2e::sync_recover_wrong_worktree_hash() {
 
     # resume time
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
-        | while read CTR; do
+        | while read -r CTR; do
             docker unpause "$CTR" >/dev/null
         done
 
@@ -3406,7 +3406,7 @@ function list_tests() {
         declare -F \
             | cut -f3 -d' ' \
             | grep "^e2e::" \
-            | while read X; do declare -F "$X"; done \
+            | while read -r X; do declare -F "$X"; done \
             | sort -n -k2 \
             | cut -f1 -d' ' \
             | sed 's/^e2e:://'
