@@ -50,12 +50,12 @@ function wait_for_file_exists() {
     local file=$1
     local ticks=$(($2*10)) # 100ms per tick
 
-    while (( $ticks > 0 )); do
+    while (( ticks > 0 )); do
         if [[ -f "$file" ]]; then
             break
         fi
         sleep 0.1
-        ticks=$(($ticks-1))
+        ticks=$((ticks-1))
     done
 }
 
