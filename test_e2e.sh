@@ -36,7 +36,7 @@ function caller() {
 }
 
 function fail() {
-    echo "FAIL: line $(caller):" "$@" >&3
+    echo "FAIL: line $(caller "$@"):" "$@" >&3
     return 42
 }
 
