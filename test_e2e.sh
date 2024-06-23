@@ -1658,7 +1658,7 @@ function e2e::sync_depth_across_updates() {
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     assert_metric_eq "${METRIC_FETCH_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "initial: expected depth $expected_depth, got $depth"
     fi
 
@@ -1672,7 +1672,7 @@ function e2e::sync_depth_across_updates() {
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     assert_metric_eq "${METRIC_FETCH_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "forward: expected depth $expected_depth, got $depth"
     fi
 
@@ -1685,7 +1685,7 @@ function e2e::sync_depth_across_updates() {
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     assert_metric_eq "${METRIC_FETCH_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "backward: expected depth $expected_depth, got $depth"
     fi
 }
@@ -2726,11 +2726,11 @@ function e2e::submodule_sync_depth() {
     assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "${FUNCNAME[0]} 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "initial depth mismatch expected=$expected_depth actual=$depth"
     fi
     submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $submodule_depth ]]; then
+    if [[ $expected_depth != "$submodule_depth" ]]; then
         fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi
 
@@ -2745,11 +2745,11 @@ function e2e::submodule_sync_depth() {
     assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "${FUNCNAME[0]} 2"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "forward depth mismatch expected=$expected_depth actual=$depth"
     fi
     submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $submodule_depth ]]; then
+    if [[ $expected_depth != "$submodule_depth" ]]; then
         fail "forward submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi
 
@@ -2763,11 +2763,11 @@ function e2e::submodule_sync_depth() {
     assert_file_eq "$ROOT/link/$SUBMODULE_REPO_NAME/submodule.file" "${FUNCNAME[0]} 1"
     assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 3
     depth=$(git -C "$ROOT/link" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $depth ]]; then
+    if [[ $expected_depth != "$depth" ]]; then
         fail "initial depth mismatch expected=$expected_depth actual=$depth"
     fi
     submodule_depth=$(git -C "$ROOT/link/$SUBMODULE_REPO_NAME" rev-list HEAD | wc -l)
-    if [[ $expected_depth != $submodule_depth ]]; then
+    if [[ $expected_depth != "$submodule_depth" ]]; then
         fail "initial submodule depth mismatch expected=$expected_depth actual=$submodule_depth"
     fi
     rm -rf $SUBMODULE
