@@ -18,6 +18,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# shellcheck disable=SC2120
 function caller() {
   local stack_skip=${1:-0}
   stack_skip=$((stack_skip + 1))
