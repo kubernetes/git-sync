@@ -85,7 +85,7 @@ program can abort if an invalid flag is specified, but a misspelled environment
 variable will just be ignored.  We've tried to stay backwards-compatible across
 major versions (by accepting deprecated flags and environment variables), but
 some things have evolved, and users are encouraged to use the most recent flags
-for their major verion.
+for their major version.
 
 ### Volumes
 

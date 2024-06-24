@@ -46,7 +46,7 @@ own style: either `-flag` or `--flag` were accepted.  git-sync v4 only accepts
 long flag names in the more common two-dash style (`--flag`), and accepts short
 (single-character) flags in the one-dash style (`-v 2`).
 
-The following does not detail every flag available in v4 - just the one that
+The following does not detail every flag available in v4 - just the ones that
 existed in v3 and are different in v4.
 
 ### Verbosity: `--v` -> `-v` or `--verbose`
@@ -164,7 +164,7 @@ though the old names are still accepted for compatibility.
 ### Depth
 
 git-sync v3 would sync the entire history of the remote repo by default.  v4
-syncs just one commit, by default.  This can be a significant performance and
+syncs just one commit by default.  This can be a significant performance and
 disk-space savings for large repos.  Users who want the full history can
 specify `--depth=0`.
 
