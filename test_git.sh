@@ -744,14 +744,14 @@ function git::rev_parse_sha() {
     git add file_1
     git commit -qam 'commit_1'
     SHA1="$(git rev-parse HEAD)"
-    SHORT1="$(echo "$SHA1" | sed 's/........$//')"
+    SHORT1="${SHA1%????????}"
 
     # Another commit on branch 1 (at HEAD)
     date > file_2
     git add file_2
     git commit -qam 'commit_2'
     SHA2="$(git rev-parse HEAD)"
-    SHORT2="$(echo "$SHA2" | sed 's/........$//')"
+    SHORT2="${SHA2%????????}"
 
     # A commit on branch 2 (not at HEAD)
     git checkout -b branch_2
@@ -759,14 +759,14 @@ function git::rev_parse_sha() {
     git add file_3
     git commit -qam 'commit_3'
     SHA3="$(git rev-parse HEAD)"
-    SHORT3="$(echo "$SHA3" | sed 's/........$//')"
+    SHORT3="${SHA3%????????}"
 
     # Another commit on branch 2 (at HEAD)
     date > file_4
     git add file_4
     git commit -qam 'commit_4'
     SHA4="$(git rev-parse HEAD)"
-    SHORT4="$(echo "$SHA4" | sed 's/........$//')"
+    SHORT4="${SHA4%????????}"
 
     assert_eq "$(git rev-parse "$SHA1")" "$SHA1"
     assert_eq "$(git rev-parse "$SHA1^{commit}")" "$SHA1"
