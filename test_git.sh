@@ -47,7 +47,7 @@ function assert_eq() {
 }
 
 function assert_substr() {
-    if [[ "$1" =~ "$2" ]]; then
+    if [[ "$1" == *"$2"* ]]; then
         return
     fi
     fail "'$1' does not contain '$2'"
@@ -855,7 +855,7 @@ for arg; do
         if [[ "${t}" =~ ${arg} ]]; then
             nmatches=$((nmatches+1))
             # Don't run tests twice, just keep the first match.
-            if [[ " ${tests_to_run[*]} " =~ " ${t} " ]]; then
+            if [[ " ${tests_to_run[*]} " == *" ${t} "* ]]; then
                 continue
             fi
             tests_to_run+=("${t}")
