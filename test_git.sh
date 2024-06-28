@@ -908,7 +908,8 @@ function run_test() {
     shift
 
     declare -g "$retvar"
-    local restore_opts=$(set +o)
+    local restore_opts
+    restore_opts=$(set +o)
     set +o errexit
     set +o nounset
     set +o pipefail
