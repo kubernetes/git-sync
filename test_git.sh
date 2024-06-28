@@ -820,7 +820,7 @@ function list_tests() {
         declare -F \
             | cut -f3 -d' ' \
             | grep "^git::" \
-            | while read X; do declare -F $X; done \
+            | while read -r X; do declare -F $X; done \
             | sort -n -k2 \
             | cut -f1 -d' ' \
             | sed 's/^git:://'
