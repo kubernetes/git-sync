@@ -47,7 +47,7 @@ function assert_eq() {
 }
 
 function assert_substr() {
-    if [[ "$1" =~ "$2" ]]; then
+    if [[ "$1" == *"$2"* ]]; then
         return
     fi
     fail "'$1' does not contain '$2'"
@@ -631,9 +631,9 @@ function git::rev_parse_branch() {
     SHA2="$(git rev-parse HEAD)"
 
     assert_eq "$(git rev-parse branch_1)" "$SHA1"
-    assert_eq "$(git rev-parse branch_1^{commit})" "$SHA1"
+    assert_eq "$(git rev-parse 'branch_1^{commit}')" "$SHA1"
     assert_eq "$(git rev-parse branch_2)" "$SHA2"
-    assert_eq "$(git rev-parse branch_2^{commit})" "$SHA2"
+    assert_eq "$(git rev-parse 'branch_2^{commit}')" "$SHA2"
 }
 
 ##############################################
@@ -675,13 +675,13 @@ function git::rev_parse_tag() {
     git tag tag_4
 
     assert_eq "$(git rev-parse tag_1)" "$SHA1"
-    assert_eq "$(git rev-parse tag_1^{commit})" "$SHA1"
+    assert_eq "$(git rev-parse 'tag_1^{commit}')" "$SHA1"
     assert_eq "$(git rev-parse tag_2)" "$SHA2"
-    assert_eq "$(git rev-parse tag_2^{commit})" "$SHA2"
+    assert_eq "$(git rev-parse 'tag_2^{commit}')" "$SHA2"
     assert_eq "$(git rev-parse tag_3)" "$SHA3"
-    assert_eq "$(git rev-parse tag_3^{commit})" "$SHA3"
+    assert_eq "$(git rev-parse 'tag_3^{commit}')" "$SHA3"
     assert_eq "$(git rev-parse tag_4)" "$SHA4"
-    assert_eq "$(git rev-parse tag_4^{commit})" "$SHA4"
+    assert_eq "$(git rev-parse 'tag_4^{commit}')" "$SHA4"
 }
 
 ##############################################
@@ -724,10 +724,10 @@ function git::rev_parse_tag_annotated() {
 
     # Annotated tags have their own SHA, which can be found with rev-parse, but
     # it doesn't make sense to test rev-parse against itself.
-    assert_eq "$(git rev-parse anntag_1^{commit})" "$SHA1"
-    assert_eq "$(git rev-parse anntag_2^{commit})" "$SHA2"
-    assert_eq "$(git rev-parse anntag_3^{commit})" "$SHA3"
-    assert_eq "$(git rev-parse anntag_4^{commit})" "$SHA4"
+    assert_eq "$(git rev-parse 'anntag_1^{commit}')" "$SHA1"
+    assert_eq "$(git rev-parse 'anntag_2^{commit}')" "$SHA2"
+    assert_eq "$(git rev-parse 'anntag_3^{commit}')" "$SHA3"
+    assert_eq "$(git rev-parse 'anntag_4^{commit}')" "$SHA4"
 }
 
 ##############################################
@@ -744,14 +744,14 @@ function git::rev_parse_sha() {
     git add file_1
     git commit -qam 'commit_1'
     SHA1="$(git rev-parse HEAD)"
-    SHORT1="$(echo "$SHA1" | sed 's/........$//')"
+    SHORT1="${SHA1%????????}"
 
     # Another commit on branch 1 (at HEAD)
     date > file_2
     git add file_2
     git commit -qam 'commit_2'
     SHA2="$(git rev-parse HEAD)"
-    SHORT2="$(echo "$SHA2" | sed 's/........$//')"
+    SHORT2="${SHA2%????????}"
 
     # A commit on branch 2 (not at HEAD)
     git checkout -b branch_2
@@ -759,14 +759,14 @@ function git::rev_parse_sha() {
     git add file_3
     git commit -qam 'commit_3'
     SHA3="$(git rev-parse HEAD)"
-    SHORT3="$(echo "$SHA3" | sed 's/........$//')"
+    SHORT3="${SHA3%????????}"
 
     # Another commit on branch 2 (at HEAD)
     date > file_4
     git add file_4
     git commit -qam 'commit_4'
     SHA4="$(git rev-parse HEAD)"
-    SHORT4="$(echo "$SHA4" | sed 's/........$//')"
+    SHORT4="${SHA4%????????}"
 
     assert_eq "$(git rev-parse "$SHA1")" "$SHA1"
     assert_eq "$(git rev-parse "$SHA1^{commit}")" "$SHA1"
@@ -804,10 +804,10 @@ function git::rev_parse_non_existent_sha() {
     # As long as it tastes like a SHA, rev-parse is happy, but there is no
     # commit for it.
     assert_eq "$(git rev-parse 0123456789abcdef0123456789abcdef01234567)" "0123456789abcdef0123456789abcdef01234567"
-    assert_substr "$(git rev-parse 0123456789abcdef0123456789abcdef01234567^{commit} 2>&1 || true)" "unknown revision"
+    assert_substr "$(git rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}' 2>&1 || true)" "unknown revision"
     # Less-than-full SHAs do not work.
     assert_substr "$(git rev-parse 0123456789abcdef 2>&1 || true)" "unknown revision"
-    assert_substr "$(git rev-parse 0123456789abcdef^{commit} 2>&1 || true)" "unknown revision"
+    assert_substr "$(git rev-parse '0123456789abcdef^{commit}' 2>&1 || true)" "unknown revision"
 }
 
 #
@@ -820,7 +820,7 @@ function list_tests() {
         declare -F \
             | cut -f3 -d' ' \
             | grep "^git::" \
-            | while read X; do declare -F $X; done \
+            | while read -r X; do declare -F "$X"; done \
             | sort -n -k2 \
             | cut -f1 -d' ' \
             | sed 's/^git:://'
@@ -828,7 +828,7 @@ function list_tests() {
 }
 
 # Figure out which, if any, tests to run.
-all_tests=($(list_tests))
+mapfile -t all_tests < <(list_tests)
 tests_to_run=()
 
 function print_tests() {
@@ -855,7 +855,7 @@ for arg; do
         if [[ "${t}" =~ ${arg} ]]; then
             nmatches=$((nmatches+1))
             # Don't run tests twice, just keep the first match.
-            if [[ " ${tests_to_run[*]} " =~ " ${t} " ]]; then
+            if [[ " ${tests_to_run[*]} " == *" ${t} "* ]]; then
                 continue
             fi
             tests_to_run+=("${t}")
@@ -908,7 +908,8 @@ function run_test() {
     shift
 
     declare -g "$retvar"
-    local restore_opts=$(set +o)
+    local restore_opts
+    restore_opts=$(set +o)
     set +o errexit
     set +o nounset
     set +o pipefail
