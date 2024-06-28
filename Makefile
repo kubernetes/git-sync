@@ -283,4 +283,13 @@ lint-staticcheck:
 lint-golangci-lint:
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0 run
 
-lint: lint-staticcheck lint-golangci-lint
+lint-shellcheck:
+	docker run \
+	    --rm \
+	    -v `pwd`:`pwd` \
+	    -w `pwd` \
+	    docker.io/koalaman/shellcheck-alpine:v0.9.0 \
+	        shellcheck \
+	        $$(git ls-files ':!:vendor' '*.sh')
+
+lint: lint-staticcheck lint-golangci-lint lint-shellcheck

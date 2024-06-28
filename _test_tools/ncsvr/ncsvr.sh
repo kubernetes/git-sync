@@ -14,17 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-if [ -z "$1" -o -z "$2" ]; then
+if [ -z "$1" ] || [ -z "$2" ]; then
     echo "usage: $0 <port> <shell-command>"
     exit 1
 fi
 
-F="/tmp/fifo.$RANDOM"
-
+# This construction allows the passed-in command ($2) to optionally read from
+# the client before responding (e.g. an HTTP request).
+CMD_TO_NC=$(mktemp -u)
+NC_TO_CMD=$(mktemp -u)
+mkfifo "$CMD_TO_NC" "$NC_TO_CMD"
 while true; do
-    rm -f "$F"
-    mkfifo "$F"
-    cat "$F" | sh -c "$2" 2>&1 | nc -l -p "$1" -N -w1 > "$F"
+    sh -c "$2" > "$CMD_TO_NC" 2>&1 < "$NC_TO_CMD" &
+    nc -l -p "$1" -N -w1 < "$CMD_TO_NC" > "$NC_TO_CMD"
     date >> /var/log/hits
 done
