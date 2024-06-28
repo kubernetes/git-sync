@@ -631,9 +631,9 @@ function git::rev_parse_branch() {
     SHA2="$(git rev-parse HEAD)"
 
     assert_eq "$(git rev-parse branch_1)" "$SHA1"
-    assert_eq "$(git rev-parse branch_1^{commit})" "$SHA1"
+    assert_eq "$(git rev-parse 'branch_1^{commit}')" "$SHA1"
     assert_eq "$(git rev-parse branch_2)" "$SHA2"
-    assert_eq "$(git rev-parse branch_2^{commit})" "$SHA2"
+    assert_eq "$(git rev-parse 'branch_2^{commit}')" "$SHA2"
 }
 
 ##############################################
@@ -675,13 +675,13 @@ function git::rev_parse_tag() {
     git tag tag_4
 
     assert_eq "$(git rev-parse tag_1)" "$SHA1"
-    assert_eq "$(git rev-parse tag_1^{commit})" "$SHA1"
+    assert_eq "$(git rev-parse 'tag_1^{commit}')" "$SHA1"
     assert_eq "$(git rev-parse tag_2)" "$SHA2"
-    assert_eq "$(git rev-parse tag_2^{commit})" "$SHA2"
+    assert_eq "$(git rev-parse 'tag_2^{commit}')" "$SHA2"
     assert_eq "$(git rev-parse tag_3)" "$SHA3"
-    assert_eq "$(git rev-parse tag_3^{commit})" "$SHA3"
+    assert_eq "$(git rev-parse 'tag_3^{commit}')" "$SHA3"
     assert_eq "$(git rev-parse tag_4)" "$SHA4"
-    assert_eq "$(git rev-parse tag_4^{commit})" "$SHA4"
+    assert_eq "$(git rev-parse 'tag_4^{commit}')" "$SHA4"
 }
 
 ##############################################
@@ -724,10 +724,10 @@ function git::rev_parse_tag_annotated() {
 
     # Annotated tags have their own SHA, which can be found with rev-parse, but
     # it doesn't make sense to test rev-parse against itself.
-    assert_eq "$(git rev-parse anntag_1^{commit})" "$SHA1"
-    assert_eq "$(git rev-parse anntag_2^{commit})" "$SHA2"
-    assert_eq "$(git rev-parse anntag_3^{commit})" "$SHA3"
-    assert_eq "$(git rev-parse anntag_4^{commit})" "$SHA4"
+    assert_eq "$(git rev-parse 'anntag_1^{commit}')" "$SHA1"
+    assert_eq "$(git rev-parse 'anntag_2^{commit}')" "$SHA2"
+    assert_eq "$(git rev-parse 'anntag_3^{commit}')" "$SHA3"
+    assert_eq "$(git rev-parse 'anntag_4^{commit}')" "$SHA4"
 }
 
 ##############################################
@@ -804,10 +804,10 @@ function git::rev_parse_non_existent_sha() {
     # As long as it tastes like a SHA, rev-parse is happy, but there is no
     # commit for it.
     assert_eq "$(git rev-parse 0123456789abcdef0123456789abcdef01234567)" "0123456789abcdef0123456789abcdef01234567"
-    assert_substr "$(git rev-parse 0123456789abcdef0123456789abcdef01234567^{commit} 2>&1 || true)" "unknown revision"
+    assert_substr "$(git rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}' 2>&1 || true)" "unknown revision"
     # Less-than-full SHAs do not work.
     assert_substr "$(git rev-parse 0123456789abcdef 2>&1 || true)" "unknown revision"
-    assert_substr "$(git rev-parse 0123456789abcdef^{commit} 2>&1 || true)" "unknown revision"
+    assert_substr "$(git rev-parse '0123456789abcdef^{commit}' 2>&1 || true)" "unknown revision"
 }
 
 #
