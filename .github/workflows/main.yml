@@ -44,6 +44,13 @@ jobs:
 
       - name: make test
         working-directory: git-sync
+        env:
+          SKIP_GITHUB_APP_TEST: false
+          TEST_GITHUB_APP_APPLICATION_ID: ${{ secrets.TEST_GITHUB_APP_APPLICATION_ID }}
+          TEST_GITHUB_APP_AUTH_TEST_REPO: ${{ secrets.TEST_GITHUB_APP_AUTH_TEST_REPO }}
+          TEST_GITHUB_APP_CLIENT_ID: ${{ secrets.TEST_GITHUB_APP_CLIENT_ID }}
+          TEST_GITHUB_APP_INSTALLATION_ID: ${{ secrets.TEST_GITHUB_APP_INSTALLATION_ID }}
+          TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_APP_PRIVATE_KEY }}
         run: |
           make test
 

@@ -194,6 +194,48 @@ fi
 RUNID="${RANDOM}${RANDOM}"
 DIR="/tmp/git-sync-e2e.$RUNID"
 mkdir "$DIR"
+function final_cleanup() {
+  if [[ "${CLEANUP:-}" == 0 ]]; then
+      echo "leaving logs in $DIR"
+  else
+      rm -rf "$DIR"
+  fi
+}
+# Set the trap to call the final_cleanup function on exit.
+trap final_cleanup EXIT
+
+skip_github_app_test="${SKIP_GITHUB_APP_TEST:-false}"
+required_env_vars=()
+LOCAL_GITHUB_APP_PRIVATE_KEY_FILE="github_app_private_key.pem"
+GITHUB_APP_PRIVATE_KEY_MOUNT=""
+if [[ "${skip_github_app_test}" != "true" ]]; then
+  required_env_vars=(
+    "TEST_GITHUB_APP_AUTH_TEST_REPO"
+    "TEST_GITHUB_APP_APPLICATION_ID"
+    "TEST_GITHUB_APP_INSTALLATION_ID"
+    "TEST_GITHUB_APP_CLIENT_ID"
+    "TEST_GITHUB_APP_PRIVATE_KEY_FILE"
+  )
+
+  # TEST_GITHUB_APP_PRIVATE_KEY, if set, overrides TEST_GITHUB_APP_PRIVATE_KEY_FILE
+  if [[ -v TEST_GITHUB_APP_PRIVATE_KEY && -n "${TEST_GITHUB_APP_PRIVATE_KEY}" ]]; then
+    if [[ ! -v TEST_GITHUB_APP_PRIVATE_KEY_FILE || -z "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}" ]]; then
+      TEST_GITHUB_APP_PRIVATE_KEY_FILE="${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
+    fi
+    echo "${TEST_GITHUB_APP_PRIVATE_KEY}" > "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}"
+  fi
+
+  # Validate all required environment variables for the github-app-auth tests are provided.
+  for var in "${required_env_vars[@]}"; do
+    if [[ ! -v "${var}" ]]; then
+      echo "Error: Required environment variable '${var}' is not set or empty. Either provide a value or skip the GitHub App test by setting SKIP_GITHUB_APP_TEST to 'true'."
+      exit 1
+    fi
+  done
+
+  # Mount the GitHub App private key file to the git-sync container
+  GITHUB_APP_PRIVATE_KEY_MOUNT=(-v "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}":"/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":ro)
+fi
 
 # WORK is temp space and in reset for each testcase.
 WORK="$DIR/work"
@@ -295,7 +337,7 @@ function GIT_SYNC() {
         -v "$DOT_SSH/1/id_test":"/ssh/secret.1":ro \
         -v "$DOT_SSH/2/id_test":"/ssh/secret.2":ro \
         -v "$DOT_SSH/3/id_test":"/ssh/secret.3":ro \
-	-v "$(pwd)/$GITHUB_APP_PRIVATE_KEY_FILE":"/github_app_private_key.pem":ro \
+        "${GITHUB_APP_PRIVATE_KEY_MOUNT[@]}" \
         "${GIT_SYNC_E2E_IMAGE}" \
             -v=6 \
             --add-user \
@@ -2189,27 +2231,33 @@ function e2e::auth_askpass_url_slow_start() {
 # Test github app auth
 ##############################################
 function e2e::auth_github_app_application_id() {
+    if [[ "${skip_github_app_test}" == "true" ]]; then
+        return
+    fi
     GIT_SYNC \
         --one-time \
-        --repo="$GITHUB_APP_AUTH_TEST_REPO" \
-        --github-app-application-id "$GITHUB_APP_APPLICATION_ID" \
-        --github-app-installation-id "$GITHUB_APP_INSTALLATION_ID" \
-        --github-app-private-key-file "/github_app_private_key.pem" \
-        --root="$ROOT" \
+        --repo="${TEST_GITHUB_APP_AUTH_TEST_REPO}" \
+        --github-app-application-id "${TEST_GITHUB_APP_APPLICATION_ID}" \
+        --github-app-installation-id "${TEST_GITHUB_APP_INSTALLATION_ID}" \
+        --github-app-private-key-file "/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}" \
+        --root="${ROOT}" \
         --link="link"
-    assert_file_exists "$ROOT/link/LICENSE"
+    assert_file_exists "${ROOT}/link/LICENSE"
 }
 
 function e2e::auth_github_app_client_id() {
+    if [[ "${skip_github_app_test}" == "true" ]]; then
+        return
+    fi
     GIT_SYNC \
         --one-time \
-        --repo="$GITHUB_APP_AUTH_TEST_REPO" \
-        --github-app-client-id "$GITHUB_APP_CLIENT_ID" \
-        --github-app-installation-id "$GITHUB_APP_INSTALLATION_ID" \
-        --github-app-private-key-file "/github_app_private_key.pem" \
-        --root="$ROOT" \
+        --repo="${TEST_GITHUB_APP_AUTH_TEST_REPO}" \
+        --github-app-client-id "${TEST_GITHUB_APP_CLIENT_ID}" \
+        --github-app-installation-id "${TEST_GITHUB_APP_INSTALLATION_ID}" \
+        --github-app-private-key-file "/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}" \
+        --root="${ROOT}" \
         --link="link"
-    assert_file_exists "$ROOT/link/LICENSE"
+    assert_file_exists "${ROOT}/link/LICENSE"
 }
 
 ##############################################
@@ -3640,11 +3688,4 @@ if [[ "$FINAL_RET" != 0 ]]; then
     exit 1
 fi
 
-# Finally...
-echo
-if [[ "${CLEANUP:-}" == 0 ]]; then
-    echo "leaving logs in $DIR"
-else
-    rm -rf "$DIR"
-fi
 

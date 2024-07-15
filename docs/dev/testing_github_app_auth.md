@@ -15,24 +15,29 @@ Go to https://github.com/settings/apps/new
 
 ## Step 2: Export the necessary environment variables
 
-The following environment variables are *required* to run the git-sync github app auth tests:
-- `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_APP_APPLICATION_ID`
-- `GITHUB_APP_CLIENT_ID`
-- `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_AUTH_TEST_REPO`
+The following environment variables are *required* to run the git-sync GitHub app auth tests:
+- `TEST_GITHUB_APP_PRIVATE_KEY` or `TEST_GITHUB_APP_PRIVATE_KEY_FILE`. If both are set, `TEST_GITHUB_APP_PRIVATE_KEY` overwrites `TEST_GITHUB_APP_PRIVATE_KEY_FILE`.
+- `TEST_GITHUB_APP_APPLICATION_ID`
+- `TEST_GITHUB_APP_CLIENT_ID`
+- `TEST_GITHUB_APP_INSTALLATION_ID`
+- `TEST_GITHUB_APP_AUTH_TEST_REPO`
 
-### GITHUB_APP_PRIVATE_KEY
-Should have been saved when creating the app
+### TEST_GITHUB_APP_PRIVATE_KEY
+The content of the GitHub app's private key file. It should have been saved when creating the app.
+If `TEST_GITHUB_APP_PRIVATE_KEY_FILE` is also set, it overwrites the file with the content.
+Otherwise, it saves the content to `/tmp/git-sync-e2e.random-id/github_app_private_key.pem`.
 
-### GITHUB_APP_APPLICATION_ID
-The value after "App ID" in the app's settings page
+### TEST_GITHUB_APP_PRIVATE_KEY_FILE
+The absolute path to the file that stores the GitHub app's private key file. It should have been saved when creating the app.
 
-### GITHUB_APP_CLIENT_ID
-The value after "Client ID" in the app's settings page
+### TEST_GITHUB_APP_APPLICATION_ID
+The value after "App ID" in the app's settings page.
 
-### GITHUB_APP_INSTALLATION_ID
+### TEST_GITHUB_APP_CLIENT_ID
+The value after "Client ID" in the app's settings page.
+
+### TEST_GITHUB_APP_INSTALLATION_ID
 Found in the URL of the app's installation page if you installed it to a repository: https://github.com/settings/installations/<installation_id>
 
-### GITHUB_APP_AUTH_TEST_REPO
-Should be set to the repository that the github app is installed to.
+### TEST_GITHUB_APP_AUTH_TEST_REPO.
+Should be set to the repository that the GitHub app is installed to.
