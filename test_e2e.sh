@@ -182,9 +182,13 @@ function docker_signal() {
 # tags are system-global, but one might have multiple repos checked out.
 E2E_TAG=$(git rev-parse --show-toplevel | sed 's|/|_|g')
 
-# Setting IMAGE forces the test to use a specific image instead of the current
-# tree.
-IMAGE="${IMAGE:-"e2e/git-sync:${E2E_TAG}__$(go env GOOS)_$(go env GOARCH)"}"
+# Setting GIT_SYNC_E2E_IMAGE forces the test to use a specific image instead of the
+# current tree.
+build_container=false
+if [[ "${GIT_SYNC_E2E_IMAGE:-unset}" == "unset" ]]; then
+  GIT_SYNC_E2E_IMAGE="e2e/git-sync:${E2E_TAG}__$(go env GOOS)_$(go env GOARCH)"
+  build_container=true
+fi
 
 # DIR is the directory in which all this test's state lives.
 RUNID="${RANDOM}${RANDOM}"
@@ -291,7 +295,7 @@ function GIT_SYNC() {
         -v "$DOT_SSH/1/id_test":"/ssh/secret.1":ro \
         -v "$DOT_SSH/2/id_test":"/ssh/secret.2":ro \
         -v "$DOT_SSH/3/id_test":"/ssh/secret.3":ro \
-        "${IMAGE}" \
+        "${GIT_SYNC_E2E_IMAGE}" \
             -v=6 \
             --add-user \
             --group-write \
@@ -3468,7 +3472,7 @@ if [[ "$#" == 0 ]]; then
 fi
 
 # Build it
-make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
+$build_container && make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
 make test-tools REGISTRY=e2e
 
 function finish() {
