@@ -21,6 +21,7 @@ package main // import "k8s.io/git-sync/cmd/git-sync"
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
@@ -71,6 +73,11 @@ var (
 		Name: "git_sync_askpass_calls",
 		Help: "How many git askpass calls completed, partitioned by state (success, error)",
 	}, []string{"status"})
+
+	metricRefreshGitHubAppTokenCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_refresh_github_app_token_count",
+		Help: "How many times the GitHub app token was refreshed, partitioned by state (success, error)",
+	}, []string{"status"})
 )
 
 func init() {
@@ -78,6 +85,7 @@ func init() {
 	prometheus.MustRegister(metricSyncCount)
 	prometheus.MustRegister(metricFetchCount)
 	prometheus.MustRegister(metricAskpassCount)
+	prometheus.MustRegister(metricRefreshGitHubAppTokenCount)
 }
 
 const (
@@ -107,20 +115,21 @@ const defaultDirMode = os.FileMode(0775) // subject to umask
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd          string         // the git command to run
-	root         absPath        // absolute path to the root directory
-	repo         string         // remote repo to sync
-	ref          string         // the ref to sync
-	depth        int            // for shallow sync
-	submodules   submodulesMode // how to handle submodules
-	gc           gcMode         // garbage collection
-	link         absPath        // absolute path to the symlink to publish
-	authURL      string         // a URL to re-fetch credentials, or ""
-	sparseFile   string         // path to a sparse-checkout file
-	syncCount    int            // how many times have we synced?
-	log          *logging.Logger
-	run          cmd.Runner
-	staleTimeout time.Duration // time for worktrees to be cleaned up
+	cmd            string         // the git command to run
+	root           absPath        // absolute path to the root directory
+	repo           string         // remote repo to sync
+	ref            string         // the ref to sync
+	depth          int            // for shallow sync
+	submodules     submodulesMode // how to handle submodules
+	gc             gcMode         // garbage collection
+	link           absPath        // absolute path to the symlink to publish
+	authURL        string         // a URL to re-fetch credentials, or ""
+	sparseFile     string         // path to a sparse-checkout file
+	syncCount      int            // how many times have we synced?
+	log            *logging.Logger
+	run            cmd.Runner
+	staleTimeout   time.Duration // time for worktrees to be cleaned up
+	appTokenExpiry time.Time     // time when github app auth token expires
 }
 
 func main() {
@@ -255,6 +264,24 @@ func main() {
 	flAskPassURL := pflag.String("askpass-url",
 		envString("", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL"),
 		"a URL to query for git credentials (username=<value> and password=<value>)")
+
+	flGithubBaseURL := pflag.String("github-base-url",
+		envString("https://api.github.com/", "GITSYNC_GITHUB_BASE_URL"),
+		"the GitHub base URL to use when making requests to GitHub when using GitHub app auth")
+	flGithubAppPrivateKey := envFlagString("GITSYNC_GITHUB_APP_PRIVATE_KEY", "",
+		"the private key to use for GitHub app auth")
+	flGithubAppPrivateKeyFile := pflag.String("github-app-private-key-file",
+		envString("", "GITSYNC_GITHUB_APP_PRIVATE_KEY_FILE"),
+		"the file from which the private key for GitHub app auth will be sourced")
+	flGithubAppClientID := pflag.String("github-app-client-id",
+		envString("", "GITSYNC_GITHUB_APP_CLIENT_ID"),
+		"the GitHub app client ID to use for GitHub app auth")
+	flGithubAppApplicationID := pflag.Int("github-app-application-id",
+		envInt(0, "GITSYNC_GITHUB_APP_APPLICATION_ID"),
+		"the GitHub app application ID to use for GitHub app auth")
+	flGithubAppInstallationID := pflag.Int("github-app-installation-id",
+		envInt(0, "GITSYNC_GITHUB_APP_INSTALLATION_ID"),
+		"the GitHub app installation ID to use for GitHub app auth")
 
 	flGitCmd := pflag.String("git",
 		envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
@@ -532,6 +559,37 @@ func main() {
 		}
 		if *flPasswordFile != "" {
 			fatalConfigError(log, true, "invalid flag: --password-file may only be specified when --username is specified")
+		}
+	}
+
+	if *flGithubAppApplicationID != 0 || *flGithubAppClientID != "" {
+		if *flGithubAppApplicationID != 0 && *flGithubAppClientID != "" {
+			fatalConfigError(log, true, "invalid flag: only one of --github-app-application-id or --github-app-client-id may be specified")
+		}
+		if *flGithubAppInstallationID == 0 {
+			fatalConfigError(log, true, "invalid flag: --github-app-installation-id must be specified when --github-app-application-id or --github-app-client-id are specified")
+		}
+		if *flGithubAppPrivateKey == "" && *flGithubAppPrivateKeyFile == "" {
+			fatalConfigError(log, true, "invalid flag: $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file must be specified when --github-app-application-id or --github-app-client-id are specified")
+		}
+		if *flGithubAppPrivateKey != "" && *flGithubAppPrivateKeyFile != "" {
+			fatalConfigError(log, true, "invalid flag: only one of $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file may be specified")
+		}
+		if *flUsername != "" {
+			fatalConfigError(log, true, "invalid flag: --username may not be specified when --github-app-private-key-file is specified")
+		}
+		if *flPassword != "" {
+			fatalConfigError(log, true, "invalid flag: --password may not be specified when --github-app-private-key-file is specified")
+		}
+		if *flPasswordFile != "" {
+			fatalConfigError(log, true, "invalid flag: --password-file may not be specified when --github-app-private-key-file is specified")
+		}
+	} else {
+		if *flGithubAppApplicationID != 0 {
+			fatalConfigError(log, true, "invalid flag: --github-app-application-id may only be specified when --github-app-private-key-file is specified")
+		}
+		if *flGithubAppInstallationID != 0 {
+			fatalConfigError(log, true, "invalid flag: --github-app-installation-id may only be specified when --github-app-private-key-file is specified")
 		}
 	}
 
@@ -838,6 +896,17 @@ func main() {
 			}
 			metricAskpassCount.WithLabelValues(metricKeySuccess).Inc()
 		}
+
+		if (*flGithubAppPrivateKeyFile != "" || *flGithubAppPrivateKey != "") && *flGithubAppInstallationID != 0 && (*flGithubAppApplicationID != 0 || *flGithubAppClientID != "") {
+			if git.appTokenExpiry.Before(time.Now().Add(30 * time.Second)) {
+				if err := git.RefreshGitHubAppToken(ctx, *flGithubBaseURL, *flGithubAppPrivateKey, *flGithubAppPrivateKeyFile, *flGithubAppClientID, *flGithubAppApplicationID, *flGithubAppInstallationID); err != nil {
+					metricRefreshGitHubAppTokenCount.WithLabelValues(metricKeyError).Inc()
+					return err
+				}
+				metricRefreshGitHubAppTokenCount.WithLabelValues(metricKeySuccess).Inc()
+			}
+		}
+
 		return nil
 	}
 
@@ -1940,6 +2009,94 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	return nil
 }
 
+// RefreshGitHubAppToken generates a new installation token for a GitHub app and stores it as a credential
+func (git *repoSync) RefreshGitHubAppToken(ctx context.Context, githubBaseURL, privateKey, privateKeyFile, clientID string, appID, installationID int) error {
+	git.log.V(3).Info("refreshing GitHub app token")
+
+	privateKeyBytes := []byte(privateKey)
+	if privateKey == "" {
+		b, err := os.ReadFile(privateKeyFile)
+		if err != nil {
+			git.log.Error(err, "can't read private key file", "file", privateKeyFile)
+			os.Exit(1)
+		}
+
+		privateKeyBytes = b
+	}
+
+	pkey, err := jwt.ParseRSAPrivateKeyFromPEM(privateKeyBytes)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+
+	// either client ID or app ID can be used when minting JWTs
+	issuer := clientID
+	if issuer == "" {
+		issuer = strconv.Itoa(appID)
+	}
+
+	claims := jwt.RegisteredClaims{
+		Issuer:    issuer,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
+	}
+
+	jwt, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(pkey)
+	if err != nil {
+		return err
+	}
+
+	url, err := url.JoinPath(githubBaseURL, fmt.Sprintf("app/installations/%d/access_tokens", installationID))
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+jwt)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != 201 {
+		errMessage, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("GitHub app installation endpoint returned status %d, failed to read body: %w", resp.StatusCode, err)
+		}
+		return fmt.Errorf("GitHub app installation endpoint returned status %d, body: %q", resp.StatusCode, string(errMessage))
+	}
+
+	tokenResponse := struct {
+		Token     string    `json:"token"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}{}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
+		return err
+	}
+
+	git.appTokenExpiry = tokenResponse.ExpiresAt
+
+	// username must be non-empty
+	username := "-"
+	password := tokenResponse.Token
+
+	if err := git.StoreCredentials(ctx, git.repo, username, password); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // SetupDefaultGitConfigs configures the global git environment with some
 // default settings that we need.
 func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
@@ -2332,6 +2489,29 @@ OPTIONS
             - off: Disable explicit git garbage collection, which may be a good
               fit when also using --one-time.
 
+    --github-base-url <string>, $GITSYNC_GITHUB_BASE_URL
+            The GitHub base URL to use in GitHub requests when GitHub app
+            authentication is used. If not specified, defaults to
+            https://api.github.com/.
+
+    --github-app-private-key-file <string>, $GITSYNC_GITHUB_APP_PRIVATE_KEY_FILE
+            The file from which the private key to use for GitHub app
+            authentication will be read.
+
+    --github-app-installation-id <int>, $GITSYNC_GITHUB_APP_INSTALLATION_ID
+            The installation ID of the GitHub app used for GitHub app
+            authentication.
+
+    --github-app-application-id <int>, $GITSYNC_GITHUB_APP_APPLICATION_ID
+            The app ID of the GitHub app used for GitHub app authentication.
+            One of --github-app-application-id or --github-app-client-id is required
+            when GitHub app authentication is used.
+
+    --github-app-client-id <int>, $GITSYNC_GITHUB_APP_CLIENT_ID
+            The client ID of the GitHub app used for GitHub app authentication.
+            One of --github-app-application-id or --github-app-client-id is required
+            when GitHub app authentication is used.
+
     --group-write, $GITSYNC_GROUP_WRITE
             Ensure that data written to disk (including the git repo metadata,
             checked out files, worktrees, and symlink) are all group writable.
@@ -2547,6 +2727,23 @@ AUTHENTICATION
     cookies
             When --cookie-file ($GITSYNC_COOKIE_FILE) is specified, the
             associated cookies can contain authentication information.
+
+    github app
+           When --github-app-private-key-file ($GITSYNC_GITHUB_APP_PRIVATE_KEY_FILE),
+           --github-app-application-id ($GITSYNC_GITHUB_APP_APPLICATION_ID) or
+           --github-app-client-id ($GITSYNC_GITHUB_APP_CLIENT_ID)
+           and --github-app-installation_id ($GITSYNC_GITHUB_APP_INSTALLATION_ID)
+           are specified, GitHub app authentication will be used.
+
+           These credentials are used to request a short-lived token which
+           is used for authentication. The base URL of the GitHub request made
+           to retrieve the token can also be specified via
+           --github-base-url ($GITSYNC_GITHUB_BASE_URL), which defaults to
+           https://api.github.com/.
+
+           The GitHub app must have sufficient access to the repository to sync.
+           It should be installed to the repository or organization containing
+           the repository, and given read access (see github docs).
 
 HOOKS
 
