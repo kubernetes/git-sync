@@ -246,6 +246,29 @@ OPTIONS
             - off: Disable explicit git garbage collection, which may be a good
               fit when also using --one-time.
 
+    --github-base-url <string>, $GITSYNC_GITHUB_BASE_URL
+            The GitHub base URL to use in GitHub requests when GitHub app
+            authentication is used. If not specified, defaults to
+            https://api.github.com/.
+
+    --github-app-private-key-file <string>, $GITSYNC_GITHUB_APP_PRIVATE_KEY_FILE
+            The file from which the private key to use for GitHub app
+            authentication will be read.
+
+    --github-app-installation-id <int>, $GITSYNC_GITHUB_APP_INSTALLATION_ID
+            The installation ID of the GitHub app used for GitHub app
+            authentication.
+
+    --github-app-application-id <int>, $GITSYNC_GITHUB_APP_APPLICATION_ID
+            The app ID of the GitHub app used for GitHub app authentication.
+            One of --github-app-application-id or --github-app-client-id is required
+            when GitHub app authentication is used.
+
+    --github-app-client-id <int>, $GITSYNC_GITHUB_APP_CLIENT_ID
+            The client ID of the GitHub app used for GitHub app authentication.
+            One of --github-app-application-id or --github-app-client-id is required
+            when GitHub app authentication is used.
+
     --group-write, $GITSYNC_GROUP_WRITE
             Ensure that data written to disk (including the git repo metadata,
             checked out files, worktrees, and symlink) are all group writable.
@@ -462,6 +485,23 @@ AUTHENTICATION
             When --cookie-file ($GITSYNC_COOKIE_FILE) is specified, the
             associated cookies can contain authentication information.
 
+    github app
+           When --github-app-private-key-file ($GITSYNC_GITHUB_APP_PRIVATE_KEY_FILE),
+           --github-app-application-id ($GITSYNC_GITHUB_APP_APPLICATION_ID) or
+           --github-app-client-id ($GITSYNC_GITHUB_APP_CLIENT_ID)
+           and --github-app-installation_id ($GITSYNC_GITHUB_APP_INSTALLATION_ID)
+           are specified, GitHub app authentication will be used.
+
+           These credentials are used to request a short-lived token which
+           is used for authentication. The base URL of the GitHub request made
+           to retrieve the token can also be specified via
+           --github-base-url ($GITSYNC_GITHUB_BASE_URL), which defaults to
+           https://api.github.com/.
+
+           The GitHub app must have sufficient access to the repository to sync.
+           It should be installed to the repository or organization containing
+           the repository, and given read access (see github docs).
+
 HOOKS
 
     Webhooks and exechooks are executed asynchronously from the main git-sync
@@ -480,3 +520,4 @@ HOOKS
     if a hook fails and a new hash is synced during the backoff period, the
     retried hook will fire for the newest hash.
 ```
+
