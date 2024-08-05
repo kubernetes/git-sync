@@ -424,3 +424,43 @@ func TestTouch(t *testing.T) {
 		t.Errorf("touch(newfile) mtime %v is not after %v", newfileInfo.ModTime(), stamp)
 	}
 }
+
+func TestHasGitLockFile(t *testing.T) {
+	testCases := map[string]struct {
+		inputFilePath  []string
+		expectLockFile bool
+	}{
+		"missing .git directory": {
+			expectLockFile: false,
+		},
+		"has git directory but no lock files": {
+			inputFilePath:  []string{".git", "HEAD"},
+			expectLockFile: false,
+		},
+		"shallow.lock file": {
+			inputFilePath:  []string{".git", "shallow.lock"},
+			expectLockFile: true,
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			root := absPath(t.TempDir())
+
+			if len(tc.inputFilePath) > 0 {
+				if err := touch(root.Join(tc.inputFilePath...)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			lockFile, err := hasGitLockFile(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hasLock := len(lockFile) > 0
+			if hasLock != tc.expectLockFile {
+				t.Fatalf("expected hasGitLockFile to return %v, but got %v", tc.expectLockFile, hasLock)
+			}
+		})
+	}
+}
