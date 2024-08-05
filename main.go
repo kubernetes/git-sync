@@ -1227,6 +1227,19 @@ func (git *repoSync) removeStaleWorktrees() (int, error) {
 	return count, nil
 }
 
+func hasGitLockFile(gitRoot absPath) (bool, error) {
+	gitLockFiles := []string{"shallow.lock"}
+	for _, lockFile := range gitLockFiles {
+		_, err := os.Stat(gitRoot.Join(".git", lockFile).String())
+		if err == nil {
+			return true, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 // sanityCheckRepo tries to make sure that the repo dir is a valid git repository.
 func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	git.log.V(3).Info("sanity-checking git repo", "repo", git.root)
@@ -1255,6 +1268,16 @@ func (git *repoSync) sanityCheckRepo(ctx context.Context) bool {
 	// REALLY verbose.
 	if _, _, err := git.Run(ctx, git.root, "fsck", "--no-progress", "--connectivity-only"); err != nil {
 		git.log.Error(err, "repo fsck failed", "path", git.root)
+		return false
+	}
+
+	// Check if the repository contains an unreleased lock file. This can happen if
+	// a previous git invocation crashed.
+	if hasLock, err := hasGitLockFile(git.root); err != nil {
+		git.log.Error(err, "error calling stat on file", "path", git.root)
+		return false
+	} else if hasLock {
+		git.log.Error(nil, "repo contains lock file", "path", git.root)
 		return false
 	}
 
