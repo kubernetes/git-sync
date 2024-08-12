@@ -25,6 +25,41 @@ git-sync can also be configured to make a webhook call or exec a command upon
 successful git repo synchronization. The call is made after the symlink is
 updated.
 
+## What it produces and why - the contract
+
+git-sync has two required flags: `--repo`, which specifies which remote git
+repo to sync, and `--root` which specifies a working directory for git-sync,
+which presents an "API" of sorts.
+
+The `--root` directory is _not_ the synced data.
+
+Inside the `--root` directory git-sync stores the synced git state and other
+things.  That directory may or may not respond to git commands - it's an
+implementation detail.
+
+One of the things in that directory is a symlink (see the `--link` flag) to the
+most recently synced data.  This is how the data is expected to be consumed,
+and is considered to be the "contract" between git-sync and consumers.  The
+exact target of that symlink is an implementation detail, but the leaf
+component of the target (i.e. `basename "$(readlink <link>)"`) is the git hash
+of the synced revision.  This is also part of the contract.
+
+git-sync looks for changes in the remote repo periodically (see the `--period`
+flag) and will attempt to transfer as little data as possible and use as little
+disk space as possible (see the `--depth` and `--git-gc` flags), but this is
+not part of the contract.
+
+### Why the symlink?
+
+git checkouts are not "atomic" operations.  If you look at the repository while
+a checkout is happening, you might see data that is neither exactly the old
+revision nor the new.  git-sync "publishes" updates via the symlink to present
+an atomic interface to consumers.  When the remote repo has changed, git-sync
+will fetch the data _without_ checking it out, then create a new worktree, then
+change the symlink to point to that new worktree.
+
+git-sync does not currently have a no-symlink mode.
+
 ## Major update: v3.x -> v4.x
 
 git-sync has undergone many significant changes between v3.x and v4.x.  [See
@@ -138,6 +173,38 @@ DESCRIPTION
 
     git-sync can also be configured to make a webhook call upon successful git
     repo synchronization.  The call is made after the symlink is updated.
+
+CONTRACT
+
+    git-sync has two required flags:
+      --repo: specifies which remote git repo to sync
+      --root: specifies a working directory for git-sync
+
+    The root directory is not the synced data.
+
+    Inside the root directory, git-sync stores the synced git state and other
+    things.  That directory may or may not respond to git commands - it's an
+    implementation detail.
+
+    One of the things in that directory is a symlink (see the --link flag) to
+    the most recently synced data.  This is how the data is expected to be
+    consumed, and is considered to be the "contract" between git-sync and
+    consumers.  The exact target of that symlink is an implementation detail,
+    but the leaf component of the target (i.e. basename "$(readlink <link>)")
+    is the git hash of the synced revision.  This is also part of the contract.
+
+    Why the symlink?  git checkouts are not "atomic" operations.  If you look
+    at the repository while a checkout is happening, you might see data that is
+    neither exactly the old revision nor the new.  git-sync "publishes" updates
+    via the symlink to present an atomic interface to consumers.  When the
+    remote repo has changed, git-sync will fetch the data _without_ checking it
+    out, then create a new worktree, then change the symlink to point to that
+    new worktree.
+
+    git-sync looks for changes in the remote repo periodically (see the
+    --period flag) and will attempt to transfer as little data as possible and
+    use as little disk space as possible (see the --depth and --git-gc flags),
+    but this is not part of the contract.
 
 OPTIONS
 
