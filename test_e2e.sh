@@ -41,6 +41,11 @@ function fail() {
     return 42
 }
 
+function skip() {
+    echo "SKIP" >&3
+    return 43
+}
+
 function pass() {
     echo "PASS"
 }
@@ -204,37 +209,43 @@ function final_cleanup() {
 # Set the trap to call the final_cleanup function on exit.
 trap final_cleanup EXIT
 
-skip_github_app_test="${SKIP_GITHUB_APP_TEST:-false}"
+skip_github_app_test="${SKIP_GITHUB_APP_TEST:-true}"
 required_env_vars=()
 LOCAL_GITHUB_APP_PRIVATE_KEY_FILE="github_app_private_key.pem"
-GITHUB_APP_PRIVATE_KEY_MOUNT=""
+GITHUB_APP_PRIVATE_KEY_MOUNT=()
 if [[ "${skip_github_app_test}" != "true" ]]; then
   required_env_vars=(
     "TEST_GITHUB_APP_AUTH_TEST_REPO"
     "TEST_GITHUB_APP_APPLICATION_ID"
     "TEST_GITHUB_APP_INSTALLATION_ID"
     "TEST_GITHUB_APP_CLIENT_ID"
-    "TEST_GITHUB_APP_PRIVATE_KEY_FILE"
   )
 
-  # TEST_GITHUB_APP_PRIVATE_KEY, if set, overrides TEST_GITHUB_APP_PRIVATE_KEY_FILE
-  if [[ -v TEST_GITHUB_APP_PRIVATE_KEY && -n "${TEST_GITHUB_APP_PRIVATE_KEY}" ]]; then
-    if [[ ! -v TEST_GITHUB_APP_PRIVATE_KEY_FILE || -z "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}" ]]; then
-      TEST_GITHUB_APP_PRIVATE_KEY_FILE="${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
-    fi
-    echo "${TEST_GITHUB_APP_PRIVATE_KEY}" > "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}"
+  if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" && -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
+      echo "ERROR: Both TEST_GITHUB_APP_PRIVATE_KEY_FILE and TEST_GITHUB_APP_PRIVATE_KEY were specified."
+      exit 1
+  fi
+  if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
+    cp "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}" "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
+  elif [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
+    echo "${TEST_GITHUB_APP_PRIVATE_KEY}" > "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
+  else
+    echo "ERROR: Neither TEST_GITHUB_APP_PRIVATE_KEY_FILE nor TEST_GITHUB_APP_PRIVATE_KEY was specified."
+    echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
+    exit 1
   fi
 
   # Validate all required environment variables for the github-app-auth tests are provided.
   for var in "${required_env_vars[@]}"; do
     if [[ ! -v "${var}" ]]; then
-      echo "Error: Required environment variable '${var}' is not set or empty. Either provide a value or skip the GitHub App test by setting SKIP_GITHUB_APP_TEST to 'true'."
+      echo "ERROR: Required environment variable '${var}' is not set."
+      echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
       exit 1
     fi
   done
 
   # Mount the GitHub App private key file to the git-sync container
-  GITHUB_APP_PRIVATE_KEY_MOUNT=(-v "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}":"/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":ro)
+  GITHUB_APP_PRIVATE_KEY_MOUNT=(-v "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":"/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":ro)
 fi
 
 # WORK is temp space and in reset for each testcase.
@@ -2232,7 +2243,7 @@ function e2e::auth_askpass_url_slow_start() {
 ##############################################
 function e2e::auth_github_app_application_id() {
     if [[ "${skip_github_app_test}" == "true" ]]; then
-        return
+        skip
     fi
     GIT_SYNC \
         --one-time \
@@ -2247,7 +2258,7 @@ function e2e::auth_github_app_application_id() {
 
 function e2e::auth_github_app_client_id() {
     if [[ "${skip_github_app_test}" == "true" ]]; then
-        return
+        skip
     fi
     GIT_SYNC \
         --one-time \
@@ -3658,6 +3669,8 @@ for t; do
         run_test RUN_RET "${TEST_FN}" >"${LOG}.${RUN}" 2>&1
         if [[ "$RUN_RET" == 0 ]]; then
             pass
+        elif [[ "$RUN_RET" == 43 ]]; then
+            true # do nothing
         else
             TEST_RET=1
             if [[ "$RUN_RET" != 42 ]]; then
