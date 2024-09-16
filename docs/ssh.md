@@ -79,7 +79,7 @@ git-sync as non-root.
       # ...
       containers:
       - name: git-sync
-        image: registry.k8s.io/git-sync:v4.0.0
+        image: registry.k8s.io/git-sync/git-sync:v4.2.4
         args:
          - "--repo=git@github.com:foo/bar"
          - "--link=bar"
@@ -136,7 +136,7 @@ spec:
           defaultMode: 0400
       containers:
       - name: git-sync
-        image: registry.k8s.io/git-sync:v4.0.0
+        image: registry.k8s.io/git-sync/git-sync:v4.2.4
         args:
          - "--repo=git@github.com:torvalds/linux"
          - "--depth=1"
