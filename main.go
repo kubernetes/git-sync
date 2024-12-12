@@ -764,7 +764,7 @@ func main() {
 
 	// If the --repo or any submodule uses SSH, we need to know which keys.
 	if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
-		log.Error(err, "can't set up git SSH", "keyFile", *flSSHKeyFiles, "knownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
+		log.Error(err, "can't set up git SSH", "keyFiles", *flSSHKeyFiles, "useKnownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
 		os.Exit(1)
 	}
 
@@ -1910,6 +1910,18 @@ func (git *repoSync) SetupGitSSH(setupKnownHosts bool, pathsToSSHSecrets []strin
 	sshCmd := os.Getenv("GIT_SSH_COMMAND")
 	if sshCmd == "" {
 		sshCmd = "ssh"
+	}
+
+	// We can't pre-verify that key-files exist because we call this path
+	// without knowing whether we actually need SSH or not, in which case the
+	// files may not exist and that is OK.  But we can make SSH report more.
+	switch {
+	case git.log.V(9).Enabled():
+		sshCmd += " -vvv"
+	case git.log.V(7).Enabled():
+		sshCmd += " -vv"
+	case git.log.V(5).Enabled():
+		sshCmd += " -v"
 	}
 
 	for _, p := range pathsToSSHSecrets {
