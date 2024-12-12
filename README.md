@@ -587,4 +587,3 @@ HOOKS
     if a hook fails and a new hash is synced during the backoff period, the
     retried hook will fire for the newest hash.
 ```
-

@@ -159,6 +159,11 @@ Most flags can also be configured by environment variables.  In v3 the
 variables all start with `GIT_SYNC_`.  In v4 they all start with `GITSYNC_`,
 though the old names are still accepted for compatibility.
 
+If both an old (`GIT_SYNC_*`) name and a new (`GITSYNC_*`) name are specified,
+the behavior is:
+* v4.0.x - v4.3.x: the new name is used
+* v4.4.x and up: the old name is used
+
 ## Defaults
 
 ### Depth
