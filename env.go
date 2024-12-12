@@ -29,17 +29,42 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Tests can set this or set it to nil.
+var envWarnfOverride func(format string, args ...any)
+
+func envWarnf(format string, args ...any) {
+	if envWarnfOverride != nil {
+		envWarnfOverride(format, args...)
+	} else {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 func envString(def string, key string, alts ...string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return val
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = alt
 		}
 	}
-	return def
+	if found == 0 {
+		return def
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+	return result
 }
 func envFlagString(key string, def string, usage string, alts ...string) *string {
 	registerEnvFlag(key, "string", usage)
@@ -60,16 +85,31 @@ func envStringArray(def string, key string, alts ...string) []string {
 		return strings.Split(s, ":")
 	}
 
-	if val := os.Getenv(key); val != "" {
-		return parse(val)
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return parse(val)
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = key
 		}
 	}
-	return parse(def)
+	if found == 0 {
+		return parse(def)
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+
+	return parse(result)
 }
 
 func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
@@ -81,16 +121,30 @@ func envBoolOrError(def bool, key string, alts ...string) (bool, error) {
 		return false, fmt.Errorf("invalid bool env %s=%q: %w", key, val, err)
 	}
 
-	if val := os.Getenv(key); val != "" {
-		return parse(key, val)
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return parse(alt, val)
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = key
 		}
 	}
-	return def, nil
+	if found == 0 {
+		return def, nil
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+	return parse(resultKey, result)
 }
 func envBool(def bool, key string, alts ...string) bool {
 	val, err := envBoolOrError(def, key, alts...)
@@ -111,16 +165,30 @@ func envIntOrError(def int, key string, alts ...string) (int, error) {
 		return 0, fmt.Errorf("invalid int env %s=%q: %w", key, val, err)
 	}
 
-	if val := os.Getenv(key); val != "" {
-		return parse(key, val)
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return parse(alt, val)
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = key
 		}
 	}
-	return def, nil
+	if found == 0 {
+		return def, nil
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+	return parse(resultKey, result)
 }
 func envInt(def int, key string, alts ...string) int {
 	val, err := envIntOrError(def, key, alts...)
@@ -141,16 +209,30 @@ func envFloatOrError(def float64, key string, alts ...string) (float64, error) {
 		return 0, fmt.Errorf("invalid float env %s=%q: %w", key, val, err)
 	}
 
-	if val := os.Getenv(key); val != "" {
-		return parse(key, val)
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return parse(alt, val)
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = key
 		}
 	}
-	return def, nil
+	if found == 0 {
+		return def, nil
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+	return parse(resultKey, result)
 }
 func envFloat(def float64, key string, alts ...string) float64 {
 	val, err := envFloatOrError(def, key, alts...)
@@ -171,16 +253,30 @@ func envDurationOrError(def time.Duration, key string, alts ...string) (time.Dur
 		return 0, fmt.Errorf("invalid duration env %s=%q: %w", key, val, err)
 	}
 
-	if val := os.Getenv(key); val != "" {
-		return parse(key, val)
+	found := 0
+	result := ""
+	resultKey := ""
+
+	if val, ok := os.LookupEnv(key); ok {
+		found++
+		result = val
+		resultKey = key
 	}
 	for _, alt := range alts {
-		if val := os.Getenv(alt); val != "" {
-			fmt.Fprintf(os.Stderr, "env $%s has been deprecated, use $%s instead\n", alt, key)
-			return parse(alt, val)
+		if val, ok := os.LookupEnv(alt); ok {
+			envWarnf("env $%s has been deprecated, use $%s instead\n", alt, key)
+			found++
+			result = val
+			resultKey = key
 		}
 	}
-	return def, nil
+	if found == 0 {
+		return def, nil
+	}
+	if found > 1 {
+		envWarnf("env $%s was overridden by $%s\n", key, resultKey)
+	}
+	return parse(resultKey, result)
 }
 func envDuration(def time.Duration, key string, alts ...string) time.Duration {
 	val, err := envDurationOrError(def, key, alts...)
