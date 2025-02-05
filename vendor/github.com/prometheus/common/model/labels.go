@@ -138,7 +138,7 @@ func (ln *LabelName) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// LabelNames is a sortable LabelName slice. In implements sort.Interface.
+// LabelNames is a sortable LabelName slice. It implements sort.Interface.
 type LabelNames []LabelName
 
 func (l LabelNames) Len() int {
