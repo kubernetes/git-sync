@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-// WebHook structure, implements Hook
+// Webhook implements Hook for HTTP requests.
 type Webhook struct {
 	// Url for the http/s request
 	url string
@@ -39,7 +39,7 @@ type Webhook struct {
 	log logintf
 }
 
-// NewWebhook returns a new WebHook
+// NewWebhook returns a new WebHook.
 func NewWebhook(url, method string, success int, timeout time.Duration, log logintf) *Webhook {
 	return &Webhook{
 		url:     url,
@@ -50,12 +50,12 @@ func NewWebhook(url, method string, success int, timeout time.Duration, log logi
 	}
 }
 
-// Name describes hook, implements Hook.Name
+// Name describes hook, implements Hook.Name.
 func (w *Webhook) Name() string {
 	return "webhook"
 }
 
-// Do calls webhook.url, implements Hook.Do
+// Do calls webhook.url, implements Hook.Do.
 func (w *Webhook) Do(ctx context.Context, hash string) error {
 	req, err := http.NewRequest(w.method, w.url, nil)
 	if err != nil {

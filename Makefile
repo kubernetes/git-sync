@@ -51,7 +51,7 @@ IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)
 OS_ARCH_TAG := $(TAG)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.22
+BUILD_IMAGE ?= golang:1.24
 
 DBG_MAKEFILE ?=
 ifneq ($(DBG_MAKEFILE),1)
@@ -277,11 +277,8 @@ container-clean:
 bin-clean:
 	rm -rf .go bin
 
-lint-staticcheck:
-	go run honnef.co/go/tools/cmd/staticcheck@2023.1.3
-
 lint-golangci-lint:
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0 run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.0.0 run -v
 
 lint-shellcheck:
 	docker run \
@@ -292,4 +289,4 @@ lint-shellcheck:
 	        shellcheck \
 	        $$(git ls-files ':!:vendor' '*.sh')
 
-lint: lint-staticcheck lint-golangci-lint lint-shellcheck
+lint: lint-golangci-lint lint-shellcheck

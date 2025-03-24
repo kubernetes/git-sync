@@ -19,7 +19,7 @@ jobs:
       - name: Set up go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.4'
+          go-version: '1.24.1'
 
       - uses: actions/checkout@v4
         with:
@@ -36,7 +36,7 @@ jobs:
       - name: Set up go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.4'
+          go-version: '1.24.1'
 
       - uses: actions/checkout@v4
         with:
@@ -61,7 +61,7 @@ jobs:
       - name: Set up go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.4'
+          go-version: '1.24.1'
 
       - uses: actions/checkout@v4
         with:
@@ -72,10 +72,10 @@ jobs:
       # There is a risk of drift between the two, but this is only linting,
       # not runtime correctness!
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           working-directory: git-sync
-          version: v1.59.0
+          version: v2.0.0
 
       - name: make lint
         working-directory: git-sync

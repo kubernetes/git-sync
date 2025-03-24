@@ -25,7 +25,7 @@ import (
 	"k8s.io/git-sync/pkg/cmd"
 )
 
-// Exechook structure, implements Hook
+// Exechook implements Hook in terms of executing a command.
 type Exechook struct {
 	// Runner
 	cmdrunner cmd.Runner
@@ -41,7 +41,7 @@ type Exechook struct {
 	log logintf
 }
 
-// NewExechook returns a new Exechook
+// NewExechook returns a new Exechook.
 func NewExechook(cmdrunner cmd.Runner, command string, getWorktree func(string) string, args []string, timeout time.Duration, log logintf) *Exechook {
 	return &Exechook{
 		cmdrunner:   cmdrunner,
@@ -53,12 +53,12 @@ func NewExechook(cmdrunner cmd.Runner, command string, getWorktree func(string) 
 	}
 }
 
-// Name describes hook, implements Hook.Name
+// Name describes hook, implements Hook.Name.
 func (h *Exechook) Name() string {
 	return "exechook"
 }
 
-// Do runs exechook.command, implements Hook.Do
+// Do runs exechook.command, implements Hook.Do.
 func (h *Exechook) Do(ctx context.Context, hash string) error {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
