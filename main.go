@@ -378,7 +378,7 @@ func main() {
 
 	// Handle print-and-exit cases.
 	if *flVersion {
-		fmt.Println(version.VERSION)
+		fmt.Fprintln(os.Stdout, version.VERSION)
 		os.Exit(0)
 	}
 	if *flHelp {
@@ -415,7 +415,7 @@ func main() {
 	cmdRunner := cmd.NewRunner(log)
 
 	if *flRepo == "" {
-		fatalConfigError(log, true, "required flag: --repo must be specified")
+		fatalConfigErrorf(log, true, "required flag: --repo must be specified")
 	}
 
 	switch {
@@ -428,27 +428,27 @@ func main() {
 		log.V(0).Info("setting --ref from deprecated --rev")
 		*flRef = *flDeprecatedRev
 	case *flDeprecatedBranch != "" && *flDeprecatedRev != "":
-		fatalConfigError(log, true, "deprecated flag combo: can't set --ref from deprecated --branch and --rev (one or the other is OK)")
+		fatalConfigErrorf(log, true, "deprecated flag combo: can't set --ref from deprecated --branch and --rev (one or the other is OK)")
 	}
 
 	if *flRef == "" {
-		fatalConfigError(log, true, "required flag: --ref must be specified")
+		fatalConfigErrorf(log, true, "required flag: --ref must be specified")
 	}
 
 	if *flDepth < 0 { // 0 means "no limit"
-		fatalConfigError(log, true, "invalid flag: --depth must be greater than or equal to 0")
+		fatalConfigErrorf(log, true, "invalid flag: --depth must be greater than or equal to 0")
 	}
 
 	switch submodulesMode(*flSubmodules) {
 	case submodulesRecursive, submodulesShallow, submodulesOff:
 	default:
-		fatalConfigError(log, true, "invalid flag: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
+		fatalConfigErrorf(log, true, "invalid flag: --submodules must be one of %q, %q, or %q", submodulesRecursive, submodulesShallow, submodulesOff)
 	}
 
 	switch *flGitGC {
 	case gcAuto, gcAlways, gcAggressive, gcOff:
 	default:
-		fatalConfigError(log, true, "invalid flag: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
+		fatalConfigErrorf(log, true, "invalid flag: --git-gc must be one of %q, %q, %q, or %q", gcAuto, gcAlways, gcAggressive, gcOff)
 	}
 
 	if *flDeprecatedDest != "" {
@@ -467,11 +467,11 @@ func main() {
 		*flPeriod = time.Duration(int(*flDeprecatedWait*1000)) * time.Millisecond
 	}
 	if *flPeriod < 10*time.Millisecond {
-		fatalConfigError(log, true, "invalid flag: --period must be at least 10ms")
+		fatalConfigErrorf(log, true, "invalid flag: --period must be at least 10ms")
 	}
 
 	if *flDeprecatedChmod != 0 {
-		fatalConfigError(log, true, "deprecated flag: --change-permissions is no longer supported")
+		fatalConfigErrorf(log, true, "deprecated flag: --change-permissions is no longer supported")
 	}
 
 	var syncSig syscall.Signal
@@ -488,7 +488,7 @@ func main() {
 			}
 		}
 		if syncSig == 0 {
-			fatalConfigError(log, true, "invalid flag: --sync-on-signal must be a valid signal name or number")
+			fatalConfigErrorf(log, true, "invalid flag: --sync-on-signal must be a valid signal name or number")
 		}
 	}
 
@@ -498,7 +498,7 @@ func main() {
 		*flSyncTimeout = time.Duration(*flDeprecatedTimeout) * time.Second
 	}
 	if *flSyncTimeout < 10*time.Millisecond {
-		fatalConfigError(log, true, "invalid flag: --sync-timeout must be at least 10ms")
+		fatalConfigErrorf(log, true, "invalid flag: --sync-timeout must be at least 10ms")
 	}
 
 	if *flDeprecatedMaxSyncFailures != 0 {
@@ -514,10 +514,10 @@ func main() {
 	}
 	if *flExechookCommand != "" {
 		if *flExechookTimeout < time.Second {
-			fatalConfigError(log, true, "invalid flag: --exechook-timeout must be at least 1s")
+			fatalConfigErrorf(log, true, "invalid flag: --exechook-timeout must be at least 1s")
 		}
 		if *flExechookBackoff < time.Second {
-			fatalConfigError(log, true, "invalid flag: --exechook-backoff must be at least 1s")
+			fatalConfigErrorf(log, true, "invalid flag: --exechook-backoff must be at least 1s")
 		}
 	}
 
@@ -527,13 +527,13 @@ func main() {
 			*flWebhookStatusSuccess = 0
 		}
 		if *flWebhookStatusSuccess < 0 {
-			fatalConfigError(log, true, "invalid flag: --webhook-success-status must be a valid HTTP code or 0")
+			fatalConfigErrorf(log, true, "invalid flag: --webhook-success-status must be a valid HTTP code or 0")
 		}
 		if *flWebhookTimeout < time.Second {
-			fatalConfigError(log, true, "invalid flag: --webhook-timeout must be at least 1s")
+			fatalConfigErrorf(log, true, "invalid flag: --webhook-timeout must be at least 1s")
 		}
 		if *flWebhookBackoff < time.Second {
-			fatalConfigError(log, true, "invalid flag: --webhook-backoff must be at least 1s")
+			fatalConfigErrorf(log, true, "invalid flag: --webhook-backoff must be at least 1s")
 		}
 	}
 
@@ -543,79 +543,79 @@ func main() {
 	}
 	if *flUsername != "" {
 		if *flPassword == "" && *flPasswordFile == "" {
-			fatalConfigError(log, true, "required flag: $GITSYNC_PASSWORD or --password-file must be specified when --username is specified")
+			fatalConfigErrorf(log, true, "required flag: $GITSYNC_PASSWORD or --password-file must be specified when --username is specified")
 		}
 		if *flPassword != "" && *flPasswordFile != "" {
-			fatalConfigError(log, true, "invalid flag: only one of $GITSYNC_PASSWORD and --password-file may be specified")
+			fatalConfigErrorf(log, true, "invalid flag: only one of $GITSYNC_PASSWORD and --password-file may be specified")
 		}
 		if u, err := url.Parse(*flRepo); err == nil { // it may not even parse as a URL, that's OK
 			if u.User != nil {
-				fatalConfigError(log, true, "invalid flag: credentials may not be specified in --repo when --username is specified")
+				fatalConfigErrorf(log, true, "invalid flag: credentials may not be specified in --repo when --username is specified")
 			}
 		}
 	} else {
 		if *flPassword != "" {
-			fatalConfigError(log, true, "invalid flag: $GITSYNC_PASSWORD may only be specified when --username is specified")
+			fatalConfigErrorf(log, true, "invalid flag: $GITSYNC_PASSWORD may only be specified when --username is specified")
 		}
 		if *flPasswordFile != "" {
-			fatalConfigError(log, true, "invalid flag: --password-file may only be specified when --username is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --password-file may only be specified when --username is specified")
 		}
 	}
 
 	if *flGithubAppApplicationID != 0 || *flGithubAppClientID != "" {
 		if *flGithubAppApplicationID != 0 && *flGithubAppClientID != "" {
-			fatalConfigError(log, true, "invalid flag: only one of --github-app-application-id or --github-app-client-id may be specified")
+			fatalConfigErrorf(log, true, "invalid flag: only one of --github-app-application-id or --github-app-client-id may be specified")
 		}
 		if *flGithubAppInstallationID == 0 {
-			fatalConfigError(log, true, "invalid flag: --github-app-installation-id must be specified when --github-app-application-id or --github-app-client-id are specified")
+			fatalConfigErrorf(log, true, "invalid flag: --github-app-installation-id must be specified when --github-app-application-id or --github-app-client-id are specified")
 		}
 		if *flGithubAppPrivateKey == "" && *flGithubAppPrivateKeyFile == "" {
-			fatalConfigError(log, true, "invalid flag: $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file must be specified when --github-app-application-id or --github-app-client-id are specified")
+			fatalConfigErrorf(log, true, "invalid flag: $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file must be specified when --github-app-application-id or --github-app-client-id are specified")
 		}
 		if *flGithubAppPrivateKey != "" && *flGithubAppPrivateKeyFile != "" {
-			fatalConfigError(log, true, "invalid flag: only one of $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file may be specified")
+			fatalConfigErrorf(log, true, "invalid flag: only one of $GITSYNC_GITHUB_APP_PRIVATE_KEY or --github-app-private-key-file may be specified")
 		}
 		if *flUsername != "" {
-			fatalConfigError(log, true, "invalid flag: --username may not be specified when --github-app-private-key-file is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --username may not be specified when --github-app-private-key-file is specified")
 		}
 		if *flPassword != "" {
-			fatalConfigError(log, true, "invalid flag: --password may not be specified when --github-app-private-key-file is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --password may not be specified when --github-app-private-key-file is specified")
 		}
 		if *flPasswordFile != "" {
-			fatalConfigError(log, true, "invalid flag: --password-file may not be specified when --github-app-private-key-file is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --password-file may not be specified when --github-app-private-key-file is specified")
 		}
 	} else {
 		if *flGithubAppApplicationID != 0 {
-			fatalConfigError(log, true, "invalid flag: --github-app-application-id may only be specified when --github-app-private-key-file is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --github-app-application-id may only be specified when --github-app-private-key-file is specified")
 		}
 		if *flGithubAppInstallationID != 0 {
-			fatalConfigError(log, true, "invalid flag: --github-app-installation-id may only be specified when --github-app-private-key-file is specified")
+			fatalConfigErrorf(log, true, "invalid flag: --github-app-installation-id may only be specified when --github-app-private-key-file is specified")
 		}
 	}
 
 	if len(*flCredentials) > 0 {
 		for _, cred := range *flCredentials {
 			if cred.URL == "" {
-				fatalConfigError(log, true, "invalid flag: --credential URL must be specified")
+				fatalConfigErrorf(log, true, "invalid flag: --credential URL must be specified")
 			}
 			if cred.Username == "" {
-				fatalConfigError(log, true, "invalid flag: --credential username must be specified")
+				fatalConfigErrorf(log, true, "invalid flag: --credential username must be specified")
 			}
 			if cred.Password == "" && cred.PasswordFile == "" {
-				fatalConfigError(log, true, "invalid flag: --credential password or password-file must be specified")
+				fatalConfigErrorf(log, true, "invalid flag: --credential password or password-file must be specified")
 			}
 			if cred.Password != "" && cred.PasswordFile != "" {
-				fatalConfigError(log, true, "invalid flag: only one of --credential password and password-file may be specified")
+				fatalConfigErrorf(log, true, "invalid flag: only one of --credential password and password-file may be specified")
 			}
 		}
 	}
 
 	if *flHTTPBind == "" {
 		if *flHTTPMetrics {
-			fatalConfigError(log, true, "required flag: --http-bind must be specified when --http-metrics is set")
+			fatalConfigErrorf(log, true, "required flag: --http-bind must be specified when --http-metrics is set")
 		}
 		if *flHTTPprof {
-			fatalConfigError(log, true, "required flag: --http-bind must be specified when --http-pprof is set")
+			fatalConfigErrorf(log, true, "required flag: --http-bind must be specified when --http-pprof is set")
 		}
 	}
 
@@ -1105,8 +1105,8 @@ func logSafeFlags(v int) []string {
 		}
 		// Handle --credential
 		if arg == "credential" {
-			orig := fl.Value.(*credentialSliceValue)
-			sl := []credential{} // make a copy of the slice so we can mutate it
+			orig := fl.Value.(*credentialSliceValue) //nolint:forcetypeassert
+			sl := []credential{}                     // make a copy of the slice so we can mutate it
 			for _, cred := range orig.value {
 				if cred.Password != "" {
 					cred.Password = redactedString
@@ -1153,10 +1153,12 @@ func sleepForever() {
 	os.Exit(0)
 }
 
-// fatalConfigError prints the error to the standard error, prints the usage
+// fatalConfigErrorf prints the error to the standard error, prints the usage
 // if the `printUsage` flag is true, exports the error to the error file and
 // exits the process with the exit code.
-func fatalConfigError(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
+//
+//nolint:unparam
+func fatalConfigErrorf(log *logging.Logger, printUsage bool, format string, a ...interface{}) {
 	s := fmt.Sprintf(format, a...)
 	fmt.Fprintln(os.Stderr, s)
 	if printUsage {
@@ -1399,7 +1401,7 @@ func dirIsEmpty(dir absPath) (bool, error) {
 	return len(dirents) == 0, nil
 }
 
-// removeDirContents iterated the specified dir and removes all contents
+// removeDirContents iterated the specified dir and removes all contents.
 func removeDirContents(dir absPath, log *logging.Logger) error {
 	return removeDirContentsIf(dir, log, func(fi os.FileInfo) (bool, error) {
 		return true, nil
@@ -1445,7 +1447,7 @@ func removeDirContentsIf(dir absPath, log *logging.Logger, fn func(fi os.FileInf
 
 // publishSymlink atomically sets link to point at the specified target.  If the
 // link existed, this returns the previous target.
-func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) error {
+func (git *repoSync) publishSymlink(worktree worktree) error {
 	targetPath := worktree.Path()
 	linkDir, linkFile := git.link.Split()
 
@@ -1475,7 +1477,7 @@ func (git *repoSync) publishSymlink(ctx context.Context, worktree worktree) erro
 	return nil
 }
 
-// removeWorktree is used to remove a worktree and its folder
+// removeWorktree is used to remove a worktree and its folder.
 func (git *repoSync) removeWorktree(ctx context.Context, worktree worktree) error {
 	// Clean up worktree, if needed.
 	_, err := os.Stat(worktree.Path().String())
@@ -1527,7 +1529,7 @@ func (git *repoSync) configureWorktree(ctx context.Context, worktree worktree) e
 	// /git/.git/worktrees/<worktree-dir-name>. Replace it with a reference
 	// using relative paths, so that other containers can use a different volume
 	// mount name.
-	rootDotGit := ""
+	var rootDotGit string
 	if rel, err := filepath.Rel(worktree.Path().String(), git.root.String()); err != nil {
 		return err
 	} else {
@@ -1745,7 +1747,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// Figure out what we got.  The ^{} syntax "peels" annotated tags to
 	// their underlying commit hashes, but has no effect if we fetched a
 	// branch, plain tag, or hash.
-	remoteHash := ""
+	var remoteHash string
 	if output, _, err := git.Run(ctx, git.root, "rev-parse", "FETCH_HEAD^{}"); err != nil {
 		return false, "", err
 	} else {
@@ -1802,7 +1804,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 		// If we have a new hash, update the symlink to point to the new worktree.
 		if changed {
-			err := git.publishSymlink(ctx, newWorktree)
+			err := git.publishSymlink(newWorktree)
 			if err != nil {
 				return false, "", err
 			}
@@ -1976,7 +1978,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", git.authURL, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, git.authURL, nil)
 	if err != nil {
 		return fmt.Errorf("can't create auth request: %w", err)
 	}
@@ -1987,7 +1989,7 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		errMessage, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("auth URL returned status %d, failed to read body: %w", resp.StatusCode, err)
@@ -2021,7 +2023,8 @@ func (git *repoSync) CallAskPassURL(ctx context.Context) error {
 	return nil
 }
 
-// RefreshGitHubAppToken generates a new installation token for a GitHub app and stores it as a credential
+// RefreshGitHubAppToken generates a new installation token for a GitHub app
+// and stores it as a credential.
 func (git *repoSync) RefreshGitHubAppToken(ctx context.Context, githubBaseURL, privateKey, privateKeyFile, clientID string, appID, installationID int) error {
 	git.log.V(3).Info("refreshing GitHub app token")
 
@@ -2080,7 +2083,7 @@ func (git *repoSync) RefreshGitHubAppToken(ctx context.Context, githubBaseURL, p
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	if resp.StatusCode != 201 {
+	if resp.StatusCode != http.StatusCreated {
 		errMessage, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("GitHub app installation endpoint returned status %d, failed to read body: %w", resp.StatusCode, err)
@@ -2247,8 +2250,8 @@ func parseGitConfigKey(r rune, ch <-chan rune) (string, error) {
 	buf = append(buf, r)
 
 	for r := range ch {
-		switch {
-		case r == ':':
+		switch r {
+		case ':':
 			return string(buf), nil
 		default:
 			buf = append(buf, r)
@@ -2777,5 +2780,5 @@ HOOKS
 `
 
 func printManPage() {
-	fmt.Print(manual)
+	fmt.Fprint(os.Stdout, manual)
 }

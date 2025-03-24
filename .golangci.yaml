@@ -2,25 +2,55 @@
 # pass, in contrast to .golangci.yaml which defines checks that also the
 # existing code passes.
 
+version: "2"
+
 run:
   timeout: 30m
 
 linters:
-  disable-all: false
+  default: all
+
   enable: # please keep this alphabetized
-    - ginkgolinter
-    - gocritic
     - govet
     - ineffassign
-    # Should we add logcheck, for consistency with kubernetes/kubernetes?
-    # - logcheck
     - staticcheck
-    - stylecheck
     - unused
+    - gocritic
+    - asasalint
+    - copyloopvar
 
-linters-settings: # please keep this alphabetized
-  gocritic:
-  staticcheck:
-    checks:
-      - "all"
-  stylecheck:
+  disable:
+    - errcheck
+    - cyclop
+    - depguard
+    - dupl
+    - err113
+    - exhaustruct
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst # TODO: turn this one on
+    - gocyclo
+    - gosec # TODO: turn this one on
+    - lll
+    - maintidx
+    - mnd
+    - musttag
+    - nestif
+    - nlreturn
+    - paralleltest
+    - perfsprint
+    - promlinter
+    - recvcheck
+    - revive
+    - tagliatelle
+    - testpackage
+    - varnamelen
+    - wrapcheck
+    - wsl
+
+  settings: # please keep this alphabetized
+    staticcheck:
+      checks:
+        - "all"

@@ -48,7 +48,7 @@ type credentialSliceValue struct {
 var _ pflag.Value = &credentialSliceValue{}
 var _ pflag.SliceValue = &credentialSliceValue{}
 
-// pflagCredentialSlice is like pflag.StringSlice()
+// pflagCredentialSlice is like pflag.StringSlice().
 func pflagCredentialSlice(name, def, usage string) *[]credential {
 	p := &credentialSliceValue{}
 	_ = p.Set(def)

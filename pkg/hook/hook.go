@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package hook provides a way to run hooks in a controlled way.
 package hook
 
 import (
@@ -38,7 +39,7 @@ func init() {
 	prometheus.MustRegister(hookRunCount)
 }
 
-// Describes what a Hook needs to implement, run by HookRunner
+// Hook describes a single hook of some sort, which can be run by HookRunner.
 type Hook interface {
 	// Describes hook
 	Name() string
@@ -52,7 +53,7 @@ type hookData struct {
 	hash  string
 }
 
-// NewHookData returns a new HookData
+// NewHookData returns a new HookData.
 func NewHookData() *hookData {
 	return &hookData{
 		ch: make(chan struct{}, 1),
@@ -87,7 +88,7 @@ func (d *hookData) send(newHash string) {
 	}
 }
 
-// NewHookRunner returns a new HookRunner
+// NewHookRunner returns a new HookRunner.
 func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log logintf, oneTime bool) *HookRunner {
 	hr := &HookRunner{hook: hook, backoff: backoff, data: data, log: log}
 	if oneTime {
@@ -96,7 +97,7 @@ func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log logintf
 	return hr
 }
 
-// HookRunner struct
+// HookRunner struct.
 type HookRunner struct {
 	// Hook to run and check
 	hook Hook
@@ -118,12 +119,12 @@ type logintf interface {
 	V(level int) logr.Logger
 }
 
-// Send sends hash to hookdata
+// Send sends hash to hookdata.
 func (r *HookRunner) Send(hash string) {
 	r.data.send(hash)
 }
 
-// Run waits for trigger events from the channel, and run hook when triggered
+// Run waits for trigger events from the channel, and run hook when triggered.
 func (r *HookRunner) Run(ctx context.Context) {
 	var lastHash string
 
@@ -171,7 +172,7 @@ func (r *HookRunner) sendOneTimeResultAndTerminate(completedSuccessfully bool) {
 // WaitForCompletion waits for HookRunner to send completion message to
 // calling thread and returns either true if HookRunner executed successfully
 // and some error otherwise.
-// Assumes that r.oneTimeResult is not nil, but if it is, returns an error
+// Assumes that r.oneTimeResult is not nil, but if it is, returns an error.
 func (r *HookRunner) WaitForCompletion() error {
 	// Make sure function should be called
 	if r.oneTimeResult == nil {

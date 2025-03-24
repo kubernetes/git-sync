@@ -296,7 +296,7 @@ type explicitFlag[T comparable] struct {
 	flagPtr *T
 }
 
-// newExplicitFlag allocates an explicitFlag
+// newExplicitFlag allocates an explicitFlag.
 func newExplicitFlag[T comparable](ptr *T, name, usage string, fn func(name string, value T, usage string) *T) {
 	h := &explicitFlag[T]{
 		realPtr: ptr,
