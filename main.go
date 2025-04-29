@@ -1780,7 +1780,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// Reset the repo (note: not the worktree - that happens later) to the new
 		// ref.  This makes subsequent fetches much less expensive.  It uses --soft
 		// so no files are checked out.
-		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", remoteHash); err != nil {
+		if _, _, err := git.Run(ctx, git.root, "reset", "--soft", remoteHash, "--"); err != nil {
 			return false, "", err
 		}
 
