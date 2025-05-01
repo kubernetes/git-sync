@@ -1492,6 +1492,40 @@ function e2e::sync_crash_no_worktree_cleanup_retry() {
 }
 
 ##############################################
+# Test syncing if a file named for the SHA exists
+##############################################
+function e2e::sync_sha_shafile_exists() {
+    echo "${FUNCNAME[0]} 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 1"
+    SHA1=$(git -C "$REPO" rev-list -n1 HEAD)
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+    SHA2=$(git -C "$REPO" rev-list -n1 HEAD)
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$SHA1" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+
+    touch "$ROOT/$SHA2"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$SHA2" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 2"
+}
+
+##############################################
 # Test changing repos with storage intact
 ##############################################
 function e2e::sync_repo_switch() {
