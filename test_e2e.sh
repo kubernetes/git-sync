@@ -20,20 +20,19 @@ set -o pipefail
 
 # shellcheck disable=SC2120
 function caller() {
-  local stack_skip=${1:-0}
-  stack_skip=$((stack_skip + 1))
-  if [[ ${#FUNCNAME[@]} -gt ${stack_skip} ]]; then
-    local i
-    for ((i=1 ; i <= ${#FUNCNAME[@]} - stack_skip ; i++))
-    do
-      local frame_no=$((i - 1 + stack_skip))
-      local source_lineno=${BASH_LINENO[$((frame_no - 1))]}
-      local funcname=${FUNCNAME[${frame_no}]}
-      if [[ "$funcname" =~ 'e2e::' ]]; then
-          echo "${source_lineno}"
-      fi
-    done
-  fi
+    local stack_skip=${1:-0}
+    stack_skip=$((stack_skip + 1))
+    if [[ ${#FUNCNAME[@]} -gt ${stack_skip} ]]; then
+        local i
+        for ((i=1 ; i <= ${#FUNCNAME[@]} - stack_skip ; i++)); do
+            local frame_no=$((i - 1 + stack_skip))
+            local source_lineno=${BASH_LINENO[$((frame_no - 1))]}
+            local funcname=${FUNCNAME[${frame_no}]}
+            if [[ "$funcname" =~ 'e2e::' ]]; then
+                echo "${source_lineno}"
+            fi
+        done
+    fi
 }
 
 function fail() {
@@ -193,8 +192,8 @@ E2E_TAG=$(git rev-parse --show-toplevel | sed 's|/|_|g')
 # current tree.
 build_container=false
 if [[ "${GIT_SYNC_E2E_IMAGE:-unset}" == "unset" ]]; then
-  GIT_SYNC_E2E_IMAGE="e2e/git-sync:${E2E_TAG}__$(go env GOOS)_$(go env GOARCH)"
-  build_container=true
+    GIT_SYNC_E2E_IMAGE="e2e/git-sync:${E2E_TAG}__$(go env GOOS)_$(go env GOARCH)"
+    build_container=true
 fi
 
 # DIR is the directory in which all this test's state lives.
@@ -202,11 +201,11 @@ RUNID="${RANDOM}${RANDOM}"
 DIR="/tmp/git-sync-e2e.$RUNID"
 mkdir "$DIR"
 function final_cleanup() {
-  if [[ "${CLEANUP:-}" == 0 ]]; then
-      echo "leaving logs in $DIR"
-  else
-      rm -rf "$DIR"
-  fi
+    if [[ "${CLEANUP:-}" == 0 ]]; then
+        echo "leaving logs in $DIR"
+    else
+        rm -rf "$DIR"
+    fi
 }
 # Set the trap to call the final_cleanup function on exit.
 trap final_cleanup EXIT
@@ -216,38 +215,38 @@ required_env_vars=()
 LOCAL_GITHUB_APP_PRIVATE_KEY_FILE="github_app_private_key.pem"
 GITHUB_APP_PRIVATE_KEY_MOUNT=()
 if [[ "${skip_github_app_test}" != "true" ]]; then
-  required_env_vars=(
-    "TEST_GITHUB_APP_AUTH_TEST_REPO"
-    "TEST_GITHUB_APP_APPLICATION_ID"
-    "TEST_GITHUB_APP_INSTALLATION_ID"
-    "TEST_GITHUB_APP_CLIENT_ID"
-  )
+    required_env_vars=(
+        "TEST_GITHUB_APP_AUTH_TEST_REPO"
+        "TEST_GITHUB_APP_APPLICATION_ID"
+        "TEST_GITHUB_APP_INSTALLATION_ID"
+        "TEST_GITHUB_APP_CLIENT_ID"
+    )
 
-  if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" && -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
-      echo "ERROR: Both TEST_GITHUB_APP_PRIVATE_KEY_FILE and TEST_GITHUB_APP_PRIVATE_KEY were specified."
-      exit 1
-  fi
-  if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
-    cp "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}" "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
-  elif [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
-    echo "${TEST_GITHUB_APP_PRIVATE_KEY}" > "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
-  else
-    echo "ERROR: Neither TEST_GITHUB_APP_PRIVATE_KEY_FILE nor TEST_GITHUB_APP_PRIVATE_KEY was specified."
-    echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
-    exit 1
-  fi
-
-  # Validate all required environment variables for the github-app-auth tests are provided.
-  for var in "${required_env_vars[@]}"; do
-    if [[ ! -v "${var}" ]]; then
-      echo "ERROR: Required environment variable '${var}' is not set."
-      echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
-      exit 1
+    if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" && -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
+          echo "ERROR: Both TEST_GITHUB_APP_PRIVATE_KEY_FILE and TEST_GITHUB_APP_PRIVATE_KEY were specified."
+          exit 1
     fi
-  done
+    if [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
+        cp "${TEST_GITHUB_APP_PRIVATE_KEY_FILE}" "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
+    elif [[ -n "${TEST_GITHUB_APP_PRIVATE_KEY:-}" ]]; then
+        echo "${TEST_GITHUB_APP_PRIVATE_KEY}" > "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}"
+    else
+        echo "ERROR: Neither TEST_GITHUB_APP_PRIVATE_KEY_FILE nor TEST_GITHUB_APP_PRIVATE_KEY was specified."
+        echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
+        exit 1
+    fi
 
-  # Mount the GitHub App private key file to the git-sync container
-  GITHUB_APP_PRIVATE_KEY_MOUNT=(-v "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":"/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":ro)
+    # Validate all required environment variables for the github-app-auth tests are provided.
+    for var in "${required_env_vars[@]}"; do
+        if [[ ! -v "${var}" ]]; then
+            echo "ERROR: Required environment variable '${var}' is not set."
+            echo "       Either provide a value or skip this test (SKIP_GITHUB_APP_TEST=true)."
+            exit 1
+        fi
+    done
+
+    # Mount the GitHub App private key file to the git-sync container
+    GITHUB_APP_PRIVATE_KEY_MOUNT=(-v "${DIR}/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":"/${LOCAL_GITHUB_APP_PRIVATE_KEY_FILE}":ro)
 fi
 
 # WORK is temp space and in reset for each testcase.
