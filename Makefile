@@ -278,7 +278,7 @@ bin-clean:
 	rm -rf .go bin
 
 lint-golangci-lint:
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.0.0 run -v
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0 run -v
 
 lint-shellcheck:
 	docker run \

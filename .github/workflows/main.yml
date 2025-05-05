@@ -75,7 +75,7 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           working-directory: git-sync
-          version: v2.0.0
+          version: v2.1.0
 
       - name: make lint
         working-directory: git-sync
