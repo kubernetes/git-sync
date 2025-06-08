@@ -149,10 +149,10 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(OS_ARCH_TAG)
 LICENSES = .licenses
 
 $(LICENSES):
-	pushd tools >/dev/null;                                   \
-	  export GOOS=$(shell go env GOHOSTOS);                   \
-	  export GOARCH=$(shell go env GOHOSTARCH);               \
-	  go build -o ../bin/tools github.com/google/go-licenses; \
+	pushd tools >/dev/null;                                       \
+	  export GOOS=$(shell go env GOHOSTOS);                       \
+	  export GOARCH=$(shell go env GOHOSTARCH);                   \
+	  go build -o ../bin/tools/ github.com/google/go-licenses/v2; \
 	  popd >/dev/null
 	rm -rf $(LICENSES)
 	./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
