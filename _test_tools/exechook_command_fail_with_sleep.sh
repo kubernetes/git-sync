@@ -19,4 +19,5 @@
 
 sleep 3
 date >> /var/log/runs
+echo "true" > delaycheck
 exit 1

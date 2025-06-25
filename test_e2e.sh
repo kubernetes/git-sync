@@ -96,7 +96,7 @@ function assert_file_eq() {
     if [[ $(cat "$1") == "$2" ]]; then
         return
     fi
-    fail "$1 does not contain '$2': $(cat "$1")"
+    fail "$1 does not equal '$2': $(cat "$1")"
 }
 
 function assert_file_contains() {
@@ -2484,6 +2484,49 @@ function e2e::exechook_startup_after_crash() {
     assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
     assert_file_lines_eq "$RUNLOG" 1
+}
+
+##############################################
+# Test exechook-success with --delay-symlink
+##############################################
+function e2e::exechook_success_delay_symlink() {
+    GIT_SYNC \
+        --delay-symlink \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND_SLEEPY"
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_absent "$ROOT/link/delaycheck"
+}
+
+##############################################
+# Test exechook-fail with --delay-symlink
+##############################################
+function e2e::exechook_fail_delay_symlink() {
+    GIT_SYNC \
+        --delay-symlink \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+        --exechook-backoff=1s
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_absent "$ROOT/link/delaycheck"
 }
 
 ##############################################

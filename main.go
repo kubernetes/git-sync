@@ -207,8 +207,12 @@ func main() {
 	flGroupWrite := pflag.Bool("group-write",
 		envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
 		"ensure that all data (repo, worktrees, etc.) is group writable")
-	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout",
+		envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
 		"how long to retain non-current worktrees")
+	flDelaySymlink := pflag.Bool("delay-symlink",
+		envBool(false, "GITSYNC_DELAY_SYMLINK", "GIT_SYNC_DELAY_SYMLINK"),
+		"delay publishing the symlink until hook execution is complete (defaults to false)") 
 
 	flExechookCommand := pflag.String("exechook-command",
 		envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
@@ -219,6 +223,9 @@ func main() {
 	flExechookBackoff := pflag.Duration("exechook-backoff",
 		envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
 		"the time to wait before retrying a failed exechook")
+	flExechookWhen := pflag.String("exechook-when",
+		envString("AFTER_SYNC", "GITSYNC_EXECHOOK_WHEN", "GIT_SYNC_EXECHOOK_WHEN"),
+		"when to run the exechook: one of 'BEFORE_SYNC', 'AFTER_SYNC', defaults to 'AFTER_SYNC'")
 
 	flWebhookURL := pflag.String("webhook-url",
 		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
@@ -937,11 +944,15 @@ func main() {
 						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
 				}
-				if webhookRunner != nil {
-					webhookRunner.Send(hash)
-				}
-				if exechookRunner != nil {
-					exechookRunner.Send(hash)
+				// if --delay-symlink is set, these will have already been sent and completed.
+				// otherwise, we send them now.
+				if !*flDelaySymlink {
+					if webhookRunner != nil {
+						webhookRunner.Send(hash)
+					}
+					if exechookRunner != nil && *flExechookWhen == "AFTER_SYNC" {
+						exechookRunner.Send(hash)
+					}
 				}
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
@@ -1771,6 +1782,12 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// path was different.
 	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
 
+	// Fire exechook if needed.
+	if exechookRunner != nil && *flExechookWhen == "BEFORE_SYNC" {
+		git.log.V(2).Info("running exechook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+		exechookRunner.Send(remoteHash)
+	}
+
 	// We have to do at least one fetch, to ensure that parameters like depth
 	// are set properly.  This is cheap when we already have the target hash.
 	if changed || git.syncCount == 0 {
@@ -1800,6 +1817,31 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// it all set is just to re-run the configuration,
 		if err := git.configureWorktree(ctx, newWorktree); err != nil {
 			return false, "", err
+		}
+
+		// If --delay-symlink is true, we don't update the symlink or finish the post-sync tasks until hooks complete.
+		if *flDelaySymlink {
+			git.log.V(0).Info("delaying symlink update", "ref", git.ref, "remote", remoteHash, "syncCount", git.syncCount)
+
+			if webhookRunner != nil {
+				webhookRunner.Send(remoteHash)
+			}
+			if exechookRunner != nil && *flExechookWhen == "AFTER_SYNC" {
+				exechookRunner.Send(remoteHash)
+			}
+
+			// Wait for the hooks to finish
+			if exechookRunner != nil {
+				if err := exechookRunner.WaitForCompletion(); err != nil {
+					exechookRunner.LogError(err, "exechook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+				}
+			}
+			if webhookRunner != nil {
+				if err := webhookRunner.WaitForCompletion(); err != nil {
+					webhookRunner.LogError(err, "webhook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+				}
+			}
+			// After the hooks are done, we can update the symlink and finish post-sync tasks.
 		}
 
 		// If we have a new hash, update the symlink to point to the new worktree.
@@ -2469,6 +2511,13 @@ OPTIONS
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
+    --exechook-when <string>, $GITSYNC_EXECHOOK_WHEN
+            When to run the --exechook-command.  This can be one of "BEFORE_SYNC"
+            or "AFTER_SYNC".  If not specified, this defaults to "AFTER_SYNC".
+            ExecHook is asynchronous, so setting this to "BEFORE_SYNC" will
+            not block the sync process. If you need the hook to run to completion
+            before the symlink is updated, you should use --delay-symlink.
+
     --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
             testing).  This defaults to "git".
@@ -2633,6 +2682,13 @@ OPTIONS
             (as determined by --sync-timeout). If not specified, this defaults
             to 0, meaning that stale worktrees will be removed immediately.
 
+    --delay-symlink, $GITSYNC_DELAY_SYMLINK
+            Don't update the symlink until after the ExecHook and Webhook 
+            commands have completed. This is useful when the
+            ExecHook or Webhook commands need to finish before the symlink
+            is updated. e.g. an ExecHook that syncs non-git files to the 
+            synced directory.
+
     --submodules <string>, $GITSYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
@@ -2772,7 +2828,11 @@ HOOKS
     exechooks, or --webhook-success-status for webhooks).  If unsuccessful,
     git-sync will wait --exechook-backoff or --webhook-backoff (as appropriate)
     before re-trying the hook.  Git-sync does not ensure that hooks are invoked
-    exactly once, so hooks must be idempotent.
+    exactly once, so hooks must be idempotent. 
+
+    By default, both exechook and webhooks are fired after the sync is complete
+    and the symlink is updated. If you need the hooks to run to completion 
+    before the symlink is updated, --delay-symlink can be used.
 
     Hooks are not guaranteed to succeed on every single hash change.  For example,
     if a hook fails and a new hash is synced during the backoff period, the
