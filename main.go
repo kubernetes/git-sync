@@ -132,6 +132,14 @@ type repoSync struct {
 	appTokenExpiry time.Time     // time when github app auth token expires
 }
 
+type Values struct {
+	m map[string]any
+}
+
+func (v Values) Get(key string) any {
+	return v.m[key]
+}
+
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
@@ -212,7 +220,7 @@ func main() {
 		"how long to retain non-current worktrees")
 	flDelaySymlink := pflag.Bool("delay-symlink",
 		envBool(false, "GITSYNC_DELAY_SYMLINK", "GIT_SYNC_DELAY_SYMLINK"),
-		"delay publishing the symlink until hook execution is complete (defaults to false)") 
+		"delay publishing the symlink until hook execution is complete (defaults to false)")
 
 	flExechookCommand := pflag.String("exechook-command",
 		envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
@@ -919,9 +927,17 @@ func main() {
 
 	failCount := 0
 	syncCount := uint64(0)
+
+	v := Values{map[string]any{
+		"webhook":        webhookRunner,
+		"exechook":       exechookRunner,
+		"flExechookWhen": *flExechookWhen,
+		"flDelaySymlink": *flDelaySymlink,
+	}}
+
 	for {
 		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
+		ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), "hookvalues", v), *flSyncTimeout)
 
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
@@ -1730,6 +1746,11 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
 
+	exechookRunner := ctx.Value("hookvalues").(Values).Get("exechook").(*hook.HookRunner)
+	webhookRunner := ctx.Value("hookvalues").(Values).Get("webhook").(*hook.HookRunner)
+	flExechookWhen := ctx.Value("hookvalues").(Values).Get("flExechookWhen").(string)
+	flDelaySymlink := ctx.Value("hookvalues").(Values).Get("flDelaySymlink").(bool)
+
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
 	}
@@ -1783,7 +1804,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
 
 	// Fire exechook if needed.
-	if exechookRunner != nil && *flExechookWhen == "BEFORE_SYNC" {
+	if exechookRunner != nil && flExechookWhen == "BEFORE_SYNC" {
 		git.log.V(2).Info("running exechook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
 		exechookRunner.Send(remoteHash)
 	}
@@ -1820,25 +1841,25 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		}
 
 		// If --delay-symlink is true, we don't update the symlink or finish the post-sync tasks until hooks complete.
-		if *flDelaySymlink {
+		if flDelaySymlink {
 			git.log.V(0).Info("delaying symlink update", "ref", git.ref, "remote", remoteHash, "syncCount", git.syncCount)
 
 			if webhookRunner != nil {
 				webhookRunner.Send(remoteHash)
 			}
-			if exechookRunner != nil && *flExechookWhen == "AFTER_SYNC" {
+			if exechookRunner != nil && flExechookWhen == "AFTER_SYNC" {
 				exechookRunner.Send(remoteHash)
 			}
 
 			// Wait for the hooks to finish
 			if exechookRunner != nil {
 				if err := exechookRunner.WaitForCompletion(); err != nil {
-					exechookRunner.LogError(err, "exechook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+					git.log.Error(err, "exechook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
 				}
 			}
 			if webhookRunner != nil {
 				if err := webhookRunner.WaitForCompletion(); err != nil {
-					webhookRunner.LogError(err, "webhook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+					git.log.Error(err, "webhook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
 				}
 			}
 			// After the hooks are done, we can update the symlink and finish post-sync tasks.
