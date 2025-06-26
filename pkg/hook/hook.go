@@ -130,6 +130,16 @@ func (r *HookRunner) Send(hash string) {
 	r.data.send(hash)
 }
 
+// SendAndWait ends sends hash to hookdata and waits for the hook to complete.
+func (r *HookRunner) SendAndWait(hash string) error {
+	r.data.send(hash)
+	err := r.WaitForCompletion()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Run waits for trigger events from the channel, and run hook when triggered.
 func (r *HookRunner) Run(ctx context.Context) {
 	var lastHash string
@@ -191,7 +201,7 @@ func (r *HookRunner) sendNonAsyncResult(completedSuccessfully bool) {
 // WaitForCompletion waits for HookRunner to send completion message to
 // calling thread and returns either true if HookRunner executed successfully
 // and some error otherwise.
-// Assumes that r.oneTimeResult is not nil, but if it is, returns an error.
+// Assumes that either r.oneTimeResult or r.nonAsyncResult is not nil, otherwise returns an error.
 func (r *HookRunner) WaitForCompletion() error {
 	// Make sure function should be called
 	if r.oneTimeResult == nil && r.nonAsyncResult == nil {

@@ -218,9 +218,6 @@ func main() {
 	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout",
 		envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
 		"how long to retain non-current worktrees")
-	flDelaySymlink := pflag.Bool("delay-symlink",
-		envBool(false, "GITSYNC_DELAY_SYMLINK", "GIT_SYNC_DELAY_SYMLINK"),
-		"delay publishing the symlink until hook execution is complete (defaults to false)")
 
 	flExechookCommand := pflag.String("exechook-command",
 		envString("", "GITSYNC_EXECHOOK_COMMAND", "GIT_SYNC_EXECHOOK_COMMAND"),
@@ -231,9 +228,6 @@ func main() {
 	flExechookBackoff := pflag.Duration("exechook-backoff",
 		envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
 		"the time to wait before retrying a failed exechook")
-	flExechookWhen := pflag.String("exechook-when",
-		envString("AFTER_SYNC", "GITSYNC_EXECHOOK_WHEN", "GIT_SYNC_EXECHOOK_WHEN"),
-		"when to run the exechook: one of 'BEFORE_SYNC', 'AFTER_SYNC', defaults to 'AFTER_SYNC'")
 
 	flWebhookURL := pflag.String("webhook-url",
 		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
@@ -938,10 +932,10 @@ func main() {
 	syncCount := uint64(0)
 
 	v := Values{map[string]any{
-		"webhook":        webhookRunner,
-		"exechook":       exechookRunner,
-		"flExechookWhen": *flExechookWhen,
-		"flDelaySymlink": *flDelaySymlink,
+		"webhook":              webhookRunner,
+		"exechook":             exechookRunner,
+		"flHooksAsync":         *flHooksAsync,
+		"flHooksBeforeSymlink": *flHooksBeforeSymlink,
 	}}
 
 	for {
@@ -969,14 +963,26 @@ func main() {
 						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
 				}
-				// if --delay-symlink is set, these will have already been sent and completed.
+				// if --hooks-before-symlink is set, these will have already been sent and completed.
 				// otherwise, we send them now.
-				if !*flDelaySymlink {
+				if !*flHooksBeforeSymlink {
 					if webhookRunner != nil {
-						webhookRunner.Send(hash)
+						if *flHooksAsync {
+							log.V(3).Info("sending webhook async", "hash", hash)
+							webhookRunner.Send(hash)
+						} else {
+							log.V(3).Info("sending webhook and waiting for completion", "hash", hash)
+							webhookRunner.SendAndWait(hash)
+						}
 					}
-					if exechookRunner != nil && *flExechookWhen == "AFTER_SYNC" {
-						exechookRunner.Send(hash)
+					if exechookRunner != nil {
+						if *flHooksAsync {
+							log.V(3).Info("sending exechook async", "hash", hash)
+							exechookRunner.Send(hash)
+						} else {
+							log.V(3).Info("sending exechook and waiting for completion", "hash", hash)
+							exechookRunner.SendAndWait(hash)
+						}
 					}
 				}
 				updateSyncMetrics(metricKeySuccess, start)
@@ -997,14 +1003,17 @@ func main() {
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
-				if exechookRunner != nil {
-					if err := exechookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+				// This will not be needed if the hooks are nonAsync as they will be called with SendAndWait
+				if *flHooksAsync {
+					if exechookRunner != nil {
+						if err := exechookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
-				}
-				if webhookRunner != nil {
-					if err := webhookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+					if webhookRunner != nil {
+						if err := webhookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
 				}
 				log.DeleteErrorFile()
@@ -1757,8 +1766,8 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 	exechookRunner := ctx.Value("hookvalues").(Values).Get("exechook").(*hook.HookRunner)
 	webhookRunner := ctx.Value("hookvalues").(Values).Get("webhook").(*hook.HookRunner)
-	flExechookWhen := ctx.Value("hookvalues").(Values).Get("flExechookWhen").(string)
-	flDelaySymlink := ctx.Value("hookvalues").(Values).Get("flDelaySymlink").(bool)
+	flHooksBeforeSymlink := ctx.Value("hookvalues").(Values).Get("flHooksBeforeAsync").(bool)
+	flHooksAsync := ctx.Value("hookvalues").(Values).Get("flHooksAsync").(bool)
 
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
@@ -1812,10 +1821,24 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// path was different.
 	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
 
-	// Fire exechook if needed.
-	if exechookRunner != nil && flExechookWhen == "BEFORE_SYNC" {
-		git.log.V(2).Info("running exechook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
-		exechookRunner.Send(remoteHash)
+	// Fire hooks if needed.
+	if flHooksBeforeSymlink {
+		if exechookRunner != nil {
+			git.log.V(2).Info("running exechook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+			if flHooksAsync {
+				exechookRunner.Send(remoteHash)
+			} else {
+				exechookRunner.SendAndWait(remoteHash)
+			}
+		}
+		if webhookRunner != nil {
+			git.log.V(2).Info("running webhook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+			if flHooksAsync {
+				webhookRunner.Send(remoteHash)
+			} else {
+				webhookRunner.SendAndWait(remoteHash)
+			}
+		}
 	}
 
 	// We have to do at least one fetch, to ensure that parameters like depth
@@ -1847,31 +1870,6 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 		// it all set is just to re-run the configuration,
 		if err := git.configureWorktree(ctx, newWorktree); err != nil {
 			return false, "", err
-		}
-
-		// If --delay-symlink is true, we don't update the symlink or finish the post-sync tasks until hooks complete.
-		if flDelaySymlink {
-			git.log.V(0).Info("delaying symlink update", "ref", git.ref, "remote", remoteHash, "syncCount", git.syncCount)
-
-			if webhookRunner != nil {
-				webhookRunner.Send(remoteHash)
-			}
-			if exechookRunner != nil && flExechookWhen == "AFTER_SYNC" {
-				exechookRunner.Send(remoteHash)
-			}
-
-			// Wait for the hooks to finish
-			if exechookRunner != nil {
-				if err := exechookRunner.WaitForCompletion(); err != nil {
-					git.log.Error(err, "exechook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
-				}
-			}
-			if webhookRunner != nil {
-				if err := webhookRunner.WaitForCompletion(); err != nil {
-					git.log.Error(err, "webhook failed", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
-				}
-			}
-			// After the hooks are done, we can update the symlink and finish post-sync tasks.
 		}
 
 		// If we have a new hash, update the symlink to point to the new worktree.
