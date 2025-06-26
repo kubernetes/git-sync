@@ -89,10 +89,12 @@ func (d *hookData) send(newHash string) {
 }
 
 // NewHookRunner returns a new HookRunner.
-func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log logintf, oneTime bool) *HookRunner {
+func NewHookRunner(hook Hook, backoff time.Duration, data *hookData, log logintf, oneTime bool, async bool) *HookRunner {
 	hr := &HookRunner{hook: hook, backoff: backoff, data: data, log: log}
 	if oneTime {
 		hr.oneTimeResult = make(chan bool, 1)
+	} else if !async {
+		hr.nonAsyncResult = make(chan bool, 1)
 	}
 	return hr
 }
@@ -110,6 +112,10 @@ type HookRunner struct {
 	// Used to send a status result when running in one-time mode.
 	// Should be initialised to a buffered channel of size 1.
 	oneTimeResult chan bool
+	// Used for non-async hook execution status result, to allow
+	// WaitForCompletion to be called even if not using oneTime.
+	// Should be initialised to a buffered channel of size 1.
+	nonAsyncResult chan bool
 }
 
 // Just the logr methods we need in this package.
@@ -145,11 +151,13 @@ func (r *HookRunner) Run(ctx context.Context) {
 				updateHookRunCountMetric(r.hook.Name(), "error")
 				// don't want to sleep unnecessarily terminating anyways
 				r.sendOneTimeResultAndTerminate(false)
+				r.sendNonAsyncResult(false)
 				time.Sleep(r.backoff)
 			} else {
 				updateHookRunCountMetric(r.hook.Name(), "success")
 				lastHash = hash
 				r.sendOneTimeResultAndTerminate(true)
+				r.sendNonAsyncResult(true)
 				break
 			}
 		}
@@ -169,22 +177,42 @@ func (r *HookRunner) sendOneTimeResultAndTerminate(completedSuccessfully bool) {
 	}
 }
 
+// If asyncResult is nil, does nothing. Otherwise, forwards the caller
+// provided success status (as a boolean) of HookRunner to receivers of
+// asyncResult.
+// Using this function to write to oneTimeResult ensures it is only ever
+// written to once.
+func (r *HookRunner) sendNonAsyncResult(completedSuccessfully bool) {
+	if r.nonAsyncResult != nil {
+		r.nonAsyncResult <- completedSuccessfully
+	}
+}
+
 // WaitForCompletion waits for HookRunner to send completion message to
 // calling thread and returns either true if HookRunner executed successfully
 // and some error otherwise.
 // Assumes that r.oneTimeResult is not nil, but if it is, returns an error.
 func (r *HookRunner) WaitForCompletion() error {
 	// Make sure function should be called
-	if r.oneTimeResult == nil {
+	if r.oneTimeResult == nil && r.nonAsyncResult == nil {
 		return fmt.Errorf("HookRunner.WaitForCompletion called on async runner")
 	}
 
-	// Perform wait on HookRunner
-	hookRunnerFinishedSuccessfully := <-r.oneTimeResult
-	if !hookRunnerFinishedSuccessfully {
-		return fmt.Errorf("hook completed with error")
+	// If oneTimeResult is not nil, we wait for its result.
+	if r.nonAsyncResult != nil {
+		hookRunnerFinishedSuccessfully := <-r.oneTimeResult
+		if !hookRunnerFinishedSuccessfully {
+			return fmt.Errorf("hook completed with error")
+		}
 	}
 
+	// If nonAsyncResult is not nil, we wait for its result.
+	if r.nonAsyncResult != nil {
+		hookRunnerFinishedSuccessfully := <-r.nonAsyncResult
+		if !hookRunnerFinishedSuccessfully {
+			return fmt.Errorf("hook completed with error")
+		}
+	}
 	return nil
 }
 

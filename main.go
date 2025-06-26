@@ -251,6 +251,13 @@ func main() {
 		envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
 		"the time to wait before retrying a failed webhook")
 
+	flHooksAsync := pflag.Bool("hooks-async",
+		envBool(true, "GITSYNC_HOOKS_ASYNC", "GIT_SYNC_HOOKS_ASYNC"),
+		"run hooks asynchronously (defaults to true, set to false to run hooks synchronously)")
+	flHooksBeforeSymlink := pflag.Bool("hooks-before-symlink",
+		envBool(false, "GITSYNC_HOOKS_BEFORE_SYMLINK", "GIT_SYNC_HOOKS_BEFORE_SYMLINK"),
+		"run hooks before creating the symlink (defaults to false)")
+
 	flUsername := pflag.String("username",
 		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
 		"the username to use for git auth")
@@ -859,6 +866,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			!*flHooksAsync,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -883,6 +891,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			!*flHooksAsync,
 		)
 		go exechookRunner.Run(context.Background())
 	}
