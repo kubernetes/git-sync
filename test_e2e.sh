@@ -2487,11 +2487,11 @@ function e2e::exechook_startup_after_crash() {
 }
 
 ##############################################
-# Test exechook-success with --delay-symlink
+# Test exechook-success with --hooks-async=false
 ##############################################
-function e2e::exechook_success_delay_symlink() {
+function e2e::exechook_success_hooks_non_async() {
     GIT_SYNC \
-        --delay-symlink \
+        --hooks-async=false \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
@@ -2504,15 +2504,36 @@ function e2e::exechook_success_delay_symlink() {
     assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
     assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
-    assert_file_absent "$ROOT/link/delaycheck"
 }
 
 ##############################################
-# Test exechook-fail with --delay-symlink
+# Test exechook-fail with --hooks-async=false
 ##############################################
-function e2e::exechook_fail_delay_symlink() {
+function e2e::exechook_fail_hooks_non_async() {
     GIT_SYNC \
-        --delay-symlink \
+        --hooks-async=false \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+        --exechook-backoff=1s
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+}
+
+##############################################
+# Test exechook-fail with --hooks-async=false
+##############################################
+function e2e::exechook_success_hooks_before_symlink_non_async() {
+    GIT_SYNC \
+        --hooks-async=false \
+        --hooks-before-symlink \
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
