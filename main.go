@@ -132,6 +132,14 @@ type repoSync struct {
 	appTokenExpiry time.Time     // time when github app auth token expires
 }
 
+type Values struct {
+	m map[string]any
+}
+
+func (v Values) Get(key string) any {
+	return v.m[key]
+}
+
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
@@ -207,7 +215,8 @@ func main() {
 	flGroupWrite := pflag.Bool("group-write",
 		envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
 		"ensure that all data (repo, worktrees, etc.) is group writable")
-	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout",
+		envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
 		"how long to retain non-current worktrees")
 
 	flExechookCommand := pflag.String("exechook-command",
@@ -235,6 +244,13 @@ func main() {
 	flWebhookBackoff := pflag.Duration("webhook-backoff",
 		envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
 		"the time to wait before retrying a failed webhook")
+
+	flHooksAsync := pflag.Bool("hooks-async",
+		envBool(true, "GITSYNC_HOOKS_ASYNC", "GIT_SYNC_HOOKS_ASYNC"),
+		"run hooks asynchronously (defaults to true, set to false to run hooks synchronously)")
+	flHooksBeforeSymlink := pflag.Bool("hooks-before-symlink",
+		envBool(false, "GITSYNC_HOOKS_BEFORE_SYMLINK", "GIT_SYNC_HOOKS_BEFORE_SYMLINK"),
+		"run hooks before creating the symlink (defaults to false)")
 
 	flUsername := pflag.String("username",
 		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
@@ -844,6 +860,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			*flHooksAsync,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -868,6 +885,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			*flHooksAsync,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -912,9 +930,17 @@ func main() {
 
 	failCount := 0
 	syncCount := uint64(0)
+
+	v := Values{map[string]any{
+		"webhook":              webhookRunner,
+		"exechook":             exechookRunner,
+		"flHooksAsync":         *flHooksAsync,
+		"flHooksBeforeSymlink": *flHooksBeforeSymlink,
+	}}
+
 	for {
 		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
+		ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), "hookvalues", v), *flSyncTimeout)
 
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
@@ -937,11 +963,27 @@ func main() {
 						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
 				}
-				if webhookRunner != nil {
-					webhookRunner.Send(hash)
-				}
-				if exechookRunner != nil {
-					exechookRunner.Send(hash)
+				// if --hooks-before-symlink is set, these will have already been sent and completed.
+				// otherwise, we send them now.
+				if !*flHooksBeforeSymlink {
+					if webhookRunner != nil {
+						if *flHooksAsync {
+							log.V(3).Info("sending webhook async", "hash", hash)
+							webhookRunner.Send(hash)
+						} else {
+							log.V(3).Info("sending webhook and waiting for completion", "hash", hash)
+							webhookRunner.SendAndWait(hash)
+						}
+					}
+					if exechookRunner != nil {
+						if *flHooksAsync {
+							log.V(3).Info("sending exechook async", "hash", hash)
+							exechookRunner.Send(hash)
+						} else {
+							log.V(3).Info("sending exechook and waiting for completion", "hash", hash)
+							exechookRunner.SendAndWait(hash)
+						}
+					}
 				}
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
@@ -961,14 +1003,17 @@ func main() {
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
-				if exechookRunner != nil {
-					if err := exechookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+				// This will not be needed if the hooks are nonAsync as they will be called with SendAndWait
+				if *flHooksAsync {
+					if exechookRunner != nil {
+						if err := exechookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
-				}
-				if webhookRunner != nil {
-					if err := webhookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+					if webhookRunner != nil {
+						if err := webhookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
 				}
 				log.DeleteErrorFile()
@@ -1719,6 +1764,11 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
 
+	exechookRunner := ctx.Value("hookvalues").(Values).Get("exechook").(*hook.HookRunner)
+	webhookRunner := ctx.Value("hookvalues").(Values).Get("webhook").(*hook.HookRunner)
+	flHooksBeforeSymlink := ctx.Value("hookvalues").(Values).Get("flHooksBeforeSymlink").(bool)
+	flHooksAsync := ctx.Value("hookvalues").(Values).Get("flHooksAsync").(bool)
+
 	if err := refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
 	}
@@ -1770,6 +1820,26 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// This catches in-place upgrades from older versions where the worktree
 	// path was different.
 	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
+
+	// Fire hooks if needed.
+	if flHooksBeforeSymlink {
+		if exechookRunner != nil {
+			git.log.V(2).Info("running exechook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+			if flHooksAsync {
+				exechookRunner.Send(remoteHash)
+			} else {
+				exechookRunner.SendAndWait(remoteHash)
+			}
+		}
+		if webhookRunner != nil {
+			git.log.V(2).Info("running webhook before sync", "local", currentHash, "remote", remoteHash, "syncCount", git.syncCount)
+			if flHooksAsync {
+				webhookRunner.Send(remoteHash)
+			} else {
+				webhookRunner.SendAndWait(remoteHash)
+			}
+		}
+	}
 
 	// We have to do at least one fetch, to ensure that parameters like depth
 	// are set properly.  This is cheap when we already have the target hash.
@@ -2469,6 +2539,13 @@ OPTIONS
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
+    --exechook-when <string>, $GITSYNC_EXECHOOK_WHEN
+            When to run the --exechook-command.  This can be one of "BEFORE_SYNC"
+            or "AFTER_SYNC".  If not specified, this defaults to "AFTER_SYNC".
+            ExecHook is asynchronous, so setting this to "BEFORE_SYNC" will
+            not block the sync process. If you need the hook to run to completion
+            before the symlink is updated, you should use --delay-symlink.
+
     --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
             testing).  This defaults to "git".
@@ -2633,6 +2710,13 @@ OPTIONS
             (as determined by --sync-timeout). If not specified, this defaults
             to 0, meaning that stale worktrees will be removed immediately.
 
+    --delay-symlink, $GITSYNC_DELAY_SYMLINK
+            Don't update the symlink until after the ExecHook and Webhook 
+            commands have completed. This is useful when the
+            ExecHook or Webhook commands need to finish before the symlink
+            is updated. e.g. an ExecHook that syncs non-git files to the 
+            synced directory.
+
     --submodules <string>, $GITSYNC_SUBMODULES
             The git submodule behavior: one of "recursive", "shallow", or
             "off".  If not specified, this defaults to "recursive".
@@ -2772,7 +2856,11 @@ HOOKS
     exechooks, or --webhook-success-status for webhooks).  If unsuccessful,
     git-sync will wait --exechook-backoff or --webhook-backoff (as appropriate)
     before re-trying the hook.  Git-sync does not ensure that hooks are invoked
-    exactly once, so hooks must be idempotent.
+    exactly once, so hooks must be idempotent. 
+
+    By default, both exechook and webhooks are fired after the sync is complete
+    and the symlink is updated. If you need the hooks to run to completion 
+    before the symlink is updated, --delay-symlink can be used.
 
     Hooks are not guaranteed to succeed on every single hash change.  For example,
     if a hook fails and a new hash is synced during the backoff period, the

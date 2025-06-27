@@ -19,4 +19,7 @@
 
 sleep 3
 cat file > exechook
+cat file
+cat exechook
+if [[ "$(pwd)" != "$(pwd -P)" ]]; then echo "true" > delaycheck; fi
 echo "ENVKEY=$ENVKEY" > exechook-env
