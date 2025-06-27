@@ -860,7 +860,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
-			!*flHooksAsync,
+			*flHooksAsync,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -885,7 +885,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
-			!*flHooksAsync,
+			*flHooksAsync,
 		)
 		go exechookRunner.Run(context.Background())
 	}
@@ -1766,7 +1766,7 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 	exechookRunner := ctx.Value("hookvalues").(Values).Get("exechook").(*hook.HookRunner)
 	webhookRunner := ctx.Value("hookvalues").(Values).Get("webhook").(*hook.HookRunner)
-	flHooksBeforeSymlink := ctx.Value("hookvalues").(Values).Get("flHooksBeforeAsync").(bool)
+	flHooksBeforeSymlink := ctx.Value("hookvalues").(Values).Get("flHooksBeforeSymlink").(bool)
 	flHooksAsync := ctx.Value("hookvalues").(Values).Get("flHooksAsync").(bool)
 
 	if err := refreshCreds(ctx); err != nil {

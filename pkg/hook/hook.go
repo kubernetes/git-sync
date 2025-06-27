@@ -134,6 +134,7 @@ func (r *HookRunner) Send(hash string) {
 func (r *HookRunner) SendAndWait(hash string) error {
 	r.data.send(hash)
 	err := r.WaitForCompletion()
+	r.log.V(1).Info("hook completed", "hash", hash, "err", err)
 	if err != nil {
 		return err
 	}
@@ -209,8 +210,9 @@ func (r *HookRunner) WaitForCompletion() error {
 	}
 
 	// If oneTimeResult is not nil, we wait for its result.
-	if r.nonAsyncResult != nil {
+	if r.oneTimeResult != nil {
 		hookRunnerFinishedSuccessfully := <-r.oneTimeResult
+		r.log.V(1).Info("one-time hook completed", "success", hookRunnerFinishedSuccessfully)
 		if !hookRunnerFinishedSuccessfully {
 			return fmt.Errorf("hook completed with error")
 		}
@@ -219,6 +221,7 @@ func (r *HookRunner) WaitForCompletion() error {
 	// If nonAsyncResult is not nil, we wait for its result.
 	if r.nonAsyncResult != nil {
 		hookRunnerFinishedSuccessfully := <-r.nonAsyncResult
+		r.log.V(1).Info("non-async hook completed", "success", hookRunnerFinishedSuccessfully)
 		if !hookRunnerFinishedSuccessfully {
 			return fmt.Errorf("hook completed with error")
 		}
