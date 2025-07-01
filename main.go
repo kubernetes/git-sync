@@ -2574,6 +2574,13 @@ OPTIONS
     -?, -h, --help
             Print help text and exit.
 
+	--hooks-async, $GITSYNC_HOOKS_ASYNC
+			Whether to run the --exechook-command asynchronously.
+
+	--hooks-before-symlink, $GITSYNC_HOOKS_BEFORE_SYMLINK
+			Whether to run the --exechook-command before updating the symlink. Use in combination with --hooks-async set
+			to false if you need the hook to finish before the symlink is updated. 
+
     --http-bind <string>, $GITSYNC_HTTP_BIND
             The bind address (including port) for git-sync's HTTP endpoint.
             The '/' URL of this endpoint is suitable for Kubernetes startup and

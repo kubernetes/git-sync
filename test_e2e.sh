@@ -3846,7 +3846,8 @@ for t; do
         fi
         remove_containers || true
         run=$((run+1))
-    done    if [[ "$test_ret" != 0 ]]; then
+    done
+    if [[ "$test_ret" != 0 ]]; then
         final_ret=1
         failures+=("$t  (log: ${log}.*)")
     fi
