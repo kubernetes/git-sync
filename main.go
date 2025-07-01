@@ -240,6 +240,9 @@ func main() {
 	flHooksAsync := pflag.Bool("hooks-async",
 		envBool(true, "GITSYNC_HOOKS_ASYNC", "GIT_SYNC_HOOKS_ASYNC"),
 		"run hooks asynchronously")
+	flHooksBeforeSymlink := pflag.Bool("hooks-before-symlink",
+		envBool(false, "GITSYNC_HOOKS_BEFORE_SYMLINK", "GIT_SYNC_HOOKS_BEFORE_SYMLINK"),
+		"run hooks before creating the symlink (defaults to false)")
 
 	flUsername := pflag.String("username",
 		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
@@ -879,6 +882,25 @@ func main() {
 		go exechookRunner.Run(context.Background())
 	}
 
+	runHooks := func(hash string) error {
+		var err error
+		if exechookRunner != nil {
+			log.V(3).Info("sending exechook")
+			err = exechookRunner.Send(hash)
+			if err != nil {
+				return err
+			}
+		}
+		if webhookRunner != nil {
+			log.V(3).Info("sending webhook")
+			err = webhookRunner.Send(hash)
+		}
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	// Setup signal notify channel
 	sigChan := make(chan os.Signal, 1)
 	if syncSig != 0 {
@@ -919,11 +941,12 @@ func main() {
 
 	failCount := 0
 	syncCount := uint64(0)
+
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 
-		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, refreshCreds, runHooks, *flHooksBeforeSymlink); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
 			if *flMaxFailures >= 0 && failCount >= *flMaxFailures {
@@ -944,11 +967,10 @@ func main() {
 						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
 				}
-				if webhookRunner != nil {
-					webhookRunner.Send(hash)
-				}
-				if exechookRunner != nil {
-					exechookRunner.Send(hash)
+				// if --hooks-before-symlink is set, these will have already been sent and completed.
+				// otherwise, we send them now.
+				if !*flHooksBeforeSymlink {
+					runHooks(hash)
 				}
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
@@ -968,14 +990,17 @@ func main() {
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
-				if exechookRunner != nil {
-					if err := exechookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+				// This will not be needed if async == false, because the Send func for the hookRunners will wait
+				if *flHooksAsync {
+					if exechookRunner != nil {
+						if err := exechookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
-				}
-				if webhookRunner != nil {
-					if err := webhookRunner.WaitForCompletion(); err != nil {
-						exitCode = 1
+					if webhookRunner != nil {
+						if err := webhookRunner.WaitForCompletion(); err != nil {
+							exitCode = 1
+						}
 					}
 				}
 				log.DeleteErrorFile()
@@ -1723,7 +1748,7 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
-func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error, runHooks func(hash string) error, flHooksBeforeSymlink bool) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
 
 	if err := refreshCreds(ctx); err != nil {
@@ -1777,6 +1802,11 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 	// This catches in-place upgrades from older versions where the worktree
 	// path was different.
 	changed := (currentHash != remoteHash) || (currentWorktree != git.worktreeFor(currentHash))
+
+	// Fire hooks if needed.
+	if flHooksBeforeSymlink {
+		runHooks(remoteHash)
+	}
 
 	// We have to do at least one fetch, to ensure that parameters like depth
 	// are set properly.  This is cheap when we already have the target hash.
