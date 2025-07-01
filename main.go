@@ -207,7 +207,8 @@ func main() {
 	flGroupWrite := pflag.Bool("group-write",
 		envBool(false, "GITSYNC_GROUP_WRITE", "GIT_SYNC_GROUP_WRITE"),
 		"ensure that all data (repo, worktrees, etc.) is group writable")
-	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout", envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
+	flStaleWorktreeTimeout := pflag.Duration("stale-worktree-timeout",
+		envDuration(0, "GITSYNC_STALE_WORKTREE_TIMEOUT"),
 		"how long to retain non-current worktrees")
 
 	flExechookCommand := pflag.String("exechook-command",
@@ -235,6 +236,10 @@ func main() {
 	flWebhookBackoff := pflag.Duration("webhook-backoff",
 		envDuration(3*time.Second, "GITSYNC_WEBHOOK_BACKOFF", "GIT_SYNC_WEBHOOK_BACKOFF"),
 		"the time to wait before retrying a failed webhook")
+
+	flHooksAsync := pflag.Bool("hooks-async",
+		envBool(true, "GITSYNC_HOOKS_ASYNC", "GIT_SYNC_HOOKS_ASYNC"),
+		"run hooks asynchronously")
 
 	flUsername := pflag.String("username",
 		envString("", "GITSYNC_USERNAME", "GIT_SYNC_USERNAME"),
@@ -844,6 +849,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			*flHooksAsync,
 		)
 		go webhookRunner.Run(context.Background())
 	}
@@ -868,6 +874,7 @@ func main() {
 			hook.NewHookData(),
 			log,
 			*flOneTime,
+			*flHooksAsync,
 		)
 		go exechookRunner.Run(context.Background())
 	}

@@ -2406,7 +2406,7 @@ function e2e::exechook_fail_retry() {
         --exechook-command="/$EXECHOOK_COMMAND_FAIL" \
         --exechook-backoff=1s \
         &
-    sleep 3 # give it time to retry
+    sleep 4 # give it time to retry
 
     # Check that exechook was called
     assert_file_lines_ge "$RUNLOG" 2
@@ -2484,6 +2484,29 @@ function e2e::exechook_startup_after_crash() {
     assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
     assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
     assert_file_lines_eq "$RUNLOG" 1
+}
+
+##############################################
+# Test exechook-success with --hooks-async=false
+##############################################
+function e2e::exechook_success_hooks_non_async() {
+    cat /dev/null > "$RUNLOG"
+
+    GIT_SYNC \
+        --hooks-async=false \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND_SLEEPY" \
+        &
+    sleep 5 # give it time to run
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
 }
 
 ##############################################
@@ -3797,8 +3820,7 @@ for t; do
         fi
         remove_containers || true
         run=$((run+1))
-    done
-    if [[ "$test_ret" != 0 ]]; then
+    done    if [[ "$test_ret" != 0 ]]; then
         final_ret=1
         failures+=("$t  (log: ${log}.*)")
     fi
