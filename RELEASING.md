@@ -6,7 +6,7 @@ First, pick the new tag.  Usually this means to see what has already been
 tagged, and pick the next release number.
 
 ```
-git tag
+git tag --sort version:refname | tail
 ```
 
 ## Log in
