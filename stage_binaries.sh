@@ -167,7 +167,7 @@ function file_to_package() {
     # `dpkg-query --search $file-pattern` outputs lines with the format: "$package: $file-path"
     # where $file-path belongs to $package.  Sometimes it has lines that say
     # "diversion" but there's no documented grammar I can find.
-    echo "${result}" | grep -v "diversion" | cut -d':' -f1
+    echo "${result}" | (grep -v "diversion" || true) | cut -d':' -f1
 }
 
 function ensure_dir_in_staging() {
@@ -216,6 +216,9 @@ function stage_file_and_deps() {
     # get the package so we can stage package metadata as well
     local package
     package="$(file_to_package "${file}")"
+    if [[ -z "${package}" ]]; then
+        return 0 # no package, but no error either
+    fi
     DBG "staging file ${file} from pkg ${package}"
 
     stage_one_file "${staging}" "$file"

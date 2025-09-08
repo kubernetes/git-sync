@@ -45,13 +45,13 @@ ALL_PLATFORMS := linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/s390x
 OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
 ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 
-BASEIMAGE ?= registry.k8s.io/build-image/debian-base:bookworm-v1.0.2
+BASEIMAGE ?= debian:trixie
 
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)
 OS_ARCH_TAG := $(TAG)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.24
+BUILD_IMAGE ?= golang:1.25
 
 DBG_MAKEFILE ?=
 ifneq ($(DBG_MAKEFILE),1)
