@@ -51,12 +51,7 @@ RUN apt-get -y -qq -o Dpkg::Use-Pty=0 update
 RUN apt-get -y -qq -o Dpkg::Use-Pty=0 -y upgrade
 
 RUN apt-get -y -qq -o Dpkg::Use-Pty=0 install --no-install-recommends bash # for the staging scripts and ldd
-# Newer Debian uses symlinks but the stage_binaries tool is kind of dumb.
 RUN mkdir -p {ARG_STAGING}
-RUN mkdir -p {ARG_STAGING}/usr/bin && ln -s usr/bin {ARG_STAGING}/bin
-RUN mkdir -p {ARG_STAGING}/usr/sbin && ln -s usr/sbin {ARG_STAGING}/sbin
-RUN mkdir -p {ARG_STAGING}/usr/lib && ln -s usr/lib {ARG_STAGING}/lib
-RUN mkdir -p {ARG_STAGING}/usr/lib64 && ln -s usr/lib64 {ARG_STAGING}/lib64
 COPY stage_binaries.sh /
 RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-p base-files \
@@ -105,11 +100,15 @@ RUN rm -rf \
     /usr/lib/git-core/git-http-fetch \
     /usr/lib/git-core/git-http-push \
     /usr/lib/git-core/git-imap-send \
+    /usr/lib/git-core/git-instaweb \
+    /usr/lib/git-core/git-sh-i18n--envsubst \
+    /usr/lib/git-core/scalar \
     /usr/lib/openssh/ssh-keysign \
     /usr/lib/openssh/ssh-pkcs11-helper \
     /usr/lib/openssh/ssh-sk-helper \
     /usr/share/gitweb \
     /usr/share/locale
+RUN rm -f /usr/bin/git && ln -s /usr/lib/git-core/git /usr/bin/git
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
