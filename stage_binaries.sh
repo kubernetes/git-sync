@@ -117,7 +117,7 @@ function load_root_links() {
     done < <(ls /)
 }
 
-# file_to_package identifies the debian package that provided the file $1
+# file_to_package identifies the debian package(s) that provided the file $1
 function file_to_package() {
     local file="$1"
 
@@ -166,40 +166,48 @@ function file_to_package() {
 
     # `dpkg-query --search $file-pattern` outputs lines with the format: "$package: $file-path"
     # where $file-path belongs to $package.  Sometimes it has lines that say
-    # "diversion" but there's no documented grammar I can find.
-    echo "${result}" | grep -v "diversion" | cut -d':' -f1
+    # "diversion" but there's no documented grammar I can find.  Multiple
+    # packages can own one file, in which case multiple lines are output.
+    echo "${result}" | (grep -v "diversion" || true) | cut -d':' -f1 | sed 's/,//g'
 }
 
-function ensure_dir_in_staging() {
-    local staging="$1"
-    local dir="$2"
-
-    if [[ ! -e "${staging}/${dir}" ]]; then
-        # Stript the leading /
-        local rel="${dir/#\//}"
-        tar -C / -c --no-recursion --dereference "${rel}" | tar -C "${staging}" -x
-    fi
-}
-
-# stage_one_file stages the filepath $2 to $1, following symlinks
+# stage_one_file stages the filepath $2 to $1, respecting symlinks
 function stage_one_file() {
     local staging="$1"
     local file="$2"
 
-    # copy the real form of the named path
-    local real
-    real="$(realpath "${file}")"
-    cp -a --parents "${real}" "${staging}"
-
-    # recreate symlinks, even on intermediate path elements
-    if [[ "${file}" != "${real}" ]]; then
-        if [[ ! -e "${staging}/${file}" ]]; then
-            local dir
-            dir="$(dirname "${file}")"
-            ensure_dir_in_staging "${staging}" "${dir}"
-            ln -s "${real}" "${staging}/${file}"
-        fi
+    if [ -e "${staging}${file}" ]; then
+        return
     fi
+
+    # This will break the path into elements, so we can handle symlinks at any
+    # level.
+    local elems=()
+    IFS='/' read -r -a elems <<< "${file}"
+    # [0] is empty because of leading /
+    if [[ "${elems[0]}" == "" ]]; then
+        elems=("${elems[@]:1}")
+    fi
+
+    local path=""
+    for elem in "${elems[@]}"; do
+        path="${path}/${elem}"
+        if [[ ! -e "${staging}${path}" ]]; then
+            if [[ -d "${path}" && ! -L "${path}" ]]; then
+                # strip the leading / and use tar, which preserves everything
+                local rel="${path/#\//}"
+                tar -C / -c --no-recursion "${rel}" | tar -C "${staging}" -x
+            else
+                # preserves hardlinks, symlinks, permissions, timestamps
+                cp -lpP "${path}" "${staging}${path}"
+
+                # if it is a symlink, also stage the target
+                if [[ -L "${path}" ]]; then
+                    stage_one_file "${staging}" "$(realpath "${path}")"
+                fi
+            fi
+        fi
+    done
 }
 
 # stage_file_and_deps stages the filepath $2 to $1, following symlinks and
@@ -214,21 +222,25 @@ function stage_file_and_deps() {
     fi
 
     # get the package so we can stage package metadata as well
-    local package
-    package="$(file_to_package "${file}")"
-    DBG "staging file ${file} from pkg ${package}"
+    local packages
+    packages="$(file_to_package "${file}")"
+    if [[ -z "${packages}" ]]; then
+        return 0 # no package(s), but no error either
+    fi
+    DBG "staging file ${file} from pkg(s) ${packages}"
 
-    stage_one_file "${staging}" "$file"
+    stage_one_file "${staging}" "${file}"
 
     # stage dependencies of binaries
-    if [[ -x "$file" ]]; then
+    if [[ -x "${file}" && ! -d "${file}" ]]; then
         DBG "staging deps of file ${file}"
         while read -r lib; do
             indent stage_file_and_deps "${staging}" "${lib}"
         done < <( binary_to_libraries "${file}" )
     fi
 
-    if [[ -n "${package}" ]]; then
+    local package
+    for package in ${packages}; do
         # stage the copyright for the file, if it exists
         local copyright_src="/usr/share/doc/${package}/copyright"
         local copyright_dst="${staging}/copyright/${package}/copyright.gz"
@@ -242,53 +254,31 @@ function stage_file_and_deps() {
         # https://github.com/bazelbuild/rules_docker/commit/f5432b813e0a11491cf2bf83ff1a923706b36420
         mkdir -p "${staging}/var/lib/dpkg/status.d/"
         dpkg -s "${package}" > "${staging}/var/lib/dpkg/status.d/${package}"
-    fi
+    done
 }
 
 function stage_one_package() {
     local staging="$1"
     local pkg="$2"
 
-    local names=()
-    local sums=()
     while read -r file; do
-        if [[ -f "${file}" ]]; then
-            local found=""
-            if [[ ! -L "${file}" ]]; then
-                sum="$(md5sum "${file}" | cut -f1 -d' ')"
-                local i=0
-                for s in "${sums[@]}"; do
-                    if [[ "${sum}" == "${s}" ]]; then
-                        local dir
-                        dir="$(dirname "${file}")"
-                        ensure_dir_in_staging "${staging}" "$(dirname "${file}")"
-                        ln -s "${names[$i]}" "${staging}/${file}"
-                        found="true"
-                        break
-                    fi
-                    i=$((i+1))
-                done
-            fi
-            if [[ -z "${found}" ]]; then
-                names+=("${file}")
-                sums+=("${sum}")
-                indent stage_file_and_deps "${staging}" "${file}"
-            fi
-        fi
+        indent stage_file_and_deps "${staging}" "${file}"
     done < <( dpkg -L "${pkg}" \
         | grep_allow_nomatch -vE '(/\.|/usr/share/(man|doc|.*-completion))' )
 }
 
 function get_dependent_packages() {
     local pkg="$1"
-    # There's no documented grammar for the output of this.  Sometimes it says:
+    # There's no easily found documented grammar for the output of this.
+    # Sometimes it says:
     #    Depends: package
     # ...and other times it says:
     #    Depends <package>
-    # ...but those don't really seem to be required.  There's also "PreDepends"
-    # which are something else.
+    # ...but those don't really seem to be required.
+    # There's also "PreDepends" which is like Depends but has semantic
+    # differences that don't matter here.
     apt-cache depends "${pkg}" \
-        | grep_allow_nomatch '^ *Depends: [a-zA-Z0-9]' \
+        | grep_allow_nomatch '^ *\(Pre\)\?Depends: [a-zA-Z0-9]' \
         | awk -F ':' '{print $2}'
 }
 

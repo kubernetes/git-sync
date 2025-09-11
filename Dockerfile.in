@@ -70,14 +70,14 @@ RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-f /etc/os-release \
 	-f /etc/passwd \
 	-f /tmp
-RUN ln -s /bin/bash {ARG_STAGING}/bin/sh # Not sure why this is not set up automatically
+RUN ln -s bash {ARG_STAGING}/bin/sh # Not sure why this is not set up automatically
 
 FROM scratch AS intermediate
 
 # Docker doesn't do vars in COPY, so we can't use a regular ARG.
 COPY --from=base {ARG_STAGING} /
 
-# This list is not generic - it is specific to git-sync on debian bookworm.
+# This list is not generic - it is specific to git-sync on debian trixie.
 RUN rm -rf \
     /usr/share/base-files \
     /usr/share/doc \
@@ -100,10 +100,15 @@ RUN rm -rf \
     /usr/lib/git-core/git-http-fetch \
     /usr/lib/git-core/git-http-push \
     /usr/lib/git-core/git-imap-send \
+    /usr/lib/git-core/git-instaweb \
+    /usr/lib/git-core/git-sh-i18n--envsubst \
+    /usr/lib/git-core/scalar \
     /usr/lib/openssh/ssh-keysign \
     /usr/lib/openssh/ssh-pkcs11-helper \
     /usr/lib/openssh/ssh-sk-helper \
-    /usr/share/gitweb
+    /usr/share/gitweb \
+    /usr/share/locale
+RUN rm -f /usr/bin/git && ln -s /usr/lib/git-core/git /usr/bin/git
 
 # Add the default UID to /etc/passwd so SSH is satisfied.
 RUN echo "git-sync:x:65533:65533::/tmp:/sbin/nologin" >> /etc/passwd
