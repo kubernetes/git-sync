@@ -35,6 +35,10 @@ DBG ?=
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
 
+# Allow some buildx adaptation for local builds
+BUILDX_BUILDER_NAME := git-sync
+BUILDX_BUILDER_SKIP_CREATION ?=
+
 ###
 ### These variables should not need tweaking.
 ###
@@ -177,7 +181,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	FORCE=0;                                                     \
 	if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
 	docker buildx build                                          \
-	    --builder git-sync                                       \
+	    --builder "$(BUILDX_BUILDER_NAME)"                       \
 	    --build-arg FORCE_REBUILD="$$FORCE"                      \
 	    --build-arg HASH_LICENSES="$$HASH_LICENSES"              \
 	    --build-arg HASH_BINARY="$$HASH_BINARY"                  \
@@ -262,7 +266,7 @@ test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 # this.  See https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
 # for great context.
 .buildx-initialized:
-	docker buildx create --name git-sync --node git-sync-0 >/dev/null
+	if [ -z "$(BUILDX_BUILDER_SKIP_CREATION)" ]; then docker buildx create --name "$(BUILDX_BUILDER_NAME)" --node git-sync-0 >/dev/null; fi
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes >/dev/null
 	date > $@
 
