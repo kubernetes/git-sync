@@ -40,6 +40,9 @@ NO_PROXY ?=
 BUILDX_BUILDER_NAME := git-sync
 BUILDX_BUILDER_SKIP_CREATION ?=
 
+# Allow alpine to be pulled from a private registry when building the end-to-end tests images
+ALPINE_REGISTRY_PREFIX ?=
+
 ###
 ### These variables should not need tweaking.
 ###
@@ -262,7 +265,7 @@ TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
 .container-test_tool.%: _test_tools/% _test_tools/%/*
-	docker build -t $(REGISTRY)/test/$$(basename $<) $<
+	docker build --build-arg ALPINE_REGISTRY_PREFIX="$(ALPINE_REGISTRY_PREFIX)" -t $(REGISTRY)/test/$$(basename $<) $<
 	docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
 # Help set up multi-arch build tools.  This assumes you have the tools
