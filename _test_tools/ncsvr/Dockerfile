@@ -14,7 +14,8 @@
 
 # Stolen from https://github.com/linuxkit/linuxkit/tree/master/pkg/sshd/
 
-FROM alpine AS base
+ARG ALPINE_REGISTRY_PREFIX=""
+FROM ${ALPINE_REGISTRY_PREFIX}alpine AS base
 
 RUN mkdir -p /out/etc/apk && cp -r /etc/apk/* /out/etc/apk/
 RUN apk add --no-cache --initdb -p /out \

@@ -1,7 +1,8 @@
-/bin
-/.go
-/.push-*
+/.buildx-initialized
 /.container-*
 /.dockerfile-*
-/.buildx-initialized
+/.go
+/.idea
 /.licenses
+/.push-*
+/bin
