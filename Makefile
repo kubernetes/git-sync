@@ -34,6 +34,7 @@ DBG ?=
 # These are passed to docker when building and testing.
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
+NO_PROXY ?=
 
 # Allow some buildx adaptation for local builds
 BUILDX_BUILDER_NAME := git-sync
@@ -134,6 +135,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ARCH=$(ARCH)                                       \
@@ -190,6 +192,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    --platform "$(OS)/$(ARCH)"                               \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                     \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                   \
+	    --build-arg NO_PROXY=$(NO_PROXY)                         \
 	    -t $(IMAGE):$(OS_ARCH_TAG)                               \
 	    -f .dockerfile-$(OS)_$(ARCH)                             \
 	    .
@@ -248,6 +251,7 @@ test: $(BUILD_DIRS)
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ./build/test.sh ./...                              \
