@@ -34,10 +34,14 @@ DBG ?=
 # These are passed to docker when building and testing.
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
+NO_PROXY ?=
 
 # Allow some buildx adaptation for local builds
 BUILDX_BUILDER_NAME := git-sync
 BUILDX_BUILDER_SKIP_CREATION ?=
+
+# Allow alpine to be pulled from a private registry when building the end-to-end tests images
+ALPINE_REGISTRY_PREFIX ?=
 
 ###
 ### These variables should not need tweaking.
@@ -134,6 +138,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ARCH=$(ARCH)                                       \
@@ -190,6 +195,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    --platform "$(OS)/$(ARCH)"                               \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                     \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                   \
+	    --build-arg NO_PROXY=$(NO_PROXY)                         \
 	    -t $(IMAGE):$(OS_ARCH_TAG)                               \
 	    -f .dockerfile-$(OS)_$(ARCH)                             \
 	    .
@@ -248,17 +254,27 @@ test: $(BUILD_DIRS)
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ./build/test.sh ./...                              \
 	    "
+	@if [ -n "$(HTTP_PROXY)" ]; then \
+		export HTTP_PROXY="$(HTTP_PROXY)"; \
+	fi
+	@if [ -n "$(HTTPS_PROXY)" ]; then \
+		export HTTPS_PROXY="$(HTTPS_PROXY)"; \
+	fi
+	@if [ -n "$(NO_PROXY)" ]; then \
+		export NO_PROXY="$(NO_PROXY)"; \
+	fi
 	VERBOSE=1 ./test_e2e.sh
 
 TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
 .container-test_tool.%: _test_tools/% _test_tools/%/*
-	docker build -t $(REGISTRY)/test/$$(basename $<) $<
+	docker build --build-arg ALPINE_REGISTRY_PREFIX="$(ALPINE_REGISTRY_PREFIX)" -t $(REGISTRY)/test/$$(basename $<) $<
 	docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
 # Help set up multi-arch build tools.  This assumes you have the tools

@@ -18,6 +18,12 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# If the Makefile and/or the user do set up the upper-case flavor of a proxy variable,
+# then let us also set up the lower-case flavor that is used by tools like the git CLI.
+[ -n "${HTTP_PROXY:-}"  ] && export http_proxy="$HTTP_PROXY"
+[ -n "${HTTPS_PROXY:-}" ] && export https_proxy="$HTTPS_PROXY"
+[ -n "${NO_PROXY:-}"    ] && export no_proxy="$NO_PROXY"
+
 # shellcheck disable=SC2120
 function caller() {
     local stack_skip=${1:-0}
