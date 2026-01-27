@@ -3451,7 +3451,7 @@ function e2e::touch_file_abs_path() {
 function e2e::github_https() {
     GIT_SYNC \
         --one-time \
-        --repo="https://github.com/kubernetes/git-sync" \
+        --repo="${GIT_SYNC_REPOSITORY_URL:-https://github.com/kubernetes/git-sync}" \
         --root="$ROOT" \
         --link="link"
     assert_file_exists "$ROOT/link/LICENSE"
