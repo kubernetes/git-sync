@@ -3759,6 +3759,9 @@ if [[ "$#" == 0 ]]; then
 fi
 
 # Build it
+# NOTE: If you want to run the end-to-end tests locally and you need specific Makefile arguments
+#       you might want to run `make test` once first with those arguments, in order to pre-build this image.
+#       Otherwise this call to the Makefile will made without customization.
 $build_container && make container REGISTRY=e2e VERSION="${E2E_TAG}" ALLOW_STALE_APT=1
 make test-tools REGISTRY=e2e
 
