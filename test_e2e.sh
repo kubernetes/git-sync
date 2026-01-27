@@ -165,7 +165,7 @@ function docker_ip() {
         echo "usage: $0 <id>"
         return 1
     fi
-    docker inspect "$1" | jq -r .[0].NetworkSettings.IPAddress
+    docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$1"
 }
 
 function docker_kill() {
@@ -1887,12 +1887,14 @@ function e2e::sync_depth_change_on_restart() {
 ##############################################
 function e2e::auth_http_password() {
     # Run a git-over-HTTP server.
+    set -x
     local ctr
     ctr=$(docker_run \
         -v "$REPO":/git/repo:ro \
         e2e/test/httpd)
     local ip
     ip=$(docker_ip "$ctr")
+    sleep 30
 
     # Try with wrong username
     assert_fail \
