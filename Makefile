@@ -43,6 +43,9 @@ BUILDX_BUILDER_SKIP_CREATION ?=
 # Allow alpine to be pulled from a private registry when building the end-to-end tests images
 ALPINE_REGISTRY_PREFIX ?=
 
+# By default all end-to-end tests are executed, but this allows for a manual selection
+LIST_OF_E2E_TESTS ?=
+
 ###
 ### These variables should not need tweaking.
 ###
@@ -268,7 +271,7 @@ test: $(BUILD_DIRS)
 	@if [ -n "$(NO_PROXY)" ]; then \
 		export NO_PROXY="$(NO_PROXY)"; \
 	fi
-	VERBOSE=1 ./test_e2e.sh
+	VERBOSE=1 ./test_e2e.sh $(LIST_OF_E2E_TESTS)
 
 TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
