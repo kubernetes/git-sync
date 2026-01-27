@@ -122,6 +122,12 @@ function assert_file_lines_ge() {
     fi
 }
 
+function assert_tgz_archive() {
+    if ! tar tzf "$1"; then
+        fail "failed to list tgz archive content in $1"
+    fi
+}
+
 function assert_metric_eq() {
     local val
     val="$(curl --silent "http://localhost:$HTTP_PORT/metrics" \
@@ -317,6 +323,7 @@ EXECHOOK_COMMAND="$TEST_TOOLS/exechook_command.sh"
 EXECHOOK_COMMAND_FAIL="$TEST_TOOLS/exechook_command_fail.sh"
 EXECHOOK_COMMAND_SLEEPY="$TEST_TOOLS/exechook_command_with_sleep.sh"
 EXECHOOK_COMMAND_FAIL_SLEEPY="$TEST_TOOLS/exechook_command_fail_with_sleep.sh"
+EXECHOOK_COMMAND_GIT_ARCHIVE="$TEST_TOOLS/exechook_command_git_archive.sh"
 EXECHOOK_ENVKEY=ENVKEY
 EXECHOOK_ENVVAL=envval
 RUNLOG="$DIR/runlog"
@@ -3602,6 +3609,20 @@ function e2e::gc_off() {
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+}
+
+##############################################
+# Test git-archive using tar and gzip
+##############################################
+function e2e::exechook_git_archive() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --exechook-command="/$EXECHOOK_COMMAND_GIT_ARCHIVE"
+    assert_file_exists "$ROOT/link/archive.tgz"
+    assert_tgz_archive "$ROOT/link/archive.tgz"
 }
 
 #
