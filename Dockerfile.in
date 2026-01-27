@@ -56,12 +56,14 @@ COPY stage_binaries.sh /
 RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-p base-files \
 	-p bash \
-	-p coreutils \
-	-p git \
-	-p openssh-client \
 	-p ca-certificates \
+	-p coreutils \
 	-p curl \
+	-p git \
+	-p gzip \
+	-p openssh-client \
 	-p socat \
+	-p tar \
 	-b /bin/grep \
 	-b /bin/sed \
 	-f /etc/debian_version \
