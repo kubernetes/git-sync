@@ -245,6 +245,9 @@ func main() {
 	flPasswordFile := pflag.String("password-file",
 		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 		"the file from which the password or personal access token for git auth will be sourced")
+	flPasswordFileReload := pflag.Bool("password-file-reload",
+		envBool(false, "GITSYNC_PASSWORD_FILE_RELOAD"),
+		"reload the password from --password-file on each sync cycle (useful when password is rotated by an external system like Vault Dynamic Engine)")
 	flCredentials := pflagCredentialSlice("credential", envString("", "GITSYNC_CREDENTIAL"), "one or more credentials (see --man for details) available for authentication")
 
 	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
@@ -883,7 +886,20 @@ func main() {
 	refreshCreds := func(ctx context.Context) error {
 		// These should all be mutually-exclusive configs.
 		for _, cred := range *flCredentials {
-			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, cred.Password); err != nil {
+			password := cred.Password
+
+			// If reload flag is set and this credential has a password file,
+			// re-read it from disk to pick up token rotation (e.g. from Vault)
+			if *flPasswordFileReload && cred.PasswordFile != "" {
+				passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
+				if err != nil {
+					return fmt.Errorf("can't reload password file %q: %w", cred.PasswordFile, err)
+				}
+				password = string(passwordFileBytes)
+				git.log.V(3).Info("reloaded password from file", "file", cred.PasswordFile)
+			}
+
+			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, password); err != nil {
 				return err
 			}
 		}
@@ -2585,6 +2601,15 @@ OPTIONS
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
             read.  See also $GITSYNC_PASSWORD.
+
+    --password-file-reload, $GITSYNC_PASSWORD_FILE_RELOAD
+            Reload the password from --password-file on each sync cycle.  This
+            is useful when using dynamic credentials that are rotated by an
+            external system (e.g. Vault's dynamic GitHub secrets engine).
+            Without this flag, the password file is read once at startup and
+            cached in memory.  With this flag enabled, the file will be re-read
+            before each sync attempt, allowing git-sync to pick up token
+            rotations.  If not specified, this defaults to false.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
