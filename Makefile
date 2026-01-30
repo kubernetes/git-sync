@@ -43,7 +43,10 @@ BUILDX_BUILDER_SKIP_CREATION ?=
 # Allow alpine to be pulled from a private registry when building the end-to-end tests images
 ALPINE_REGISTRY_PREFIX ?=
 
-# By default all end-to-end tests are executed, but this allows for a manual selection
+# By default all end-to-end tests are executed, but this allows for a manual selection.
+# NOTE: Each item in this list will be used as a regex to run functions of the form 'e2e::${MATCHING_TEST_NAME}'
+#       in the test_e2e.sh script. For example using 'auth' will include all authentication end-to-end tests.
+#       If multiple items match a same test, it will be executed only once.
 LIST_OF_E2E_TESTS ?=
 
 ###
@@ -246,6 +249,8 @@ release:
 version:
 	echo $(VERSION)
 
+# Run the 'test' goal in a single shell
+test: .SHELLFLAGS = -c
 test: $(BUILD_DIRS)
 	docker run                                                 \
 	    -i                                                     \

@@ -3449,9 +3449,11 @@ function e2e::touch_file_abs_path() {
 # Test github HTTPS
 ##############################################
 function e2e::github_https() {
+    local default_repo="https://github.com/kubernetes/git-sync"
+    local repo="${REMOTE_TEST_REPO_URL:-$default_repo}"
     GIT_SYNC \
         --one-time \
-        --repo="${GIT_SYNC_REPOSITORY_URL:-https://github.com/kubernetes/git-sync}" \
+        --repo="$repo" \
         --root="$ROOT" \
         --link="link"
     assert_file_exists "$ROOT/link/LICENSE"
