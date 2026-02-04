@@ -873,7 +873,7 @@ func main() {
 			password := cred.Password
 
 			// If this credential has a password file, re-read it from disk
-			// to pick up token rotation (e.g. from Vault)
+			// to pick up token rotation
 			if cred.PasswordFile != "" {
 				passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
 				if err != nil {
