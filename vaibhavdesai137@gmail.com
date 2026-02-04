@@ -245,9 +245,6 @@ func main() {
 	flPasswordFile := pflag.String("password-file",
 		envString("", "GITSYNC_PASSWORD_FILE", "GIT_SYNC_PASSWORD_FILE"),
 		"the file from which the password or personal access token for git auth will be sourced")
-	flPasswordFileReload := pflag.Bool("password-file-reload",
-		envBool(false, "GITSYNC_PASSWORD_FILE_RELOAD"),
-		"reload the password from --password-file on each sync cycle, useful when password is rotated by an external system")
 	flCredentials := pflagCredentialSlice("credential", envString("", "GITSYNC_CREDENTIAL"), "one or more credentials (see --man for details) available for authentication")
 
 	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
@@ -752,19 +749,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Finish populating credentials.
-	for i := range *flCredentials {
-		cred := &(*flCredentials)[i]
-		if cred.PasswordFile != "" {
-			passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
-			if err != nil {
-				log.Error(err, "can't read password file", "file", cred.PasswordFile)
-				os.Exit(1)
-			}
-			cred.Password = string(passwordFileBytes)
-		}
-	}
-
 	// If the --repo or any submodule uses SSH, we need to know which keys.
 	if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
 		log.Error(err, "can't set up git SSH", "keyFiles", *flSSHKeyFiles, "useKnownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
@@ -888,15 +872,15 @@ func main() {
 		for _, cred := range *flCredentials {
 			password := cred.Password
 
-			// If reload flag is set and this credential has a password file,
-			// re-read it from disk to pick up token rotation (e.g. from Vault)
-			if *flPasswordFileReload && cred.PasswordFile != "" {
+			// If this credential has a password file, re-read it from disk
+			// to pick up token rotation (e.g. from Vault)
+			if cred.PasswordFile != "" {
 				passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
 				if err != nil {
-					return fmt.Errorf("can't reload password file %q: %w", cred.PasswordFile, err)
+					return fmt.Errorf("can't read password file %q: %w", cred.PasswordFile, err)
 				}
 				password = string(passwordFileBytes)
-				git.log.V(3).Info("reloaded password from file", "file", cred.PasswordFile)
+				git.log.V(3).Info("read password from file", "file", cred.PasswordFile)
 			}
 
 			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, password); err != nil {
@@ -2600,16 +2584,10 @@ OPTIONS
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.  See also $GITSYNC_PASSWORD.
-
-    --password-file-reload, $GITSYNC_PASSWORD_FILE_RELOAD
-            Reload the password from --password-file on each sync cycle.  This
-            is useful when using dynamic credentials that are rotated by an
-            external system (e.g. Vault's dynamic GitHub secrets engine).
-            Without this flag, the password file is read once at startup and
-            cached in memory.  With this flag enabled, the file will be re-read
-            before each sync attempt, allowing git-sync to pick up token
-            rotations.  If not specified, this defaults to false.
+            read.  The file is re-read before each sync attempt, allowing
+            git-sync to pick up token rotations automatically (e.g. when 
+						credentials are dynamically rotated by external systems).
+            See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
