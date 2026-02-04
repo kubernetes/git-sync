@@ -247,7 +247,7 @@ func main() {
 		"the file from which the password or personal access token for git auth will be sourced")
 	flPasswordFileReload := pflag.Bool("password-file-reload",
 		envBool(false, "GITSYNC_PASSWORD_FILE_RELOAD"),
-		"reload the password from --password-file on each sync cycle (useful when password is rotated by an external system like Vault Dynamic Engine)")
+		"reload the password from --password-file on each sync cycle, useful when password is rotated by an external system")
 	flCredentials := pflagCredentialSlice("credential", envString("", "GITSYNC_CREDENTIAL"), "one or more credentials (see --man for details) available for authentication")
 
 	flSSHKeyFiles := pflag.StringArray("ssh-key-file",
