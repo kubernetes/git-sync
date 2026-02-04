@@ -2585,8 +2585,8 @@ OPTIONS
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
             read.  The file is re-read before each sync attempt, allowing
-            git-sync to pick up token rotations automatically (e.g. when 
-			credentials are dynamically rotated by external systems).
+            git-sync to pick up token rotations automatically (e.g. when using
+            dynamic credentials from Vault's dynamic GitHub secrets engine).
             See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
