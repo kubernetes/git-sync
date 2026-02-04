@@ -2586,7 +2586,7 @@ OPTIONS
             github docs) to use for git authentication (see --username) will be
             read.  The file is re-read before each sync attempt, allowing
             git-sync to pick up token rotations automatically (e.g. when 
-						credentials are dynamically rotated by external systems).
+			credentials are dynamically rotated by external systems).
             See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
