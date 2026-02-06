@@ -2025,7 +2025,7 @@ function e2e::auth_http_password_file() {
 ##############################################
 # Test password-file reload on each sync
 ##############################################
-function e2e::auth_http_password_file_reload() {
+function e2e::auth_password_file_reload() {
     # Run a git-over-HTTP server.
     local ctr
     ctr=$(docker_run \
@@ -2048,6 +2048,7 @@ function e2e::auth_http_password_file_reload() {
         --link="link" \
         --username="testuser" \
         --password-file="$WORK/password-file" \
+        --max-failures=100 \
         &
     wait_for_sync "${MAXWAIT}"
     assert_link_exists "$ROOT/link"
