@@ -749,19 +749,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Finish populating credentials.
-	for i := range *flCredentials {
-		cred := &(*flCredentials)[i]
-		if cred.PasswordFile != "" {
-			passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
-			if err != nil {
-				log.Error(err, "can't read password file", "file", cred.PasswordFile)
-				os.Exit(1)
-			}
-			cred.Password = string(passwordFileBytes)
-		}
-	}
-
 	// If the --repo or any submodule uses SSH, we need to know which keys.
 	if err := git.SetupGitSSH(*flSSHKnownHosts, *flSSHKeyFiles, *flSSHKnownHostsFile); err != nil {
 		log.Error(err, "can't set up git SSH", "keyFiles", *flSSHKeyFiles, "useKnownHosts", *flSSHKnownHosts, "knownHostsFile", *flSSHKnownHostsFile)
@@ -883,7 +870,20 @@ func main() {
 	refreshCreds := func(ctx context.Context) error {
 		// These should all be mutually-exclusive configs.
 		for _, cred := range *flCredentials {
-			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, cred.Password); err != nil {
+			password := cred.Password
+
+			// If this credential has a password file, re-read it from disk
+			// to pick up token rotation
+			if cred.PasswordFile != "" {
+				passwordFileBytes, err := os.ReadFile(cred.PasswordFile)
+				if err != nil {
+					return fmt.Errorf("can't read password file %q: %w", cred.PasswordFile, err)
+				}
+				password = string(passwordFileBytes)
+				git.log.V(3).Info("read password from file", "file", cred.PasswordFile)
+			}
+
+			if err := git.StoreCredentials(ctx, cred.URL, cred.Username, password); err != nil {
 				return err
 			}
 		}
@@ -2584,7 +2584,10 @@ OPTIONS
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.  See also $GITSYNC_PASSWORD.
+            read.  The file is re-read before each sync attempt, allowing
+            git-sync to pick up token rotations automatically (e.g. when using
+            dynamic credentials from an external secrets system).
+            See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least

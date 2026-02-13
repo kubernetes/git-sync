@@ -2023,6 +2023,64 @@ function e2e::auth_http_password_file() {
 }
 
 ##############################################
+# Test password-file reload on each sync
+##############################################
+function e2e::auth_password_file_reload() {
+    # Run a git-over-HTTP server.
+    local ctr
+    ctr=$(docker_run \
+        -v "$REPO":/git/repo:ro \
+        e2e/test/httpd)
+    local ip
+    ip=$(docker_ip "$ctr")
+
+    # Create a password file with the correct password.
+    echo -n "testpass" > "$WORK/password-file"
+
+    # First sync
+    echo "${FUNCNAME[0]} 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 1"
+
+    GIT_SYNC \
+        --period=1s \
+        --repo="http://$ip/repo" \
+        --root="$ROOT" \
+        --link="link" \
+        --username="testuser" \
+        --password-file="$WORK/password-file" \
+        --max-failures=100 \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+
+    # Change password file to wrong password
+    echo -n "wrong" > "$WORK/password-file.tmp"
+    mv "$WORK/password-file.tmp" "$WORK/password-file"
+
+    # Commit a change to the repo
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+
+    # Wait a bit and verify sync did NOT happen (still has old content)
+    sleep 3
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+
+    # Change password file back to correct password
+    echo -n "testpass" > "$WORK/password-file.tmp"
+    mv "$WORK/password-file.tmp" "$WORK/password-file"
+
+    # Verify sync now picks up the new change
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 2"
+}
+
+##############################################
 # Test SSH (user@host:path syntax)
 ##############################################
 function e2e::auth_ssh() {
