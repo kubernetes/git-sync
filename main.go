@@ -186,6 +186,12 @@ func main() {
 	flPeriod := pflag.Duration("period",
 		envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
 		"how long to wait between syncs, must be >= 10ms; --wait overrides this")
+	flInitPeriod := pflag.Duration("init-period",
+		envDuration(0, "GITSYNC_INIT_PERIOD"),
+		"how long to wait between sync attempts until the first success, must be >= 10ms if set; if unset, --period is used")
+	flInitTimeout := pflag.Duration("init-timeout",
+		envDuration(0, "GITSYNC_INIT_TIMEOUT"),
+		"the max time allowed for the initial sync to succeed; if unset, there is no timeout (retries forever until --max-failures)")
 	flSyncTimeout := pflag.Duration("sync-timeout",
 		envDuration(120*time.Second, "GITSYNC_SYNC_TIMEOUT", "GIT_SYNC_SYNC_TIMEOUT"),
 		"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
@@ -468,6 +474,12 @@ func main() {
 	}
 	if *flPeriod < 10*time.Millisecond {
 		fatalConfigErrorf(log, true, "invalid flag: --period must be at least 10ms")
+	}
+	if *flInitPeriod != 0 && *flInitPeriod < 10*time.Millisecond {
+		fatalConfigErrorf(log, true, "invalid flag: --init-period must be at least 10ms")
+	}
+	if *flInitTimeout != 0 && *flInitTimeout < 10*time.Millisecond {
+		fatalConfigErrorf(log, true, "invalid flag: --init-timeout must be at least 10ms")
 	}
 
 	if *flDeprecatedChmod != 0 {
@@ -912,6 +924,11 @@ func main() {
 
 	failCount := 0
 	syncCount := uint64(0)
+	initialSyncDone := false
+	var initStart time.Time
+	if *flInitPeriod != 0 || *flInitTimeout != 0 {
+		initStart = time.Now()
+	}
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -919,6 +936,10 @@ func main() {
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
+			if isInitTimedOut(*flInitTimeout, initialSyncDone, initStart) {
+				log.Error(err, "initial sync timed out", "initTimeout", flInitTimeout.String(), "failCount", failCount)
+				os.Exit(1)
+			}
 			if *flMaxFailures >= 0 && failCount >= *flMaxFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
@@ -926,6 +947,12 @@ func main() {
 			}
 			log.Error(err, "error syncing repo, will retry", "failCount", failCount)
 		} else {
+			if !initialSyncDone {
+				initialSyncDone = true
+				if *flInitPeriod != 0 {
+					log.V(0).Info("initial sync complete, switching to normal period", "initPeriod", flInitPeriod.String(), "period", flPeriod.String())
+				}
+			}
 			// this might have been called before, but also might not have
 			setRepoReady()
 			// We treat the first loop as a sync, including sending hooks.
@@ -989,12 +1016,14 @@ func main() {
 			log.DeleteErrorFile()
 		}
 
-		log.V(3).Info("next sync", "waitTime", flPeriod.String(), "syncCount", syncCount)
+		// Use init-period for retries before the first successful sync.
+		waitTime := chooseWaitTime(*flPeriod, *flInitPeriod, initialSyncDone)
+		log.V(3).Info("next sync", "waitTime", waitTime.String(), "syncCount", syncCount)
 		cancel()
 
 		// Sleep until the next sync. If syncSig is set then the sleep may
 		// be interrupted by that signal.
-		t := time.NewTimer(*flPeriod)
+		t := time.NewTimer(waitTime)
 		select {
 		case <-t.C:
 		case <-sigChan:
@@ -1142,6 +1171,24 @@ func setRepoReady() {
 	readyLock.Lock()
 	defer readyLock.Unlock()
 	repoReady = true
+}
+
+// chooseWaitTime returns the appropriate wait duration based on whether the
+// initial sync has completed. If initPeriod is non-zero and the initial sync
+// is not yet done, it returns initPeriod. Otherwise it returns period.
+func chooseWaitTime(period, initPeriod time.Duration, initialSyncDone bool) time.Duration {
+	if !initialSyncDone && initPeriod != 0 {
+		return initPeriod
+	}
+	return period
+}
+
+// isInitTimedOut returns true if the initial sync has exceeded the init-timeout.
+func isInitTimedOut(initTimeout time.Duration, initialSyncDone bool, initStart time.Time) bool {
+	if initTimeout == 0 || initialSyncDone {
+		return false
+	}
+	return time.Since(initStart) >= initTimeout
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
@@ -2588,6 +2635,18 @@ OPTIONS
             git-sync to pick up token rotations automatically (e.g. when using
             dynamic credentials from an external secrets system).
             See also $GITSYNC_PASSWORD.
+
+    --init-period <duration>, $GITSYNC_INIT_PERIOD
+            How long to wait between sync attempts until the first successful
+            sync.  Once the initial sync succeeds, --period is used instead.
+            This must be at least 10ms if set.  If not specified, --period is
+            used for all sync attempts.
+
+    --init-timeout <duration>, $GITSYNC_INIT_TIMEOUT
+            The maximum amount of time to keep retrying the initial sync
+            before failing.  If not specified, git-sync retries forever (or
+            until --max-failures is reached).  This must be at least 10ms if
+            set.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least

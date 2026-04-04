@@ -425,6 +425,96 @@ func TestTouch(t *testing.T) {
 	}
 }
 
+func TestChooseWaitTime(t *testing.T) {
+	period := 10 * time.Second
+	initPeriod := 500 * time.Millisecond
+
+	cases := []struct {
+		name            string
+		period          time.Duration
+		initPeriod      time.Duration
+		initialSyncDone bool
+		expected        time.Duration
+	}{{
+		name:            "no init-period, not done",
+		period:          period,
+		initPeriod:      0,
+		initialSyncDone: false,
+		expected:        period,
+	}, {
+		name:            "no init-period, done",
+		period:          period,
+		initPeriod:      0,
+		initialSyncDone: true,
+		expected:        period,
+	}, {
+		name:            "init-period set, not done",
+		period:          period,
+		initPeriod:      initPeriod,
+		initialSyncDone: false,
+		expected:        initPeriod,
+	}, {
+		name:            "init-period set, done",
+		period:          period,
+		initPeriod:      initPeriod,
+		initialSyncDone: true,
+		expected:        period,
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := chooseWaitTime(tc.period, tc.initPeriod, tc.initialSyncDone)
+			if got != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestIsInitTimedOut(t *testing.T) {
+	cases := []struct {
+		name            string
+		initTimeout     time.Duration
+		initialSyncDone bool
+		elapsed         time.Duration
+		expected        bool
+	}{{
+		name:            "no timeout set",
+		initTimeout:     0,
+		initialSyncDone: false,
+		elapsed:         time.Hour,
+		expected:        false,
+	}, {
+		name:            "timeout set, already done",
+		initTimeout:     time.Second,
+		initialSyncDone: true,
+		elapsed:         time.Hour,
+		expected:        false,
+	}, {
+		name:            "timeout set, not done, not expired",
+		initTimeout:     10 * time.Second,
+		initialSyncDone: false,
+		elapsed:         time.Second,
+		expected:        false,
+	}, {
+		name:            "timeout set, not done, expired",
+		initTimeout:     time.Second,
+		initialSyncDone: false,
+		elapsed:         2 * time.Second,
+		expected:        true,
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			initStart := time.Now().Add(-tc.elapsed)
+			got := isInitTimedOut(tc.initTimeout, tc.initialSyncDone, initStart)
+			if got != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
 func TestHasGitLockFile(t *testing.T) {
 	testCases := map[string]struct {
 		inputFilePath  []string
