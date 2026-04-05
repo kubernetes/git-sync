@@ -365,6 +365,17 @@ OPTIONS
             Enable the pprof debug endpoints on git-sync's HTTP endpoint at
             /debug/pprof.  Requires --http-bind to be specified.
 
+    --init-period <duration>, $GITSYNC_INIT_PERIOD
+            How long to wait between sync attempts until the first successful
+            sync.  This must be at least 10ms if set.  If not specified, the
+            value of --period is used for initial sync attempts as well.
+
+    --init-timeout <duration>, $GITSYNC_INIT_TIMEOUT
+            The maximum time allowed for the initial sync to succeed.  If the
+            first successful sync does not occur within this duration, git-sync
+            will exit with an error.  If not specified, there is no timeout and
+            git-sync will retry until --max-failures is reached.
+
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
             current git directory, at the currently synced hash.  This may be

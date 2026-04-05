@@ -183,15 +183,15 @@ func main() {
 	flErrorFile := pflag.String("error-file",
 		envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
 		"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
-	flPeriod := pflag.Duration("period",
-		envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
-		"how long to wait between syncs, must be >= 10ms; --wait overrides this")
 	flInitPeriod := pflag.Duration("init-period",
 		envDuration(0, "GITSYNC_INIT_PERIOD"),
 		"how long to wait between sync attempts until the first success, must be >= 10ms if set; if unset, --period is used")
 	flInitTimeout := pflag.Duration("init-timeout",
 		envDuration(0, "GITSYNC_INIT_TIMEOUT"),
 		"the max time allowed for the initial sync to succeed; if unset, there is no timeout (retries forever until --max-failures)")
+	flPeriod := pflag.Duration("period",
+		envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
+		"how long to wait between syncs, must be >= 10ms; --wait overrides this")
 	flSyncTimeout := pflag.Duration("sync-timeout",
 		envDuration(120*time.Second, "GITSYNC_SYNC_TIMEOUT", "GIT_SYNC_SYNC_TIMEOUT"),
 		"the total time allowed for one complete sync, must be >= 10ms; --timeout overrides this")
