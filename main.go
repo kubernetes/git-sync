@@ -120,6 +120,7 @@ type repoSync struct {
 	repo           string         // remote repo to sync
 	ref            string         // the ref to sync
 	depth          int            // for shallow sync
+	filter         string         // for partial clone
 	submodules     submodulesMode // how to handle submodules
 	gc             gcMode         // garbage collection
 	link           absPath        // absolute path to the symlink to publish
@@ -167,6 +168,9 @@ func main() {
 	flDepth := pflag.Int("depth",
 		envInt(1, "GITSYNC_DEPTH", "GIT_SYNC_DEPTH"),
 		"create a shallow clone with history truncated to the specified number of commits")
+	flFilter := pflag.String("filter",
+		envString("", "GITSYNC_FILTER"),
+		"use partial clone with the specified filter (e.g. 'blob:none', 'tree:0')")
 	flSubmodules := pflag.String("submodules",
 		envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
 		"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
@@ -709,6 +713,7 @@ func main() {
 		repo:         *flRepo,
 		ref:          *flRef,
 		depth:        *flDepth,
+		filter:       *flFilter,
 		submodules:   submodulesMode(*flSubmodules),
 		gc:           gcMode(*flGitGC),
 		link:         absLink,
@@ -1860,6 +1865,9 @@ func (git *repoSync) fetch(ctx context.Context, ref string) error {
 			args = append(args, "--unshallow")
 		}
 	}
+	if git.filter != "" {
+		args = append(args, "--filter", git.filter)
+	}
 	if _, _, err := git.Run(ctx, git.root, args...); err != nil {
 		return err
 	}
@@ -2444,6 +2452,13 @@ OPTIONS
             number of commits.  If not specified, this defaults to syncing a
             single commit.  Setting this to 0 will sync the full history of the
             repo.
+
+    --filter <string>, $GITSYNC_FILTER
+            Use partial clone with the specified filter.  This can reduce
+            the amount of data transferred when cloning large repositories.
+            Common values are 'blob:none' (omit all blobs, fetch on demand)
+            and 'tree:0' (omit all trees and blobs).  This is most effective
+            when combined with --depth and --sparse-checkout-file.
 
     --error-file <string>, $GITSYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
