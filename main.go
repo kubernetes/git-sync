@@ -2453,13 +2453,6 @@ OPTIONS
             single commit.  Setting this to 0 will sync the full history of the
             repo.
 
-    --filter <string>, $GITSYNC_FILTER
-            Use partial clone with the specified filter.  This can reduce
-            the amount of data transferred when cloning large repositories.
-            Common values are 'blob:none' (omit all blobs, fetch on demand)
-            and 'tree:0' (omit all trees and blobs).  This is most effective
-            when combined with --depth and --sparse-checkout-file.
-
     --error-file <string>, $GITSYNC_ERROR_FILE
             The path to an optional file into which errors will be written.
             This may be an absolute path or a relative path, in which case it
@@ -2483,6 +2476,14 @@ OPTIONS
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
+
+    --filter <string>, $GITSYNC_FILTER
+            Use partial clone with the specified filter.  This can reduce
+            the amount of data transferred when cloning large repositories.
+            Common values are 'blob:none' (omit all blobs, fetch on demand)
+            and 'tree:0' (omit all trees and blobs).  This is most effective
+            when combined with --depth and --sparse-checkout-file.  See
+            https://git-scm.com/docs/partial-clone for more information.
 
     --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
