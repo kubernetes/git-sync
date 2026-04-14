@@ -3723,11 +3723,10 @@ function e2e::init_period_faster_initial_sync() {
 function e2e::init_timeout_expires() {
     assert_fail \
         GIT_SYNC \
-            --git="/$SLOW_GIT_FETCH" \
             --period=100ms \
             --init-timeout=1s \
             --max-failures=-1 \
-            --repo="file://$REPO" \
+            --repo="file:///does/not/exist" \
             --root="$ROOT" \
             --link="link"
     assert_file_absent "$ROOT/link/file"
