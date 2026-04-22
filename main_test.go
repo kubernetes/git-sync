@@ -471,43 +471,54 @@ func TestChooseWaitTime(t *testing.T) {
 	}
 }
 
-func TestIsInitTimedOut(t *testing.T) {
+func TestIsInitFailuresExceeded(t *testing.T) {
 	cases := []struct {
 		name            string
-		initTimeout     time.Duration
+		initMaxFailures int
 		initialSyncDone bool
-		elapsed         time.Duration
+		failCount       int
 		expected        bool
 	}{{
-		name:            "no timeout set",
-		initTimeout:     0,
+		name:            "disabled (zero)",
+		initMaxFailures: 0,
 		initialSyncDone: false,
-		elapsed:         time.Hour,
+		failCount:       100,
 		expected:        false,
 	}, {
-		name:            "timeout set, already done",
-		initTimeout:     time.Second,
+		name:            "disabled (negative)",
+		initMaxFailures: -1,
+		initialSyncDone: false,
+		failCount:       100,
+		expected:        false,
+	}, {
+		name:            "limit set, already done",
+		initMaxFailures: 3,
 		initialSyncDone: true,
-		elapsed:         time.Hour,
+		failCount:       100,
 		expected:        false,
 	}, {
-		name:            "timeout set, not done, not expired",
-		initTimeout:     10 * time.Second,
+		name:            "limit set, not done, under limit",
+		initMaxFailures: 5,
 		initialSyncDone: false,
-		elapsed:         time.Second,
+		failCount:       3,
 		expected:        false,
 	}, {
-		name:            "timeout set, not done, expired",
-		initTimeout:     time.Second,
+		name:            "limit set, not done, at limit",
+		initMaxFailures: 3,
 		initialSyncDone: false,
-		elapsed:         2 * time.Second,
+		failCount:       3,
+		expected:        true,
+	}, {
+		name:            "limit set, not done, over limit",
+		initMaxFailures: 3,
+		initialSyncDone: false,
+		failCount:       5,
 		expected:        true,
 	}}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			initStart := time.Now().Add(-tc.elapsed)
-			got := isInitTimedOut(tc.initTimeout, tc.initialSyncDone, initStart)
+			got := isInitFailuresExceeded(tc.initMaxFailures, tc.initialSyncDone, tc.failCount)
 			if got != tc.expected {
 				t.Errorf("expected %v, got %v", tc.expected, got)
 			}

@@ -183,12 +183,12 @@ func main() {
 	flErrorFile := pflag.String("error-file",
 		envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
 		"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
+	flInitMaxFailures := pflag.Int("init-max-failures",
+		envInt(0, "GITSYNC_INIT_MAX_FAILURES"),
+		"the number of consecutive failures allowed before aborting during the initial sync phase; 0 disables the check (falls through to --max-failures)")
 	flInitPeriod := pflag.Duration("init-period",
 		envDuration(0, "GITSYNC_INIT_PERIOD"),
 		"how long to wait between sync attempts until the first success, must be >= 10ms if set; if unset, --period is used")
-	flInitTimeout := pflag.Duration("init-timeout",
-		envDuration(0, "GITSYNC_INIT_TIMEOUT"),
-		"the max time allowed for the initial sync to succeed; if unset, there is no timeout (retries forever until --max-failures)")
 	flPeriod := pflag.Duration("period",
 		envDuration(10*time.Second, "GITSYNC_PERIOD", "GIT_SYNC_PERIOD"),
 		"how long to wait between syncs, must be >= 10ms; --wait overrides this")
@@ -478,8 +478,8 @@ func main() {
 	if *flInitPeriod != 0 && *flInitPeriod < 10*time.Millisecond {
 		fatalConfigErrorf(log, true, "invalid flag: --init-period must be at least 10ms")
 	}
-	if *flInitTimeout != 0 && *flInitTimeout < 10*time.Millisecond {
-		fatalConfigErrorf(log, true, "invalid flag: --init-timeout must be at least 10ms")
+	if *flInitMaxFailures < 0 {
+		fatalConfigErrorf(log, true, "invalid flag: --init-max-failures must not be negative")
 	}
 
 	if *flDeprecatedChmod != 0 {
@@ -925,10 +925,6 @@ func main() {
 	failCount := 0
 	syncCount := uint64(0)
 	initialSyncDone := false
-	var initStart time.Time
-	if *flInitPeriod != 0 || *flInitTimeout != 0 {
-		initStart = time.Now()
-	}
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -936,11 +932,15 @@ func main() {
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
-			if isInitTimedOut(*flInitTimeout, initialSyncDone, initStart) {
-				log.Error(err, "initial sync timed out", "initTimeout", flInitTimeout.String(), "failCount", failCount)
+			if isInitFailuresExceeded(*flInitMaxFailures, initialSyncDone, failCount) {
+				log.Error(err, "too many initial sync failures, aborting", "initMaxFailures", *flInitMaxFailures, "failCount", failCount)
 				os.Exit(1)
 			}
-			if *flMaxFailures >= 0 && failCount >= *flMaxFailures {
+			// During the initial sync phase, --init-max-failures (if set) is
+			// the authoritative limit; --max-failures applies once init is
+			// done, or when --init-max-failures is not set.
+			useMainLimit := initialSyncDone || *flInitMaxFailures == 0
+			if useMainLimit && *flMaxFailures >= 0 && failCount >= *flMaxFailures {
 				// Exit after too many retries, maybe the error is not recoverable.
 				log.Error(err, "too many failures, aborting", "failCount", failCount)
 				os.Exit(1)
@@ -1183,12 +1183,14 @@ func chooseWaitTime(period, initPeriod time.Duration, initialSyncDone bool) time
 	return period
 }
 
-// isInitTimedOut returns true if the initial sync has exceeded the init-timeout.
-func isInitTimedOut(initTimeout time.Duration, initialSyncDone bool, initStart time.Time) bool {
-	if initTimeout == 0 || initialSyncDone {
+// isInitFailuresExceeded returns true if the initial sync has failed more than
+// initMaxFailures consecutive times. A non-positive initMaxFailures disables
+// the check.
+func isInitFailuresExceeded(initMaxFailures int, initialSyncDone bool, failCount int) bool {
+	if initMaxFailures <= 0 || initialSyncDone {
 		return false
 	}
-	return time.Since(initStart) >= initTimeout
+	return failCount >= initMaxFailures
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
@@ -2444,6 +2446,24 @@ CONTRACT
     use as little disk space as possible (see the --depth and --git-gc flags),
     but this is not part of the contract.
 
+SYNC PHASES
+
+    git-sync operates in two phases:
+
+    Initial sync:
+        git-sync retries until its first successful sync with the remote
+        repo.  During this phase, the retry interval is controlled by
+        --init-period (falling back to --period if unset) and the failure
+        limit is controlled by --init-max-failures (falling back to
+        --max-failures when set to 0).  This phase is useful for tolerating
+        transient connectivity issues at startup while still giving up
+        eventually.
+
+    Steady state:
+        Once the first sync succeeds, git-sync polls the remote at the
+        --period interval and tolerates failures up to --max-failures before
+        aborting.  --init-period and --init-max-failures no longer apply.
+
 OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
@@ -2603,17 +2623,18 @@ OPTIONS
             Enable the pprof debug endpoints on git-sync's HTTP endpoint at
             /debug/pprof.  Requires --http-bind to be specified.
 
+    --init-max-failures <int>, $GITSYNC_INIT_MAX_FAILURES
+            The number of consecutive failures allowed before aborting during
+            the initial sync phase (before the first successful sync).  Once
+            the initial sync succeeds, --max-failures applies instead.  Set
+            to 0 (the default) to disable this separate limit and fall
+            through to --max-failures for the entire run.
+
     --init-period <duration>, $GITSYNC_INIT_PERIOD
             How long to wait between sync attempts until the first successful
             sync.  Once the initial sync succeeds, --period is used instead.
             This must be at least 10ms if set.  If not specified, --period is
             used for all sync attempts.
-
-    --init-timeout <duration>, $GITSYNC_INIT_TIMEOUT
-            The maximum amount of time to keep retrying the initial sync
-            before failing.  If not specified, git-sync retries forever (or
-            until --max-failures is reached).  This must be at least 10ms if
-            set.
 
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the

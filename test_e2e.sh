@@ -3718,13 +3718,13 @@ function e2e::init_period_faster_initial_sync() {
 }
 
 ##############################################
-# Test init-timeout exits on timeout
+# Test init-max-failures aborts after N failed attempts
 ##############################################
-function e2e::init_timeout_expires() {
+function e2e::init_max_failures_exceeded() {
     assert_fail \
         GIT_SYNC \
             --period=100ms \
-            --init-timeout=1s \
+            --init-max-failures=3 \
             --max-failures=-1 \
             --repo="file:///does/not/exist" \
             --root="$ROOT" \
