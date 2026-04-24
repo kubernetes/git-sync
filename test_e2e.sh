@@ -3691,6 +3691,55 @@ function e2e::exechook_git_archive() {
     assert_tgz_archive "$ROOT/link/archive.tgz"
 }
 
+##############################################
+# Test init-period uses faster interval for initial sync
+##############################################
+function e2e::init_period_faster_initial_sync() {
+    # First sync
+    echo "${FUNCNAME[0]} 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 1"
+
+    GIT_SYNC \
+        --period=100s \
+        --init-period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        &
+    # With init-period=100ms, sync should happen quickly even though
+    # period=100s. If init-period were not working, this would time out.
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+
+    # After initial sync, period should switch to the normal 100s.
+    # Make a new commit and verify it does NOT sync quickly (because
+    # we're now using the slow period).
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+    # Wait a bit - should NOT have synced since normal period is 100s
+    sleep 3
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+}
+
+##############################################
+# Test init-max-failures aborts after N failed attempts
+##############################################
+function e2e::init_max_failures_exceeded() {
+    assert_fail \
+        GIT_SYNC \
+            --period=100ms \
+            --init-max-failures=3 \
+            --max-failures=-1 \
+            --repo="file:///does/not/exist" \
+            --root="$ROOT" \
+            --link="link"
+    assert_file_absent "$ROOT/link/file"
+}
+
 #
 # main
 #

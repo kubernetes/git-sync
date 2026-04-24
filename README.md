@@ -206,6 +206,24 @@ CONTRACT
     use as little disk space as possible (see the --depth and --git-gc flags),
     but this is not part of the contract.
 
+SYNC PHASES
+
+    git-sync operates in two phases:
+
+    Initial sync:
+        git-sync retries until its first successful sync with the remote
+        repo.  During this phase, the retry interval is controlled by
+        --init-period (falling back to --period if unset) and the failure
+        limit is controlled by --init-max-failures (falling back to
+        --max-failures when unset).  This phase is useful for tolerating
+        transient connectivity issues at startup while still giving up
+        eventually.
+
+    Steady state:
+        Once the first sync succeeds, git-sync polls the remote at the
+        --period interval and tolerates failures up to --max-failures before
+        aborting.  --init-period and --init-max-failures no longer apply.
+
 OPTIONS
 
     Many options can be specified as either a commandline flag or an environment
@@ -364,6 +382,20 @@ OPTIONS
     --http-pprof, $GITSYNC_HTTP_PPROF
             Enable the pprof debug endpoints on git-sync's HTTP endpoint at
             /debug/pprof.  Requires --http-bind to be specified.
+
+    --init-max-failures <int>, $GITSYNC_INIT_MAX_FAILURES
+            The number of consecutive failures allowed before aborting during
+            the initial sync phase (before the first successful sync).  Once
+            the initial sync succeeds, --max-failures applies instead.
+            Setting this to a negative value will retry forever during the
+            initial sync.  If this flag is not set, --max-failures applies
+            to the initial sync phase as well.
+
+    --init-period <duration>, $GITSYNC_INIT_PERIOD
+            How long to wait between sync attempts until the first successful
+            sync.  Once the initial sync succeeds, --period is used instead.
+            This must be at least 10ms if set.  If not specified, --period is
+            used for all sync attempts.
 
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
