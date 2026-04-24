@@ -183,9 +183,6 @@ func main() {
 	flErrorFile := pflag.String("error-file",
 		envString("", "GITSYNC_ERROR_FILE", "GIT_SYNC_ERROR_FILE"),
 		"the path (absolute or relative to --root) to an optional file into which errors will be written (defaults to disabled)")
-	flInitMaxFailures := pflag.Int("init-max-failures",
-		envInt(0, "GITSYNC_INIT_MAX_FAILURES"),
-		"the number of consecutive failures allowed before aborting during the initial sync phase; 0 disables the check (falls through to --max-failures)")
 	flInitPeriod := pflag.Duration("init-period",
 		envDuration(0, "GITSYNC_INIT_PERIOD"),
 		"how long to wait between sync attempts until the first success, must be >= 10ms if set; if unset, --period is used")
@@ -204,6 +201,9 @@ func main() {
 	flMaxFailures := pflag.Int("max-failures",
 		envInt(0, "GITSYNC_MAX_FAILURES", "GIT_SYNC_MAX_FAILURES"),
 		"the number of consecutive failures allowed before aborting (-1 will retry forever")
+	flInitMaxFailures := pflag.Int("init-max-failures",
+		envInt(0, "GITSYNC_INIT_MAX_FAILURES"),
+		"the number of consecutive failures allowed before aborting during the initial sync phase; a negative value retries forever; if unset, --max-failures applies instead")
 	flTouchFile := pflag.String("touch-file",
 		envString("", "GITSYNC_TOUCH_FILE", "GIT_SYNC_TOUCH_FILE"),
 		"the path (absolute or relative to --root) to an optional file which will be touched whenever a sync completes (defaults to disabled)")
@@ -382,6 +382,11 @@ func main() {
 
 	pflag.Parse()
 
+	// Was --init-max-failures explicitly set (CLI or env)?  envInt applies
+	// the env value as the pflag default, so pflag.Changed alone misses it.
+	_, initMaxFailuresEnv := os.LookupEnv("GITSYNC_INIT_MAX_FAILURES")
+	initMaxFailuresSet := initMaxFailuresEnv || pflag.Lookup("init-max-failures").Changed
+
 	// Handle print-and-exit cases.
 	if *flVersion {
 		fmt.Fprintln(os.Stdout, version.VERSION)
@@ -475,11 +480,10 @@ func main() {
 	if *flPeriod < 10*time.Millisecond {
 		fatalConfigErrorf(log, true, "invalid flag: --period must be at least 10ms")
 	}
-	if *flInitPeriod != 0 && *flInitPeriod < 10*time.Millisecond {
+	if *flInitPeriod == 0 {
+		*flInitPeriod = *flPeriod
+	} else if *flInitPeriod < 10*time.Millisecond {
 		fatalConfigErrorf(log, true, "invalid flag: --init-period must be at least 10ms")
-	}
-	if *flInitMaxFailures < 0 {
-		fatalConfigErrorf(log, true, "invalid flag: --init-max-failures must not be negative")
 	}
 
 	if *flDeprecatedChmod != 0 {
@@ -925,6 +929,16 @@ func main() {
 	failCount := 0
 	syncCount := uint64(0)
 	initialSyncDone := false
+	waitTime := *flInitPeriod
+	// getMaxFailures returns the effective max-failure limit for the current
+	// phase.  During the initial sync phase, --init-max-failures (if set)
+	// overrides --max-failures; otherwise --max-failures applies.
+	getMaxFailures := func() int {
+		if !initialSyncDone && initMaxFailuresSet {
+			return *flInitMaxFailures
+		}
+		return *flMaxFailures
+	}
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
@@ -932,24 +946,16 @@ func main() {
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
-			if isInitFailuresExceeded(*flInitMaxFailures, initialSyncDone, failCount) {
-				log.Error(err, "too many initial sync failures, aborting", "initMaxFailures", *flInitMaxFailures, "failCount", failCount)
-				os.Exit(1)
-			}
-			// During the initial sync phase, --init-max-failures (if set) is
-			// the authoritative limit; --max-failures applies once init is
-			// done, or when --init-max-failures is not set.
-			useMainLimit := initialSyncDone || *flInitMaxFailures == 0
-			if useMainLimit && *flMaxFailures >= 0 && failCount >= *flMaxFailures {
-				// Exit after too many retries, maybe the error is not recoverable.
-				log.Error(err, "too many failures, aborting", "failCount", failCount)
+			if maxFails := getMaxFailures(); maxFails >= 0 && failCount >= maxFails {
+				log.Error(err, "too many failures, aborting", "failCount", failCount, "maxFailures", maxFails)
 				os.Exit(1)
 			}
 			log.Error(err, "error syncing repo, will retry", "failCount", failCount)
 		} else {
 			if !initialSyncDone {
 				initialSyncDone = true
-				if *flInitPeriod != 0 {
+				waitTime = *flPeriod
+				if *flInitPeriod != *flPeriod {
 					log.V(0).Info("initial sync complete, switching to normal period", "initPeriod", flInitPeriod.String(), "period", flPeriod.String())
 				}
 			}
@@ -1016,8 +1022,6 @@ func main() {
 			log.DeleteErrorFile()
 		}
 
-		// Use init-period for retries before the first successful sync.
-		waitTime := chooseWaitTime(*flPeriod, *flInitPeriod, initialSyncDone)
 		log.V(3).Info("next sync", "waitTime", waitTime.String(), "syncCount", syncCount)
 		cancel()
 
@@ -1171,26 +1175,6 @@ func setRepoReady() {
 	readyLock.Lock()
 	defer readyLock.Unlock()
 	repoReady = true
-}
-
-// chooseWaitTime returns the appropriate wait duration based on whether the
-// initial sync has completed. If initPeriod is non-zero and the initial sync
-// is not yet done, it returns initPeriod. Otherwise it returns period.
-func chooseWaitTime(period, initPeriod time.Duration, initialSyncDone bool) time.Duration {
-	if !initialSyncDone && initPeriod != 0 {
-		return initPeriod
-	}
-	return period
-}
-
-// isInitFailuresExceeded returns true if the initial sync has failed more than
-// initMaxFailures consecutive times. A non-positive initMaxFailures disables
-// the check.
-func isInitFailuresExceeded(initMaxFailures int, initialSyncDone bool, failCount int) bool {
-	if initMaxFailures <= 0 || initialSyncDone {
-		return false
-	}
-	return failCount >= initMaxFailures
 }
 
 // Do no work, but don't do something that triggers go's runtime into thinking
@@ -2455,7 +2439,7 @@ SYNC PHASES
         repo.  During this phase, the retry interval is controlled by
         --init-period (falling back to --period if unset) and the failure
         limit is controlled by --init-max-failures (falling back to
-        --max-failures when set to 0).  This phase is useful for tolerating
+        --max-failures when unset).  This phase is useful for tolerating
         transient connectivity issues at startup while still giving up
         eventually.
 
@@ -2626,9 +2610,10 @@ OPTIONS
     --init-max-failures <int>, $GITSYNC_INIT_MAX_FAILURES
             The number of consecutive failures allowed before aborting during
             the initial sync phase (before the first successful sync).  Once
-            the initial sync succeeds, --max-failures applies instead.  Set
-            to 0 (the default) to disable this separate limit and fall
-            through to --max-failures for the entire run.
+            the initial sync succeeds, --max-failures applies instead.
+            Setting this to a negative value will retry forever during the
+            initial sync.  If this flag is not set, --max-failures applies
+            to the initial sync phase as well.
 
     --init-period <duration>, $GITSYNC_INIT_PERIOD
             How long to wait between sync attempts until the first successful

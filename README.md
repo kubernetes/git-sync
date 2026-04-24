@@ -215,7 +215,7 @@ SYNC PHASES
         repo.  During this phase, the retry interval is controlled by
         --init-period (falling back to --period if unset) and the failure
         limit is controlled by --init-max-failures (falling back to
-        --max-failures when set to 0).  This phase is useful for tolerating
+        --max-failures when unset).  This phase is useful for tolerating
         transient connectivity issues at startup while still giving up
         eventually.
 
@@ -386,9 +386,10 @@ OPTIONS
     --init-max-failures <int>, $GITSYNC_INIT_MAX_FAILURES
             The number of consecutive failures allowed before aborting during
             the initial sync phase (before the first successful sync).  Once
-            the initial sync succeeds, --max-failures applies instead.  Set
-            to 0 (the default) to disable this separate limit and fall
-            through to --max-failures for the entire run.
+            the initial sync succeeds, --max-failures applies instead.
+            Setting this to a negative value will retry forever during the
+            initial sync.  If this flag is not set, --max-failures applies
+            to the initial sync phase as well.
 
     --init-period <duration>, $GITSYNC_INIT_PERIOD
             How long to wait between sync attempts until the first successful
