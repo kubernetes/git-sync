@@ -3346,6 +3346,93 @@ function e2e::sparse_checkout() {
 }
 
 ##############################################
+# Test filter (partial clone) with blob:none
+##############################################
+function e2e::filter_partial_clone_blob_none() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --filter="blob:none" \
+        --depth=0
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+
+    # Verify partial clone is in effect: git fetch --filter creates a
+    # .promisor marker alongside each pack file containing filtered objects.
+    local pack_dir
+    pack_dir="$(git -C "$ROOT/link" rev-parse --git-common-dir)/objects/pack"
+    if ! ls "$pack_dir"/*.promisor >/dev/null 2>&1; then
+        fail "expected .promisor pack marker (partial clone)"
+    fi
+}
+
+##############################################
+# Test filter with sparse-checkout
+##############################################
+function e2e::filter_with_sparse_checkout() {
+    echo "!/*" > "$WORK/sparseconfig"
+    echo "!/*/" >> "$WORK/sparseconfig"
+    echo "file2" >> "$WORK/sparseconfig"
+    echo "${FUNCNAME[0]}" > "$REPO/file2"
+    mkdir -p "$REPO/dir"
+    echo "${FUNCNAME[0]}" > "$REPO/dir/file3"
+    git -C "$REPO" add file2
+    git -C "$REPO" add dir
+    git -C "$REPO" commit -qam "${FUNCNAME[0]}"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --filter="blob:none" \
+        --depth=1 \
+        --sparse-checkout-file="$WORK/sparseconfig"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file2"
+    assert_file_absent "$ROOT/link/dir/file3"
+    assert_file_absent "$ROOT/link/dir"
+    assert_file_eq "$ROOT/link/file2" "${FUNCNAME[0]}"
+}
+
+##############################################
+# Test filter syncing across updates
+##############################################
+function e2e::filter_across_updates() {
+    # First sync
+    echo "${FUNCNAME[0]} 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --filter="blob:none" \
+        --depth=0 \
+        --root="$ROOT" \
+        --link="link" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 1
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 1
+
+    # Move forward
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 2"
+    assert_metric_eq "${METRIC_GOOD_SYNC_COUNT}" 2
+    assert_metric_eq "${METRIC_FETCH_COUNT}" 2
+}
+
+##############################################
 # Test additional git configs
 ##############################################
 function e2e::additional_git_configs() {

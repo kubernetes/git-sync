@@ -145,6 +145,7 @@ More documentation on specific topics can be [found here](./docs).
 ## Manual
 
 ```
+
 GIT-SYNC
 
 NAME
@@ -296,6 +297,14 @@ OPTIONS
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
+    --filter <string>, $GITSYNC_FILTER
+            Use partial clone with the specified filter.  This can reduce
+            the amount of data transferred when cloning large repositories.
+            Common values are 'blob:none' (omit all blobs, fetch on demand)
+            and 'tree:0' (omit all trees and blobs).  This is most effective
+            when combined with --depth and --sparse-checkout-file.  See
+            https://git-scm.com/docs/partial-clone for more information.
+
     --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
             testing).  This defaults to "git".
@@ -425,7 +434,10 @@ OPTIONS
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.  See also $GITSYNC_PASSWORD.
+            read.  The file is re-read before each sync attempt, allowing
+            git-sync to pick up token rotations automatically (e.g. when using
+            dynamic credentials from an external secrets system).
+            See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
