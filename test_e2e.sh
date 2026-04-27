@@ -3343,9 +3343,6 @@ function e2e::sparse_checkout() {
 # Test filter (partial clone) with blob:none
 ##############################################
 function e2e::filter_partial_clone_blob_none() {
-    echo "${FUNCNAME[0]}" > "$REPO/file"
-    git -C "$REPO" commit -qam "${FUNCNAME[0]}"
-
     GIT_SYNC \
         --one-time \
         --repo="file://$REPO" \
@@ -3357,14 +3354,12 @@ function e2e::filter_partial_clone_blob_none() {
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
 
-    # Verify the repo is a partial clone
-    if ! git -C "$ROOT/link" config --get remote.origin.promisor >/dev/null 2>&1; then
-        # Check if the repo has a partial clone filter configured
-        local filter
-        filter=$(git -C "$ROOT/link" config --get remote.origin.partialclonefilter 2>/dev/null || true)
-        if [[ -z "$filter" ]]; then
-            fail "expected partial clone filter to be configured"
-        fi
+    # Verify partial clone is in effect: git fetch --filter creates a
+    # .promisor marker alongside each pack file containing filtered objects.
+    local pack_dir
+    pack_dir="$(git -C "$ROOT/link" rev-parse --git-common-dir)/objects/pack"
+    if ! ls "$pack_dir"/*.promisor >/dev/null 2>&1; then
+        fail "expected .promisor pack marker (partial clone)"
     fi
 }
 
@@ -3375,7 +3370,6 @@ function e2e::filter_with_sparse_checkout() {
     echo "!/*" > "$WORK/sparseconfig"
     echo "!/*/" >> "$WORK/sparseconfig"
     echo "file2" >> "$WORK/sparseconfig"
-    echo "${FUNCNAME[0]}" > "$REPO/file"
     echo "${FUNCNAME[0]}" > "$REPO/file2"
     mkdir -p "$REPO/dir"
     echo "${FUNCNAME[0]}" > "$REPO/dir/file3"
