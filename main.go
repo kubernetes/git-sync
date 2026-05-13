@@ -1337,7 +1337,7 @@ func (git *repoSync) removeStaleWorktrees() (int, error) {
 }
 
 func hasGitLockFile(gitRoot absPath) (string, error) {
-	gitLockFiles := []string{"shallow.lock"}
+	gitLockFiles := []string{"shallow.lock", "index.lock", "HEAD.lock", "refs.lock"}
 	for _, lockFile := range gitLockFiles {
 		lockFilePath := gitRoot.Join(".git", lockFile).String()
 		_, err := os.Stat(lockFilePath)
@@ -1347,6 +1347,28 @@ func hasGitLockFile(gitRoot absPath) (string, error) {
 			return lockFilePath, err
 		}
 	}
+
+	// Check for lock files in worktrees
+	worktreeDir := gitRoot.Join(".git", "worktrees").String()
+	if _, err := os.Stat(worktreeDir); err == nil {
+		entries, err := os.ReadDir(worktreeDir)
+		if err != nil {
+			return "", err
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			indexLockPath := filepath.Join(worktreeDir, entry.Name(), "index.lock")
+			_, err := os.Stat(indexLockPath)
+			if err == nil {
+				return indexLockPath, nil
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return indexLockPath, err
+			}
+		}
+	}
+
 	return "", nil
 }
 

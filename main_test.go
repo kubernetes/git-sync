@@ -441,6 +441,22 @@ func TestHasGitLockFile(t *testing.T) {
 			inputFilePath:  []string{".git", "shallow.lock"},
 			expectLockFile: true,
 		},
+		"index.lock file": {
+			inputFilePath:  []string{".git", "index.lock"},
+			expectLockFile: true,
+		},
+		"HEAD.lock file": {
+			inputFilePath:  []string{".git", "HEAD.lock"},
+			expectLockFile: true,
+		},
+		"refs.lock file": {
+			inputFilePath:  []string{".git", "refs.lock"},
+			expectLockFile: true,
+		},
+		"worktree index.lock file": {
+			inputFilePath:  []string{".git", "worktrees", "abcd1234", "index.lock"},
+			expectLockFile: true,
+		},
 	}
 
 	for name, tc := range testCases {
