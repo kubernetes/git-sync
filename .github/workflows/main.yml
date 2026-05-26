@@ -72,7 +72,7 @@ jobs:
       # There is a risk of drift between the two, but this is only linting,
       # not runtime correctness!
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9
         with:
           working-directory: git-sync
           version: v2.1.0
