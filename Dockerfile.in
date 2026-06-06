@@ -162,4 +162,6 @@ WORKDIR /tmp
 # override this, and we assume they are handling permissions themselves.
 ENV GITSYNC_ROOT=/git
 
+LABEL org.opencontainers.image.source="https://github.com/kubernetes/git-sync"
+
 ENTRYPOINT ["/{ARG_BIN}"]
