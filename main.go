@@ -982,6 +982,7 @@ func main() {
 	syncCount := uint64(0)
 	initialSyncDone := false
 	waitTime := *flInitPeriod
+	prevHash := ""
 	// getMaxFailures returns the effective max-failure limit for the current
 	// phase.  During the initial sync phase, --init-max-failures (if set)
 	// overrides --max-failures; otherwise --max-failures applies.
@@ -994,7 +995,6 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
-		prevHash := ""
 
 		if preExechookRunner != nil {
 			preExechookRunner.Send(prevHash)
