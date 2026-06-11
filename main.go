@@ -2583,7 +2583,7 @@ OPTIONS
             The timeout for the --exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
-	--pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
+    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
             The time to wait before retrying a failed --pre-exechook-command.  If
             not specified, this defaults to 3 seconds ("3s").
 
@@ -2597,7 +2597,6 @@ OPTIONS
     --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
             The timeout for the --pre-exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
-
 
     --filter <string>, $GITSYNC_FILTER
             Use partial clone with the specified filter.  This can reduce
