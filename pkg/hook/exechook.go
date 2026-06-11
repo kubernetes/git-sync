@@ -27,6 +27,8 @@ import (
 
 // Exechook implements Hook in terms of executing a command.
 type Exechook struct {
+	// Name
+	name string
 	// Runner
 	cmdrunner cmd.Runner
 	// Command to run
@@ -42,8 +44,9 @@ type Exechook struct {
 }
 
 // NewExechook returns a new Exechook.
-func NewExechook(cmdrunner cmd.Runner, command string, getWorktree func(string) string, args []string, timeout time.Duration, log logintf) *Exechook {
+func NewExechook(name string, cmdrunner cmd.Runner, command string, getWorktree func(string) string, args []string, timeout time.Duration, log logintf) *Exechook {
 	return &Exechook{
+		name:        name,
 		cmdrunner:   cmdrunner,
 		command:     command,
 		getWorktree: getWorktree,
@@ -55,7 +58,7 @@ func NewExechook(cmdrunner cmd.Runner, command string, getWorktree func(string) 
 
 // Name describes hook, implements Hook.Name.
 func (h *Exechook) Name() string {
-	return "exechook"
+	return h.name
 }
 
 // Do runs exechook.command, implements Hook.Do.
