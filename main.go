@@ -230,6 +230,16 @@ func main() {
 		envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
 		"the time to wait before retrying a failed exechook")
 
+	flPreExechookCommand := pflag.String("pre-exechook-command",
+		envString("", "GITSYNC_PRE_EXECHOOK_COMMAND", "GIT_SYNC_PRE_EXECHOOK_COMMAND"),
+		"an optional command to be run before syncs complete (must be idempotent)")
+	flPreExechookTimeout := pflag.Duration("pre-exechook-timeout",
+		envDuration(30*time.Second, "GITSYNC_PRE_EXECHOOK_TIMEOUT", "GIT_SYNC_PRE_EXECHOOK_TIMEOUT"),
+		"the timeout for the pre-exechook")
+	flPreExechookBackoff := pflag.Duration("pre-exechook-backoff",
+		envDuration(3*time.Second, "GITSYNC_PRE_EXECHOOK_BACKOFF", "GIT_SYNC_PRE_EXECHOOK_BACKOFF"),
+		"the time to wait before retrying a failed pre-exechook")
+
 	flWebhookURL := pflag.String("webhook-url",
 		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
 		"a URL for optional webhook notifications when syncs complete (must be idempotent)")
@@ -538,6 +548,15 @@ func main() {
 		}
 		if *flExechookBackoff < time.Second {
 			fatalConfigErrorf(log, true, "invalid flag: --exechook-backoff must be at least 1s")
+		}
+	}
+
+	if *flPreExechookCommand != "" {
+		if *flPreExechookTimeout < time.Second {
+			fatalConfigErrorf(log, true, "invalid flag: --pre-exechook-timeout must be at least 1s")
+		}
+		if *flPreExechookBackoff < time.Second {
+			fatalConfigErrorf(log, true, "invalid flag: --pre-exechook-backoff must be at least 1s")
 		}
 	}
 
@@ -859,8 +878,10 @@ func main() {
 	// Startup exechooks goroutine
 	var exechookRunner *hook.HookRunner
 	if *flExechookCommand != "" {
-		log := log.WithName("exechook")
+		logname := "exechook"
+		log := log.WithName(logname)
 		exechook := hook.NewExechook(
+			logname,
 			cmd.NewRunner(log),
 			*flExechookCommand,
 			func(hash string) string {
@@ -878,6 +899,32 @@ func main() {
 			*flOneTime,
 		)
 		go exechookRunner.Run(context.Background())
+	}
+
+	// Startup pre-exechooks goroutine
+	var preExechookRunner *hook.HookRunner
+	if *flPreExechookCommand != "" {
+		logname := "pre-exechook"
+		log := log.WithName(logname)
+		exechook := hook.NewExechook(
+			logname,
+			cmd.NewRunner(log),
+			*flPreExechookCommand,
+			func(hash string) string {
+				return git.worktreeFor(hash).Path().String()
+			},
+			[]string{},
+			*flPreExechookTimeout,
+			log,
+		)
+		preExechookRunner = hook.NewHookRunner(
+			exechook,
+			*flPreExechookBackoff,
+			hook.NewHookData(),
+			log,
+			*flOneTime,
+		)
+		go preExechookRunner.Run(context.Background())
 	}
 
 	// Setup signal notify channel
@@ -935,6 +982,7 @@ func main() {
 	syncCount := uint64(0)
 	initialSyncDone := false
 	waitTime := *flInitPeriod
+	prevHash := ""
 	// getMaxFailures returns the effective max-failure limit for the current
 	// phase.  During the initial sync phase, --init-max-failures (if set)
 	// overrides --max-failures; otherwise --max-failures applies.
@@ -947,6 +995,10 @@ func main() {
 	for {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
+
+		if preExechookRunner != nil {
+			preExechookRunner.Send(prevHash)
+		}
 
 		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
 			failCount++
@@ -980,6 +1032,9 @@ func main() {
 				}
 				if exechookRunner != nil {
 					exechookRunner.Send(hash)
+				}
+				if preExechookRunner != nil {
+					prevHash = hash
 				}
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
@@ -2526,6 +2581,21 @@ OPTIONS
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
+            defaults to 30 seconds ("30s").
+
+    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed --pre-exechook-command.  If
+            not specified, this defaults to 3 seconds ("3s").
+
+    --pre-exechook-command <string>, $GITSYNC_PRE_EXECHOOK_COMMAND
+            An optional command to be executed before syncing a new hash of the
+            remote repository.  This command does not take any arguments and
+            executes with the synced repo as its working directory. The
+            $GITSYNC_HASH environment variable will be set to the previous git hash that
+            was synced. This hook will always be invoked as it runs before any sync attempt.
+
+    --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
+            The timeout for the --pre-exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
     --filter <string>, $GITSYNC_FILTER
