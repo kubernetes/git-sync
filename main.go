@@ -133,6 +133,13 @@ type repoSync struct {
 	appTokenExpiry time.Time     // time when github app auth token expires
 }
 
+// syncHooks manages the refresh of credentials and hooks.
+type syncHooks struct {
+	refreshCreds  func(ctx context.Context) error
+	beforePublish func(hash string) error
+	afterPublish  func(hash string) error
+}
+
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
@@ -978,11 +985,28 @@ func main() {
 		return nil
 	}
 
+	syncHooks := syncHooks{
+		refreshCreds: refreshCreds,
+		beforePublish: func(hash string) error {
+			if preExechookRunner != nil {
+				preExechookRunner.Send(hash)
+			}
+			return nil
+		},
+		afterPublish: func(hash string) error {
+			if exechookRunner != nil {
+				exechookRunner.Send(hash)
+			}
+			if webhookRunner != nil {
+				webhookRunner.Send(hash)
+			}
+			return nil
+		},
+	}
 	failCount := 0
 	syncCount := uint64(0)
 	initialSyncDone := false
 	waitTime := *flInitPeriod
-	prevHash := ""
 	// getMaxFailures returns the effective max-failure limit for the current
 	// phase.  During the initial sync phase, --init-max-failures (if set)
 	// overrides --max-failures; otherwise --max-failures applies.
@@ -996,11 +1020,7 @@ func main() {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), *flSyncTimeout)
 
-		if preExechookRunner != nil {
-			preExechookRunner.Send(prevHash)
-		}
-
-		if changed, hash, err := git.SyncRepo(ctx, refreshCreds); err != nil {
+		if changed, hash, err := git.SyncRepo(ctx, syncHooks); err != nil {
 			failCount++
 			updateSyncMetrics(metricKeyError, start)
 			if maxFails := getMaxFailures(); maxFails >= 0 && failCount >= maxFails {
@@ -1026,15 +1046,6 @@ func main() {
 					} else {
 						log.V(3).Info("touched touch-file", "path", absTouchFile)
 					}
-				}
-				if webhookRunner != nil {
-					webhookRunner.Send(hash)
-				}
-				if exechookRunner != nil {
-					exechookRunner.Send(hash)
-				}
-				if preExechookRunner != nil {
-					prevHash = hash
 				}
 				updateSyncMetrics(metricKeySuccess, start)
 			} else {
@@ -1809,10 +1820,10 @@ func (git *repoSync) currentWorktree() (worktree, error) {
 // SyncRepo syncs the repository to the desired ref, publishes it via the link,
 // and tries to clean up any detritus.  This function returns whether the
 // current hash has changed and what the new hash is.
-func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Context) error) (bool, string, error) {
+func (git *repoSync) SyncRepo(ctx context.Context, syncHooks syncHooks) (bool, string, error) {
 	git.log.V(3).Info("syncing", "repo", redactURL(git.repo))
 
-	if err := refreshCreds(ctx); err != nil {
+	if err := syncHooks.refreshCreds(ctx); err != nil {
 		return false, "", fmt.Errorf("credential refresh failed: %w", err)
 	}
 
@@ -1897,7 +1908,12 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 
 		// If we have a new hash, update the symlink to point to the new worktree.
 		if changed {
-			err := git.publishSymlink(newWorktree)
+			err := syncHooks.beforePublish(newWorktree.Hash())
+			if err != nil {
+				return false, "", err
+			}
+
+			err = git.publishSymlink(newWorktree)
 			if err != nil {
 				return false, "", err
 			}
@@ -1908,6 +1924,11 @@ func (git *repoSync) SyncRepo(ctx context.Context, refreshCreds func(context.Con
 					git.log.Error(err, "can't change stale worktree mtime", "path", currentWorktree.Path())
 				}
 			}
+		}
+
+		err := syncHooks.afterPublish(newWorktree.Hash())
+		if err != nil {
+			return false, "", err
 		}
 
 		// Mark ourselves as "ready".
@@ -2570,7 +2591,8 @@ OPTIONS
 
     --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
-            remote repository.  This command does not take any arguments and
+            remote repository and publishing the symlink (see --link).
+            This command does not take any arguments and
             executes with the synced repo as its working directory.  The
             $GITSYNC_HASH environment variable will be set to the git hash that
             was synced.  If, at startup, git-sync finds that the --root already
@@ -2581,21 +2603,6 @@ OPTIONS
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
-            defaults to 30 seconds ("30s").
-
-    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
-            The time to wait before retrying a failed --pre-exechook-command.  If
-            not specified, this defaults to 3 seconds ("3s").
-
-    --pre-exechook-command <string>, $GITSYNC_PRE_EXECHOOK_COMMAND
-            An optional command to be executed before syncing a new hash of the
-            remote repository.  This command does not take any arguments and
-            executes with the synced repo as its working directory. The
-            $GITSYNC_HASH environment variable will be set to the previous git hash that
-            was synced. This hook will always be invoked as it runs before any sync attempt.
-
-    --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
-            The timeout for the --pre-exechook-command.  If not specifid, this
             defaults to 30 seconds ("30s").
 
     --filter <string>, $GITSYNC_FILTER
@@ -2745,6 +2752,22 @@ OPTIONS
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
+
+    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed --pre-exechook-command.  If
+            not specified, this defaults to 3 seconds ("3s").
+
+    --pre-exechook-command <string>, $GITSYNC_PRE_EXECHOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the 
+            remote repository but before publishing the symlink (see --link).
+            This command does not take any arguments and
+            executes with the synced repo as its working directory. The
+            $GITSYNC_HASH environment variable will be set to the previous git hash that
+            was synced. This hook will always be invoked as it runs before any sync attempt.
+
+    --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
+            The timeout for the --pre-exechook-command.  If not specifid, this
+            defaults to 30 seconds ("30s").
 
     --ref <string>, $GITSYNC_REF
             The git revision (branch, tag, or hash) to check out.  If not
