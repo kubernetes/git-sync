@@ -41,6 +41,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -825,6 +826,28 @@ func main() {
 			log.Error(err, "can't set additional git configs", "configs", str)
 			os.Exit(1)
 		}
+	}
+
+	// Log configs for debug. The -z means to produce a list of NUL-delimted KV
+	// pairs, where the first newline is the key/value separator and any
+	// additional newlines are part of the value.
+	if stdout, stderr, err := cmdRunner.Run(ctx, "", nil, *flGitCmd, "config", "list", "-z"); err != nil {
+		log.Error(err, "can't list git config")
+		os.Exit(1)
+	} else if stderr != "" {
+		log.V(0).Info("unexpected stderr reading git config", "stdout", stdout, "stderr", stderr)
+		os.Exit(1)
+	} else {
+		cfgs := strings.Split(stdout, string(rune(0)))
+		kvs := funcr.PseudoStruct{} // like a map but ordered
+		for _, cfg := range cfgs {
+			if cfg == "" {
+				continue
+			}
+			parts := strings.SplitN(cfg, "\n", 2) // any additional newlines are part of the value
+			kvs = append(kvs, parts[0], parts[1])
+		}
+		log.V(0).Info("git config", "configs", kvs)
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
