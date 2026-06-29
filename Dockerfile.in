@@ -103,7 +103,6 @@ RUN rm -rf \
     /usr/lib/git-core/git-http-push \
     /usr/lib/git-core/git-imap-send \
     /usr/lib/git-core/git-instaweb \
-    /usr/lib/git-core/git-sh-i18n--envsubst \
     /usr/lib/git-core/scalar \
     /usr/lib/openssh/ssh-keysign \
     /usr/lib/openssh/ssh-pkcs11-helper \

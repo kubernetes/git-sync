@@ -312,7 +312,28 @@ OPTIONS
     --git-config <string>, $GITSYNC_GIT_CONFIG
             Additional git config options in a comma-separated 'key:val'
             format.  The parsed keys and values are passed to 'git config' and
-            must be valid syntax for that command.
+            must be valid syntax for that command.  This is similar to
+            --git-config-add, but uses a single comma-separated string.
+
+            Both keys and values can be either quoted or unquoted strings.
+            Within quoted keys and all values (quoted or not), the following
+            escape sequences are supported:
+                '\n' => [newline]
+                '\t' => [tab]
+                '\"' => '"'
+                '\,' => ','
+                '\\' => '\'
+            To include a colon within a key (e.g. a URL) the key must be
+            quoted.  Within unquoted values commas must be escaped.  Within
+            quoted values commas may be escaped, but are not required to be.
+            Any other escape sequence is an error.
+
+    --git-config-add <string>
+            Add one git config option.  The parsed key and value are passed to
+            'git config' and must be valid syntax for that command.  This flag
+            can be specified more than once.  This is similar to --git-config,
+            but allows multiple discrete uses of the flag instead of a single
+            comma-separated string.
 
             Both keys and values can be either quoted or unquoted strings.
             Within quoted keys and all values (quoted or not), the following

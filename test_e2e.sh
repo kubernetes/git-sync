@@ -368,7 +368,8 @@ function GIT_SYNC() {
             --add-user \
             --group-write \
             --touch-file="$INTERLOCK" \
-            --git-config='protocol.file.allow:always' \
+            --git-config-add='protocol.file.allow:always' \
+            --git-config-add='safe.directory:*' \
             --http-bind=":$HTTP_PORT" \
             --http-metrics \
             --http-pprof \
@@ -3573,7 +3574,10 @@ function e2e::additional_git_configs() {
         --repo="file://$REPO" \
         --root="$ROOT" \
         --link="link" \
-        --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val'
+        --git-config='http.postBuffer:10485760,sect.k1:"a val",sect.k2:another val' \
+        --git-config-add='sect.k3:a val' \
+        --git-config-add='sect.k4:"a val with quotes"' \
+        --git-config-add='"sect.k5":"quoted_all"'
     assert_link_exists "$ROOT/link"
     assert_file_exists "$ROOT/link/file"
     assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
