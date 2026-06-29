@@ -313,9 +313,12 @@ func main() {
 	flGitCmd := pflag.String("git",
 		envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
 		"the git command to run (subject to PATH search, mostly for testing)")
-	flGitConfig := pflag.String("git-config",
+	flGitConfigString := pflag.String("git-config",
 		envString("", "GITSYNC_GIT_CONFIG", "GIT_SYNC_GIT_CONFIG"),
 		"additional git config options in 'section.var1:val1,\"section.sub.var2\":\"val2\"' format")
+	flGitConfigList := pflag.StringArray("git-config-add", // Array vs. Slice to avoid CSV parsing
+		nil,
+		"add one additional git config option in 'section.var1:val1' format; can be repeated")
 	flGitGC := pflag.String("git-gc",
 		envString("always", "GITSYNC_GIT_GC", "GIT_SYNC_GIT_GC"),
 		"git garbage collection behavior: one of 'auto', 'always', 'aggressive', or 'off'")
@@ -810,9 +813,16 @@ func main() {
 	}
 
 	// This needs to be after all other git-related config flags.
-	if *flGitConfig != "" {
-		if err := git.SetupExtraGitConfigs(ctx, *flGitConfig); err != nil {
-			log.Error(err, "can't set additional git configs", "configs", *flGitConfig)
+	if *flGitConfigString != "" {
+		if err := git.SetupExtraGitConfigs(ctx, *flGitConfigString, "--git-config"); err != nil {
+			log.Error(err, "can't set additional git configs", "configs", *flGitConfigString)
+			os.Exit(1)
+		}
+	}
+	if len(*flGitConfigList) > 0 {
+		str := strings.Join(*flGitConfigList, ",")
+		if err := git.SetupExtraGitConfigs(ctx, str, "--git-config-add"); err != nil {
+			log.Error(err, "can't set additional git configs", "configs", str)
 			os.Exit(1)
 		}
 	}
@@ -2259,10 +2269,6 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 		// Never prompt for a password.
 		key: "core.askPass",
 		val: "true",
-	}, {
-		// Mark repos as safe (avoid a "dubious ownership" error).
-		key: "safe.directory",
-		val: "*",
 	}}
 
 	for _, kv := range configs {
@@ -2275,10 +2281,10 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 
 // SetupExtraGitConfigs configures the global git environment with user-provided
 // override settings.
-func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string) error {
+func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string, flagName string) error {
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
-		return fmt.Errorf("can't parse --git-config flag: %w", err)
+		return fmt.Errorf("can't parse %s flag: %w", flagName, err)
 	}
 	git.log.V(1).Info("setting additional git configs", "configs", configs)
 	for _, kv := range configs {
@@ -2631,7 +2637,28 @@ OPTIONS
     --git-config <string>, $GITSYNC_GIT_CONFIG
             Additional git config options in a comma-separated 'key:val'
             format.  The parsed keys and values are passed to 'git config' and
-            must be valid syntax for that command.
+            must be valid syntax for that command.  This is similar to
+            --git-config-add, but uses a single comma-separated string.
+
+            Both keys and values can be either quoted or unquoted strings.
+            Within quoted keys and all values (quoted or not), the following
+            escape sequences are supported:
+                '\n' => [newline]
+                '\t' => [tab]
+                '\"' => '"'
+                '\,' => ','
+                '\\' => '\'
+            To include a colon within a key (e.g. a URL) the key must be
+            quoted.  Within unquoted values commas must be escaped.  Within
+            quoted values commas may be escaped, but are not required to be.
+            Any other escape sequence is an error.
+
+    --git-config-add <string>
+            Add one git config option.  The parsed key and value are passed to
+            'git config' and must be valid syntax for that command.  This flag
+            can be specified more than once.  This is similar to --git-config,
+            but allows multiple discrete uses of the flag instead of a single
+            comma-separated string.
 
             Both keys and values can be either quoted or unquoted strings.
             Within quoted keys and all values (quoted or not), the following
