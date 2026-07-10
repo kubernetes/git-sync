@@ -2560,6 +2560,138 @@ function e2e::exechook_startup_after_crash() {
 }
 
 ##############################################
+# Test pre-publish-exechook-success
+##############################################
+function e2e::pre_publish_exechook_success() {
+    cat /dev/null > "$RUNLOG"
+
+    # First sync
+    echo "${FUNCNAME[0]} 1" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --pre-publish-exechook-command="/$EXECHOOK_COMMAND" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 1"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]} 1"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_lines_eq "$RUNLOG" 1
+
+    # Move forward
+    echo "${FUNCNAME[0]} 2" > "$REPO/file"
+    git -C "$REPO" commit -qam "${FUNCNAME[0]} 2"
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]} 2"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]} 2"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+    assert_file_lines_eq "$RUNLOG" 2
+}
+
+##############################################
+# Test pre-publish-exechook-fail-retry
+##############################################
+function e2e::pre_publish_exechook_fail_retry() {
+    cat /dev/null > "$RUNLOG"
+
+    # First sync - return a failure to ensure that we try again
+    GIT_SYNC \
+        --period=100ms \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --pre-publish-exechook-command="/$EXECHOOK_COMMAND_FAIL" \
+        --pre-publish-exechook-backoff=1s \
+        &
+    sleep 3 # give it time to retry
+
+    # Check that exechook was called
+    assert_file_lines_ge "$RUNLOG" 2
+}
+
+######################################################
+# Test pre-publish-exechook-success with --one-time
+######################################################
+function e2e::pre_publish_exechook_success_once() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        --pre-publish-exechook-command="/$EXECHOOK_COMMAND_SLEEPY"
+
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_exists "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook" "${FUNCNAME[0]}"
+    assert_file_eq "$ROOT/link/exechook-env" "$EXECHOOK_ENVKEY=$EXECHOOK_ENVVAL"
+}
+
+###################################################
+# Test pre-publish-exechook-fail with --one-time
+###################################################
+function e2e::pre_publish_exechook_fail_once() {
+    cat /dev/null > "$RUNLOG"
+
+	assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --repo="file://$REPO" \
+            --root="$ROOT" \
+            --link="link" \
+            --pre-publish-exechook-command="/$EXECHOOK_COMMAND_FAIL_SLEEPY" \
+            --pre-publish-exechook-backoff=1s
+
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_lines_eq "$RUNLOG" 1
+}
+
+##########################################################
+# Test pre-publish-exechook at startup with correct SHA
+##########################################################
+function e2e::pre_publish_exechook_startup_after_crash() {
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+
+    # No changes to repo, pre-publish-exechook-command is not called
+
+    cat /dev/null > "$RUNLOG"
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --ref="$MAIN_BRANCH" \
+        --root="$ROOT" \
+        --link="link" \
+        --pre-publish-exechook-command="/$EXECHOOK_COMMAND"
+    assert_link_exists "$ROOT/link"
+    assert_file_exists "$ROOT/link/file"
+    assert_file_absent "$ROOT/link/exechook"
+    assert_file_eq "$ROOT/link/file" "${FUNCNAME[0]}"
+    assert_file_lines_eq "$RUNLOG" 0
+}
+
+##############################################
 # Test webhook success
 ##############################################
 function e2e::webhook_success() {
