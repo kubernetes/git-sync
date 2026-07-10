@@ -445,21 +445,22 @@ OPTIONS
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
 
-    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
-        The time to wait before retrying a failed --pre-exechook-command.  If
-        not specified, this defaults to 3 seconds ("3s").
+    --pre-publish-exechook-backoff <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed
+            --pre-publish-exechook-command. If not specified, this defaults to 
+            3 seconds ("3s").
 
-    --pre-exechook-command <string>, $GITSYNC_PRE_EXECHOOK_COMMAND
-			An optional command to be executed after syncing a new hash of the 
-	        remote repository but before publishing the symlink (see --link).
-	        This command does not take any arguments and
-            executes with the synced repo as its working directory. The
-            $GITSYNC_HASH environment variable will be set to the previous git hash that
-            was synced. This hook will always be invoked as it runs before any sync attempt.
+    --pre-publish-exechook-command <string>, $GITSYNC_PRE_PUBLISH_EXECHOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the
+            remote repository but before publishing the symlink (see --link).
+            This command does not take any arguments and executes with the
+            synced repo as its working directory. The $GITSYNC_HASH environment
+            variable will be set to the previous git hash that was synced. This
+            hook will always be invoked as it runs before any sync attempt.
 
-    --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
-            The timeout for the --pre-exechook-command.  If not specifid, this
-            defaults to 30 seconds ("30s").
+    --pre-publish-exechook-timeout <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_TIMEOUT
+            The timeout for the --pre-publish-exechook-command.  If not        
+            specified this defaults to 30 seconds ("30s").
 
     --ref <string>, $GITSYNC_REF
             The git revision (branch, tag, or hash) to check out.  If not

@@ -237,15 +237,15 @@ func main() {
 		envDuration(3*time.Second, "GITSYNC_EXECHOOK_BACKOFF", "GIT_SYNC_EXECHOOK_BACKOFF"),
 		"the time to wait before retrying a failed exechook")
 
-	flPreExechookCommand := pflag.String("pre-exechook-command",
-		envString("", "GITSYNC_PRE_EXECHOOK_COMMAND", "GIT_SYNC_PRE_EXECHOOK_COMMAND"),
+	flPrePubExechookCommand := pflag.String("pre-publish-exechook-command",
+		envString("", "GITSYNC_PRE_PUBLISH_EXECHOOK_COMMAND"),
 		"an optional command to be run before syncs complete (must be idempotent)")
-	flPreExechookTimeout := pflag.Duration("pre-exechook-timeout",
-		envDuration(30*time.Second, "GITSYNC_PRE_EXECHOOK_TIMEOUT", "GIT_SYNC_PRE_EXECHOOK_TIMEOUT"),
-		"the timeout for the pre-exechook")
-	flPreExechookBackoff := pflag.Duration("pre-exechook-backoff",
-		envDuration(3*time.Second, "GITSYNC_PRE_EXECHOOK_BACKOFF", "GIT_SYNC_PRE_EXECHOOK_BACKOFF"),
-		"the time to wait before retrying a failed pre-exechook")
+	flPrePubExechookTimeout := pflag.Duration("pre-publish-exechook-timeout",
+		envDuration(30*time.Second, "GITSYNC_PRE_PUBLISH_EXECHOOK_TIMEOUT"),
+		"the timeout for the pre-publish-exechook")
+	flPrePubExechookBackoff := pflag.Duration("pre-publish-exechook-backoff",
+		envDuration(3*time.Second, "GITSYNC_PRE_PUBLISH_EXECHOOK_BACKOFF"),
+		"the time to wait before retrying a failed pre-publish-exechook")
 
 	flWebhookURL := pflag.String("webhook-url",
 		envString("", "GITSYNC_WEBHOOK_URL", "GIT_SYNC_WEBHOOK_URL"),
@@ -558,12 +558,12 @@ func main() {
 		}
 	}
 
-	if *flPreExechookCommand != "" {
-		if *flPreExechookTimeout < time.Second {
-			fatalConfigErrorf(log, true, "invalid flag: --pre-exechook-timeout must be at least 1s")
+	if *flPrePubExechookCommand != "" {
+		if *flPrePubExechookTimeout < time.Second {
+			fatalConfigErrorf(log, true, "invalid flag: --pre-publish-exechook-timeout must be at least 1s")
 		}
-		if *flPreExechookBackoff < time.Second {
-			fatalConfigErrorf(log, true, "invalid flag: --pre-exechook-backoff must be at least 1s")
+		if *flPrePubExechookBackoff < time.Second {
+			fatalConfigErrorf(log, true, "invalid flag: --pre-publish-exechook-backoff must be at least 1s")
 		}
 	}
 
@@ -908,30 +908,30 @@ func main() {
 		go exechookRunner.Run(context.Background())
 	}
 
-	// Startup pre-exechooks goroutine
-	var preExechookRunner *hook.HookRunner
-	if *flPreExechookCommand != "" {
-		logname := "pre-exechook"
+	// Startup pre-publish-exechooks goroutine
+	var prePubExechookRunner *hook.HookRunner
+	if *flPrePubExechookCommand != "" {
+		logname := "pre-publish-exechook"
 		log := log.WithName(logname)
 		exechook := hook.NewExechook(
 			logname,
 			cmd.NewRunner(log),
-			*flPreExechookCommand,
+			*flPrePubExechookCommand,
 			func(hash string) string {
 				return git.worktreeFor(hash).Path().String()
 			},
 			[]string{},
-			*flPreExechookTimeout,
+			*flPrePubExechookTimeout,
 			log,
 		)
-		preExechookRunner = hook.NewHookRunner(
+		prePubExechookRunner = hook.NewHookRunner(
 			exechook,
-			*flPreExechookBackoff,
+			*flPrePubExechookBackoff,
 			hook.NewHookData(),
 			log,
 			*flOneTime,
 		)
-		go preExechookRunner.Run(context.Background())
+		go prePubExechookRunner.Run(context.Background())
 	}
 
 	// Setup signal notify channel
@@ -988,8 +988,8 @@ func main() {
 	syncHooks := syncHooks{
 		refreshCreds: refreshCreds,
 		beforePublish: func(hash string) error {
-			if preExechookRunner != nil {
-				preExechookRunner.Send(hash)
+			if prePubExechookRunner != nil {
+				prePubExechookRunner.Send(hash)
 			}
 			return nil
 		},
@@ -1065,6 +1065,11 @@ func main() {
 				// Assumes that if hook channels are not nil, they will have at
 				// least one value before getting closed
 				exitCode := 0 // is 0 if all hooks succeed, else is 1
+				if prePubExechookRunner != nil && changed {
+					if err := prePubExechookRunner.WaitForCompletion(); err != nil {
+						exitCode = 1
+					}
+				}
 				if exechookRunner != nil {
 					if err := exechookRunner.WaitForCompletion(); err != nil {
 						exitCode = 1
@@ -1908,6 +1913,12 @@ func (git *repoSync) SyncRepo(ctx context.Context, syncHooks syncHooks) (bool, s
 
 		// If we have a new hash, update the symlink to point to the new worktree.
 		if changed {
+			// If the previous run crashed before publishing the link, then we
+			// must call the pre-publish hook, and since changed is true, we will.
+			// we will. If the previous run crashed after publishing the link,
+			// then we do not need to call the pre-publish hook, and since
+			// changed is false, we won't. The post-publish hooks are called in
+			// both cases.
 			err := syncHooks.beforePublish(newWorktree.Hash())
 			if err != nil {
 				return false, "", err
@@ -2591,15 +2602,15 @@ OPTIONS
 
     --exechook-command <string>, $GITSYNC_EXECHOOK_COMMAND
             An optional command to be executed after syncing a new hash of the
-            remote repository and publishing the symlink (see --link).
-            This command does not take any arguments and
-            executes with the synced repo as its working directory.  The
-            $GITSYNC_HASH environment variable will be set to the git hash that
-            was synced.  If, at startup, git-sync finds that the --root already
-            has the correct hash, this hook will still be invoked.  This means
-            that hooks can be invoked more than one time per hash, so they
-            must be idempotent.  This flag obsoletes --sync-hook-command, but
-            if sync-hook-command is specified, it will take precedence.
+            remote repository and publishing the symlink (see --link). This
+            command does not take any arguments and executes with the synced
+            repo as its working directory.  The $GITSYNC_HASH environment
+            variable will be set to the git hash that was synced.  If, at
+            startup, git-sync finds that the --root already has the correct
+            hash, this hook will still be invoked.  This means that hooks can
+            be invoked more than one time per hash, so they must be idempotent.
+            This flag obsoletes --sync-hook-command, but if sync-hook-command
+            is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
             The timeout for the --exechook-command.  If not specifid, this
@@ -2753,21 +2764,22 @@ OPTIONS
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
 
-    --pre-exechook-backoff <duration>, $GITSYNC_PRE_EXECHOOK_BACKOFF
-            The time to wait before retrying a failed --pre-exechook-command.  If
-            not specified, this defaults to 3 seconds ("3s").
+    --pre-publish-exechook-backoff <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed
+            --pre-publish-exechook-command. If not specified, this defaults to 
+            3 seconds ("3s").
 
-    --pre-exechook-command <string>, $GITSYNC_PRE_EXECHOOK_COMMAND
-            An optional command to be executed after syncing a new hash of the 
+    --pre-publish-exechook-command <string>, $GITSYNC_PRE_PUBLISH_EXECHOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the
             remote repository but before publishing the symlink (see --link).
-            This command does not take any arguments and
-            executes with the synced repo as its working directory. The
-            $GITSYNC_HASH environment variable will be set to the previous git hash that
-            was synced. This hook will always be invoked as it runs before any sync attempt.
+            This command does not take any arguments and executes with the
+            synced repo as its working directory. The $GITSYNC_HASH environment
+            variable will be set to the previous git hash that was synced. This
+            hook will always be invoked as it runs before any sync attempt.
 
-    --pre-exechook-timeout <duration>, $GITSYNC_PRE_EXECHOOK_TIMEOUT
-            The timeout for the --pre-exechook-command.  If not specifid, this
-            defaults to 30 seconds ("30s").
+    --pre-publish-exechook-timeout <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_TIMEOUT
+            The timeout for the --pre-publish-exechook-command.  If not        
+            specified this defaults to 30 seconds ("30s").
 
     --ref <string>, $GITSYNC_REF
             The git revision (branch, tag, or hash) to check out.  If not
