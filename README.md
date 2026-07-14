@@ -242,6 +242,39 @@ OPTIONS
             (200) and produce a series of key=value lines, including
             "username=<value>" and "password=<value>".
 
+    --azure-workload-identity, $GITSYNC_AZURE_WORKLOAD_IDENTITY
+            Use Azure Workload Identity Federation to authenticate to Azure
+            DevOps.  The pod's projected ServiceAccount token is exchanged for
+            a Microsoft Entra ID access token which is used as the git
+            credential, so no PAT or secret is stored.  May not be combined
+            with --username/--password, --askpass-url, --credential, or the
+            --github-app-* flags.
+
+    --azure-client-id <string>, $GITSYNC_AZURE_CLIENT_ID
+            The Microsoft Entra ID client ID to use for Azure workload identity
+            authentication.  If not specified, defaults to $AZURE_CLIENT_ID,
+            which is normally injected by the azure-workload-identity webhook.
+
+    --azure-tenant-id <string>, $GITSYNC_AZURE_TENANT_ID
+            The Microsoft Entra ID tenant ID to use for Azure workload identity
+            authentication.  If not specified, defaults to $AZURE_TENANT_ID.
+
+    --azure-federated-token-file <string>, $GITSYNC_AZURE_FEDERATED_TOKEN_FILE
+            The path to the projected ServiceAccount token used for Azure
+            workload identity authentication.  If not specified, defaults to
+            $AZURE_FEDERATED_TOKEN_FILE.
+
+    --azure-authority-host <string>, $GITSYNC_AZURE_AUTHORITY_HOST
+            The Microsoft Entra ID authority host to use for Azure workload
+            identity authentication.  If not specified, defaults to
+            $AZURE_AUTHORITY_HOST, or https://login.microsoftonline.com/ when
+            that is unset.  Override only for sovereign clouds.
+
+    --azure-scope <string>, $GITSYNC_AZURE_SCOPE
+            The OAuth2 scope to request when exchanging the federated token for
+            an access token.  If not specified, defaults to the Azure DevOps
+            resource ID (499b84ac-1321-427f-aa17-267ca6975798/.default).
+
     --cookie-file <string>, $GITSYNC_COOKIE_FILE
             Use a git cookiefile (/etc/git-secret/cookie_file) for
             authentication.

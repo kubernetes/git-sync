@@ -78,6 +78,11 @@ var (
 		Name: "git_sync_refresh_github_app_token_count",
 		Help: "How many times the GitHub app token was refreshed, partitioned by state (success, error)",
 	}, []string{"status"})
+
+	metricRefreshAzureWITokenCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "git_sync_refresh_azure_wi_token_count",
+		Help: "How many times the Azure Workload Identity token was refreshed, partitioned by state (success, error)",
+	}, []string{"status"})
 )
 
 func init() {
@@ -86,6 +91,7 @@ func init() {
 	prometheus.MustRegister(metricFetchCount)
 	prometheus.MustRegister(metricAskpassCount)
 	prometheus.MustRegister(metricRefreshGitHubAppTokenCount)
+	prometheus.MustRegister(metricRefreshAzureWITokenCount)
 }
 
 const (
@@ -115,22 +121,23 @@ const defaultDirMode = os.FileMode(0775) // subject to umask
 
 // repoSync represents the remote repo and the local sync of it.
 type repoSync struct {
-	cmd            string         // the git command to run
-	root           absPath        // absolute path to the root directory
-	repo           string         // remote repo to sync
-	ref            string         // the ref to sync
-	depth          int            // for shallow sync
-	filter         string         // for partial clone
-	submodules     submodulesMode // how to handle submodules
-	gc             gcMode         // garbage collection
-	link           absPath        // absolute path to the symlink to publish
-	authURL        string         // a URL to re-fetch credentials, or ""
-	sparseFile     string         // path to a sparse-checkout file
-	syncCount      int            // how many times have we synced?
-	log            *logging.Logger
-	run            cmd.Runner
-	staleTimeout   time.Duration // time for worktrees to be cleaned up
-	appTokenExpiry time.Time     // time when github app auth token expires
+	cmd                string         // the git command to run
+	root               absPath        // absolute path to the root directory
+	repo               string         // remote repo to sync
+	ref                string         // the ref to sync
+	depth              int            // for shallow sync
+	filter             string         // for partial clone
+	submodules         submodulesMode // how to handle submodules
+	gc                 gcMode         // garbage collection
+	link               absPath        // absolute path to the symlink to publish
+	authURL            string         // a URL to re-fetch credentials, or ""
+	sparseFile         string         // path to a sparse-checkout file
+	syncCount          int            // how many times have we synced?
+	log                *logging.Logger
+	run                cmd.Runner
+	staleTimeout       time.Duration // time for worktrees to be cleaned up
+	appTokenExpiry     time.Time     // time when github app auth token expires
+	azureWITokenExpiry time.Time     // time when Azure Workload Identity token expires
 }
 
 func main() {
@@ -292,6 +299,25 @@ func main() {
 	flGithubAppInstallationID := pflag.Int("github-app-installation-id",
 		envInt(0, "GITSYNC_GITHUB_APP_INSTALLATION_ID"),
 		"the GitHub app installation ID to use for GitHub app auth")
+
+	flAzureWorkloadIdentity := pflag.Bool("azure-workload-identity",
+		envBool(false, "GITSYNC_AZURE_WORKLOAD_IDENTITY"),
+		"use Azure Workload Identity Federation to authenticate to Azure DevOps")
+	flAzureClientID := pflag.String("azure-client-id",
+		envString("", "GITSYNC_AZURE_CLIENT_ID", envAzureClientID),
+		"the Azure AD client ID for workload identity auth (defaults to $AZURE_CLIENT_ID from the azure-workload-identity webhook)")
+	flAzureTenantID := pflag.String("azure-tenant-id",
+		envString("", "GITSYNC_AZURE_TENANT_ID", envAzureTenantID),
+		"the Azure AD tenant ID for workload identity auth (defaults to $AZURE_TENANT_ID)")
+	flAzureFederatedTokenFile := pflag.String("azure-federated-token-file",
+		envString("", "GITSYNC_AZURE_FEDERATED_TOKEN_FILE", envAzureFederatedTokenFile),
+		"the path to the projected federated token file (defaults to $AZURE_FEDERATED_TOKEN_FILE)")
+	flAzureAuthorityHost := pflag.String("azure-authority-host",
+		envString("https://login.microsoftonline.com/", "GITSYNC_AZURE_AUTHORITY_HOST", envAzureAuthorityHost),
+		"the Azure AD authority host (defaults to $AZURE_AUTHORITY_HOST or the public cloud endpoint)")
+	flAzureScope := pflag.String("azure-scope",
+		envString("499b84ac-1321-427f-aa17-267ca6975798/.default", "GITSYNC_AZURE_SCOPE"),
+		"the OAuth2 scope to exchange the federated token for (defaults to the Azure DevOps resource ID)")
 
 	flGitCmd := pflag.String("git",
 		envString("git", "GITSYNC_GIT", "GIT_SYNC_GIT"),
@@ -613,6 +639,29 @@ func main() {
 		}
 	}
 
+	if *flAzureWorkloadIdentity {
+		if *flUsername != "" || *flPassword != "" || *flPasswordFile != "" {
+			fatalConfigErrorf(log, true, "invalid flag: --username/--password/--password-file may not be specified when --azure-workload-identity is set")
+		}
+		if *flAskPassURL != "" {
+			fatalConfigErrorf(log, true, "invalid flag: --askpass-url may not be specified when --azure-workload-identity is set")
+		}
+		if *flGithubAppApplicationID != 0 || *flGithubAppClientID != "" {
+			fatalConfigErrorf(log, true, "invalid flag: --github-app-* flags may not be specified when --azure-workload-identity is set")
+		}
+		if len(*flCredentials) > 0 {
+			fatalConfigErrorf(log, true, "invalid flag: --credential may not be specified when --azure-workload-identity is set")
+		}
+		if *flAzureClientID == "" || *flAzureTenantID == "" || *flAzureFederatedTokenFile == "" {
+			fatalConfigErrorf(log, true, "invalid config: --azure-workload-identity requires --azure-client-id, --azure-tenant-id, and --azure-federated-token-file (or their AZURE_* env vars, normally injected by the azure-workload-identity webhook)")
+		}
+		if u, err := url.Parse(*flRepo); err == nil {
+			if u.Scheme != "https" {
+				fatalConfigErrorf(log, true, "invalid flag: --repo must be an https:// URL when --azure-workload-identity is set, got scheme %q", u.Scheme)
+			}
+		}
+	}
+
 	if len(*flCredentials) > 0 {
 		for _, cred := range *flCredentials {
 			if cred.URL == "" {
@@ -925,6 +974,16 @@ func main() {
 					return err
 				}
 				metricRefreshGitHubAppTokenCount.WithLabelValues(metricKeySuccess).Inc()
+			}
+		}
+
+		if *flAzureWorkloadIdentity {
+			if git.azureWITokenExpiry.Before(time.Now().Add(30 * time.Second)) {
+				if err := git.RefreshAzureWIToken(ctx, *flAzureClientID, *flAzureTenantID, *flAzureFederatedTokenFile, *flAzureAuthorityHost, *flAzureScope); err != nil {
+					metricRefreshAzureWITokenCount.WithLabelValues(metricKeyError).Inc()
+					return err
+				}
+				metricRefreshAzureWITokenCount.WithLabelValues(metricKeySuccess).Inc()
 			}
 		}
 
