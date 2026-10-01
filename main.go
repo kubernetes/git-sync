@@ -54,6 +54,23 @@ import (
 	"k8s.io/git-sync/pkg/version"
 )
 
+// hideEnvDefault replaces a flag's displayed default when one of envKeys is
+// set to a non-empty value. pflag prints DefValue in usage; the parsed value
+// is left alone. An empty credential default stringifies as "[]", so this
+// keys off the environment rather than DefValue != "".
+func hideEnvDefault(fs *pflag.FlagSet, name string, envKeys ...string) {
+	f := fs.Lookup(name)
+	if f == nil {
+		return
+	}
+	for _, key := range envKeys {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
+			f.DefValue = "<set from environment>"
+			return
+		}
+	}
+}
+
 var (
 	metricSyncDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "git_sync_duration_seconds",
@@ -404,6 +421,12 @@ func main() {
 	//
 	// Parse and verify flags.  Errors here are fatal.
 	//
+
+	// These three take a default from env vars that can hold a token.
+	// pflag prints that default in --help and on a parse error.
+	hideEnvDefault(pflag.CommandLine, "repo", "GITSYNC_REPO", "GIT_SYNC_REPO")
+	hideEnvDefault(pflag.CommandLine, "credential", "GITSYNC_CREDENTIAL")
+	hideEnvDefault(pflag.CommandLine, "askpass-url", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL")
 
 	pflag.Parse()
 

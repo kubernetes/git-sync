@@ -24,8 +24,69 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/pflag"
 	"go.uber.org/goleak"
 )
+
+func TestHideEnvDefault(t *testing.T) {
+	secret := "https://user:REPOPAT_xyz789@github.com/o/r.git"
+	cred := `[{"username":"bot","password":"SENTINEL_PAT"}]`
+	t.Setenv("GITSYNC_REPO", secret)
+	t.Setenv("GITSYNC_CREDENTIAL", cred)
+	t.Setenv("GIT_ASKPASS_URL", "")
+
+	fs := pflag.NewFlagSet("git-sync", pflag.ContinueOnError)
+	fs.String("repo", secret, "the git repository to sync")
+	fs.String("credential", cred, "credentials")
+	fs.String("askpass-url", "", "askpass")
+	fs.String("ref", "HEAD", "the git revision")
+
+	hideEnvDefault(fs, "repo", "GITSYNC_REPO", "GIT_SYNC_REPO")
+	hideEnvDefault(fs, "credential", "GITSYNC_CREDENTIAL")
+	hideEnvDefault(fs, "askpass-url", "GITSYNC_ASKPASS_URL", "GIT_SYNC_ASKPASS_URL", "GIT_ASKPASS_URL")
+	hideEnvDefault(fs, "missing", "GITSYNC_REPO")
+
+	if got := fs.Lookup("repo").DefValue; got != "<set from environment>" {
+		t.Fatalf("repo DefValue = %q", got)
+	}
+	if got := fs.Lookup("credential").DefValue; got != "<set from environment>" {
+		t.Fatalf("credential DefValue = %q", got)
+	}
+	if got := fs.Lookup("askpass-url").DefValue; got != "" {
+		t.Fatalf("empty askpass env was treated as set: %q", got)
+	}
+	if got := fs.Lookup("ref").DefValue; got != "HEAD" {
+		t.Fatalf("unrelated flag rewritten: %q", got)
+	}
+
+	if err := fs.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	gotRepo, err := fs.GetString("repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotRepo != secret {
+		t.Fatalf("repo value = %q, want the env default kept", gotRepo)
+	}
+
+	usage := fs.FlagUsages()
+	if strings.Contains(usage, "REPOPAT") || strings.Contains(usage, "SENTINEL_PAT") {
+		t.Fatalf("usage leaked a secret:\n%s", usage)
+	}
+	if !strings.Contains(usage, "<set from environment>") {
+		t.Fatalf("usage missing placeholder:\n%s", usage)
+	}
+
+	// credential's zero value stringifies as "[]", which must stay visible
+	// when the env var is unset.
+	bare := pflag.NewFlagSet("git-sync", pflag.ContinueOnError)
+	bare.String("credential", "[]", "credentials")
+	hideEnvDefault(bare, "credential", "GITSYNC_CREDENTIAL_UNSET")
+	if got := bare.Lookup("credential").DefValue; got != "[]" {
+		t.Fatalf("unset credential DefValue = %q", got)
+	}
+}
 
 func TestMakeAbsPath(t *testing.T) {
 	cases := []struct {
