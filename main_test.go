@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr/funcr"
 	"go.uber.org/goleak"
 )
 
@@ -241,6 +242,53 @@ func TestParseGitConfigs(t *testing.T) {
 			if err == nil && tc.fail {
 				t.Errorf("unexpected success")
 			}
+			if !reflect.DeepEqual(kvs, tc.expect) {
+				t.Errorf("bad result:\n\texpected: %#v\n\t     got: %#v", tc.expect, kvs)
+			}
+		})
+	}
+}
+
+func TestParseGitConfigList(t *testing.T) {
+	cases := []struct {
+		name   string
+		input  string
+		expect funcr.PseudoStruct
+	}{{
+		name:   "empty",
+		input:  "",
+		expect: funcr.PseudoStruct{},
+	}, {
+		name:   "one-pair",
+		input:  "k\nv\x00",
+		expect: funcr.PseudoStruct{"k", "v"},
+	}, {
+		name:   "no-trailing-nul",
+		input:  "k\nv",
+		expect: funcr.PseudoStruct{"k", "v"},
+	}, {
+		name:   "empty-value",
+		input:  "k\n\x00",
+		expect: funcr.PseudoStruct{"k", ""},
+	}, {
+		name:   "multi-line-value",
+		input:  "k\nline1\nline2\x00",
+		expect: funcr.PseudoStruct{"k", "line1\nline2"},
+	}, {
+		// `git config list -z` prints a key with no value (e.g. a bare `key`
+		// line, which git treats as boolean true) without a newline.
+		name:   "no-value",
+		input:  "k\x00",
+		expect: funcr.PseudoStruct{"k", nil},
+	}, {
+		name:   "multiple",
+		input:  "core.bare\nfalse\x00demo.bare\x00demo.empty\n\x00demo.multi\nline1\nline2\x00",
+		expect: funcr.PseudoStruct{"core.bare", "false", "demo.bare", nil, "demo.empty", "", "demo.multi", "line1\nline2"},
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kvs := parseGitConfigList(tc.input)
 			if !reflect.DeepEqual(kvs, tc.expect) {
 				t.Errorf("bad result:\n\texpected: %#v\n\t     got: %#v", tc.expect, kvs)
 			}
