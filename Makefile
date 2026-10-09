@@ -163,10 +163,16 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(OS_ARCH_TAG)
 
 LICENSES = .licenses
 
+# go-licenses identifies stdlib packages by its compiled-in GOROOT, so it must
+# be built with the same toolchain that the main module selects when it runs
+# `go list`.  Otherwise (e.g. with GOTOOLCHAIN=auto and an older host Go) the
+# tools module and the main module can resolve to different toolchains, and
+# every stdlib package is reported as "does not have module info".
 $(LICENSES):
 	pushd tools >/dev/null;                                       \
 	  export GOOS=$(shell go env GOHOSTOS);                       \
 	  export GOARCH=$(shell go env GOHOSTARCH);                   \
+	  export GOTOOLCHAIN=$(shell go env GOVERSION);               \
 	  go build -o ../bin/tools/ github.com/google/go-licenses/v2; \
 	  popd >/dev/null
 	rm -rf $(LICENSES)
