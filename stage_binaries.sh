@@ -262,6 +262,12 @@ function stage_one_package() {
     local pkg="$2"
 
     while read -r file; do
+        # Minimal base images may drop files via dpkg path-exclude rules
+        # (see /etc/dpkg/dpkg.cfg.d/), but dpkg -L still lists them.
+        if [[ ! -e "${file}" && ! -L "${file}" ]]; then
+            DBG "skipping ${file} from pkg ${pkg}: listed by dpkg but not present"
+            continue
+        fi
         indent stage_file_and_deps "${staging}" "${file}"
     done < <( dpkg -L "${pkg}" \
         | grep_allow_nomatch -vE '(/\.|/usr/share/(man|doc|.*-completion))' )
