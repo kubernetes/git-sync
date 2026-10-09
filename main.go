@@ -838,16 +838,7 @@ func main() {
 		log.V(0).Info("unexpected stderr reading git config", "stdout", stdout, "stderr", stderr)
 		os.Exit(1)
 	} else {
-		cfgs := strings.Split(stdout, string(rune(0)))
-		kvs := funcr.PseudoStruct{} // like a map but ordered
-		for _, cfg := range cfgs {
-			if cfg == "" {
-				continue
-			}
-			parts := strings.SplitN(cfg, "\n", 2) // any additional newlines are part of the value
-			kvs = append(kvs, parts[0], parts[1])
-		}
-		log.V(0).Info("git config", "configs", kvs)
+		log.V(0).Info("git config", "configs", parseGitConfigList(stdout))
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
@@ -2322,6 +2313,26 @@ func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag strin
 type keyVal struct {
 	key string
 	val string
+}
+
+// parseGitConfigList parses the output of `git config list -z`.  A key with no
+// value (e.g. a bare `key` line, which git treats as boolean true) is printed
+// without a newline, and is reported with a nil value.
+func parseGitConfigList(stdout string) funcr.PseudoStruct {
+	cfgs := strings.Split(stdout, string(rune(0)))
+	kvs := funcr.PseudoStruct{} // like a map but ordered
+	for _, cfg := range cfgs {
+		if cfg == "" {
+			continue
+		}
+		parts := strings.SplitN(cfg, "\n", 2) // any additional newlines are part of the value
+		if len(parts) == 1 {
+			kvs = append(kvs, parts[0], nil)
+			continue
+		}
+		kvs = append(kvs, parts[0], parts[1])
+	}
+	return kvs
 }
 
 func parseGitConfigs(configsFlag string) ([]keyVal, error) {
