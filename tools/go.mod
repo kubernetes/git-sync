@@ -1,8 +1,8 @@
 module k8s.io/git-sync/tools
 
-go 1.23.0
+go 1.27.3
 
-toolchain go1.24.1
+toolchain go1.27.3
 
 require (
 	github.com/estesp/manifest-tool/v2 v2.2.0
