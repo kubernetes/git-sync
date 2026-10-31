@@ -158,7 +158,7 @@ func (r *HookRunner) Run(ctx context.Context) {
 
 // If oneTimeResult is nil, does nothing. Otherwise, forwards the caller
 // provided success status (as a boolean) of HookRunner to receivers of
-// oneTimeResult, closes said chanel, and terminates this goroutine.
+// oneTimeResult, closes said channel, and terminates this goroutine.
 // Using this function to write to oneTimeResult ensures it is only ever
 // written to once.
 func (r *HookRunner) sendOneTimeResultAndTerminate(completedSuccessfully bool) {
