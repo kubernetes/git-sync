@@ -294,7 +294,7 @@ OPTIONS
             if sync-hook-command is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
-            The timeout for the --exechook-command.  If not specifid, this
+            The timeout for the --exechook-command.  If not specified, this
             defaults to 30 seconds ("30s").
 
     --filter <string>, $GITSYNC_FILTER
