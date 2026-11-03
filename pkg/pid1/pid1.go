@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package pid1 provides a simple way to convert the current process into an
+// init-like process.  This is useful for containerized applications that need
+// to manage child processes.
 package pid1
 
 import (
@@ -53,6 +56,7 @@ func runInit(firstborn int) (int, error) {
 	for sig := range sigs {
 		if sig != syscall.SIGCHLD {
 			// Pass it on to the real process.
+			//nolint:forcetypeassert
 			if err := syscall.Kill(firstborn, sig.(syscall.Signal)); err != nil {
 				return 0, err
 			}

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build s390x && linux
-// +build s390x,linux
 
 package unix
 
@@ -11,7 +10,6 @@ import (
 	"unsafe"
 )
 
-//sys	EpollWait(epfd int, events []EpollEvent, msec int) (n int, err error)
 //sys	Fadvise(fd int, offset int64, length int64, advice int) (err error) = SYS_FADVISE64
 //sys	Fchown(fd int, uid int, gid int) (err error)
 //sys	Fstat(fd int, stat *Stat_t) (err error)
@@ -34,11 +32,6 @@ import (
 //sys	sendfile(outfd int, infd int, offset *int64, count int) (written int, err error)
 //sys	setfsgid(gid int) (prev int, err error)
 //sys	setfsuid(uid int) (prev int, err error)
-//sysnb	Setregid(rgid int, egid int) (err error)
-//sysnb	Setresgid(rgid int, egid int, sgid int) (err error)
-//sysnb	Setresuid(ruid int, euid int, suid int) (err error)
-//sysnb	Setrlimit(resource int, rlim *Rlimit) (err error)
-//sysnb	Setreuid(ruid int, euid int) (err error)
 //sys	Splice(rfd int, roff *int64, wfd int, woff *int64, len int, flags int) (n int64, err error)
 //sys	Stat(path string, stat *Stat_t) (err error)
 //sys	Statfs(path string, buf *Statfs_t) (err error)

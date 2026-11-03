@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package version contains version information for the current binary.
 package version
 
+// VERSION is the version of the binary.  This can be set by the linker at
+// build time.
 var VERSION = "UNKNOWN"

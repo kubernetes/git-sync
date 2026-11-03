@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package logging provides a logging interface.
 package logging
 
 import (
@@ -45,7 +46,7 @@ func New(root string, errorFile string, verbosity int) *Logger {
 }
 
 // Error implements logr.Logger.Error.
-func (l *Logger) Error(err error, msg string, kvList ...interface{}) {
+func (l *Logger) Error(err error, msg string, kvList ...any) {
 	l.Logger.WithCallDepth(1).Error(err, msg, kvList...)
 	if l.errorFile == "" {
 		return
@@ -53,11 +54,13 @@ func (l *Logger) Error(err error, msg string, kvList ...interface{}) {
 	payload := struct {
 		Msg  string
 		Err  string
-		Args map[string]interface{}
+		Args map[string]any
 	}{
 		Msg:  msg,
-		Err:  err.Error(),
-		Args: map[string]interface{}{},
+		Args: map[string]any{},
+	}
+	if err != nil {
+		payload.Err = err.Error()
 	}
 	if len(kvList)%2 != 0 {
 		kvList = append(kvList, "<no-value>")

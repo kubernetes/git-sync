@@ -145,6 +145,7 @@ More documentation on specific topics can be [found here](./docs).
 ## Manual
 
 ```
+
 GIT-SYNC
 
 NAME
@@ -205,6 +206,24 @@ CONTRACT
     --period flag) and will attempt to transfer as little data as possible and
     use as little disk space as possible (see the --depth and --git-gc flags),
     but this is not part of the contract.
+
+SYNC PHASES
+
+    git-sync operates in two phases:
+
+    Initial sync:
+        git-sync retries until its first successful sync with the remote
+        repo.  During this phase, the retry interval is controlled by
+        --init-period (falling back to --period if unset) and the failure
+        limit is controlled by --init-max-failures (falling back to
+        --max-failures when unset).  This phase is useful for tolerating
+        transient connectivity issues at startup while still giving up
+        eventually.
+
+    Steady state:
+        Once the first sync succeeds, git-sync polls the remote at the
+        --period interval and tolerates failures up to --max-failures before
+        aborting.  --init-period and --init-max-failures no longer apply.
 
 OPTIONS
 
@@ -275,8 +294,16 @@ OPTIONS
             if sync-hook-command is specified, it will take precedence.
 
     --exechook-timeout <duration>, $GITSYNC_EXECHOOK_TIMEOUT
-            The timeout for the --exechook-command.  If not specifid, this
+            The timeout for the --exechook-command.  If not specified, this
             defaults to 30 seconds ("30s").
+
+    --filter <string>, $GITSYNC_FILTER
+            Use partial clone with the specified filter.  This can reduce
+            the amount of data transferred when cloning large repositories.
+            Common values are 'blob:none' (omit all blobs, fetch on demand)
+            and 'tree:0' (omit all trees and blobs).  This is most effective
+            when combined with --depth and --sparse-checkout-file.  See
+            https://git-scm.com/docs/partial-clone for more information.
 
     --git <string>, $GITSYNC_GIT
             The git command to run (subject to PATH search, mostly for
@@ -285,7 +312,28 @@ OPTIONS
     --git-config <string>, $GITSYNC_GIT_CONFIG
             Additional git config options in a comma-separated 'key:val'
             format.  The parsed keys and values are passed to 'git config' and
-            must be valid syntax for that command.
+            must be valid syntax for that command.  This is similar to
+            --git-config-add, but uses a single comma-separated string.
+
+            Both keys and values can be either quoted or unquoted strings.
+            Within quoted keys and all values (quoted or not), the following
+            escape sequences are supported:
+                '\n' => [newline]
+                '\t' => [tab]
+                '\"' => '"'
+                '\,' => ','
+                '\\' => '\'
+            To include a colon within a key (e.g. a URL) the key must be
+            quoted.  Within unquoted values commas must be escaped.  Within
+            quoted values commas may be escaped, but are not required to be.
+            Any other escape sequence is an error.
+
+    --git-config-add <string>
+            Add one git config option.  The parsed key and value are passed to
+            'git config' and must be valid syntax for that command.  This flag
+            can be specified more than once.  This is similar to --git-config,
+            but allows multiple discrete uses of the flag instead of a single
+            comma-separated string.
 
             Both keys and values can be either quoted or unquoted strings.
             Within quoted keys and all values (quoted or not), the following
@@ -365,6 +413,20 @@ OPTIONS
             Enable the pprof debug endpoints on git-sync's HTTP endpoint at
             /debug/pprof.  Requires --http-bind to be specified.
 
+    --init-max-failures <int>, $GITSYNC_INIT_MAX_FAILURES
+            The number of consecutive failures allowed before aborting during
+            the initial sync phase (before the first successful sync).  Once
+            the initial sync succeeds, --max-failures applies instead.
+            Setting this to a negative value will retry forever during the
+            initial sync.  If this flag is not set, --max-failures applies
+            to the initial sync phase as well.
+
+    --init-period <duration>, $GITSYNC_INIT_PERIOD
+            How long to wait between sync attempts until the first successful
+            sync.  Once the initial sync succeeds, --period is used instead.
+            This must be at least 10ms if set.  If not specified, --period is
+            used for all sync attempts.
+
     --link <string>, $GITSYNC_LINK
             The path to at which to create a symlink which points to the
             current git directory, at the currently synced hash.  This may be
@@ -393,13 +455,33 @@ OPTIONS
     --password-file <string>, $GITSYNC_PASSWORD_FILE
             The file from which the password or personal access token (see
             github docs) to use for git authentication (see --username) will be
-            read.  See also $GITSYNC_PASSWORD.
+            read.  The file is re-read before each sync attempt, allowing
+            git-sync to pick up token rotations automatically (e.g. when using
+            dynamic credentials from an external secrets system).
+            See also $GITSYNC_PASSWORD.
 
     --period <duration>, $GITSYNC_PERIOD
             How long to wait between sync attempts.  This must be at least
             10ms.  This flag obsoletes --wait, but if --wait is specified, it
             will take precedence.  If not specified, this defaults to 10
             seconds ("10s").
+
+    --pre-publish-exechook-backoff <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_BACKOFF
+            The time to wait before retrying a failed
+            --pre-publish-exechook-command. If not specified, this defaults to 
+            3 seconds ("3s").
+
+    --pre-publish-exechook-command <string>, $GITSYNC_PRE_PUBLISH_EXECHOOK_COMMAND
+            An optional command to be executed after syncing a new hash of the
+            remote repository but before publishing the symlink (see --link).
+            This command does not take any arguments and executes with the
+            synced repo as its working directory. The $GITSYNC_HASH environment
+            variable will be set to the previous git hash that was synced. This
+            hook will always be invoked as it runs before any sync attempt.
+
+    --pre-publish-exechook-timeout <duration>, $GITSYNC_PRE_PUBLISH_EXECHOOK_TIMEOUT
+            The timeout for the --pre-publish-exechook-command.  If not        
+            specified this defaults to 30 seconds ("30s").
 
     --ref <string>, $GITSYNC_REF
             The git revision (branch, tag, or hash) to check out.  If not
@@ -587,4 +669,3 @@ HOOKS
     if a hook fails and a new hash is synced during the backoff period, the
     retried hook will fire for the newest hash.
 ```
-

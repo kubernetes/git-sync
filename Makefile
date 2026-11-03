@@ -34,6 +34,20 @@ DBG ?=
 # These are passed to docker when building and testing.
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
+NO_PROXY ?=
+
+# Allow some buildx adaptation for local builds
+BUILDX_BUILDER_NAME := git-sync
+BUILDX_BUILDER_SKIP_CREATION ?=
+
+# Allow alpine to be pulled from a private registry when building the end-to-end tests images
+ALPINE_REGISTRY_PREFIX ?=
+
+# By default all end-to-end tests are executed, but this allows for a manual selection.
+# NOTE: Each item in this list will be used as a regex to run functions of the form 'e2e::${MATCHING_TEST_NAME}'
+#       in the test_e2e.sh script. For example using 'auth' will include all authentication end-to-end tests.
+#       If multiple items match a same test, it will be executed only once.
+LIST_OF_E2E_TESTS ?=
 
 ###
 ### These variables should not need tweaking.
@@ -45,13 +59,13 @@ ALL_PLATFORMS := linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/s390x
 OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
 ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 
-BASEIMAGE ?= registry.k8s.io/build-image/debian-base:bookworm-v1.0.2
+BASEIMAGE ?= debian:trixie
 
 IMAGE := $(REGISTRY)/$(BIN)
 TAG := $(VERSION)
 OS_ARCH_TAG := $(TAG)__$(OS)_$(ARCH)
 
-BUILD_IMAGE ?= golang:1.22
+BUILD_IMAGE ?= golang:1.27
 
 DBG_MAKEFILE ?=
 ifneq ($(DBG_MAKEFILE),1)
@@ -130,6 +144,7 @@ $(OUTBIN): .go/$(OUTBIN).stamp
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ARCH=$(ARCH)                                       \
@@ -148,11 +163,17 @@ DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(OS_ARCH_TAG)
 
 LICENSES = .licenses
 
+# go-licenses identifies stdlib packages by its compiled-in GOROOT, so it must
+# be built with the same toolchain that the main module selects when it runs
+# `go list`.  Otherwise (e.g. with GOTOOLCHAIN=auto and an older host Go) the
+# tools module and the main module can resolve to different toolchains, and
+# every stdlib package is reported as "does not have module info".
 $(LICENSES):
-	pushd tools >/dev/null;                                   \
-	  export GOOS=$(shell go env GOHOSTOS);                   \
-	  export GOARCH=$(shell go env GOHOSTARCH);               \
-	  go build -o ../bin/tools github.com/google/go-licenses; \
+	pushd tools >/dev/null;                                       \
+	  export GOOS=$(shell go env GOHOSTOS);                       \
+	  export GOARCH=$(shell go env GOHOSTARCH);                   \
+	  export GOTOOLCHAIN=$(shell go env GOVERSION);               \
+	  go build -o ../bin/tools/ github.com/google/go-licenses/v2; \
 	  popd >/dev/null
 	rm -rf $(LICENSES)
 	./bin/tools/go-licenses save ./... --save_path=$(LICENSES)
@@ -177,7 +198,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	FORCE=0;                                                     \
 	if [ -z "$(ALLOW_STALE_APT)" ]; then FORCE=$$(date +%s); fi; \
 	docker buildx build                                          \
-	    --builder git-sync                                       \
+	    --builder "$(BUILDX_BUILDER_NAME)"                       \
 	    --build-arg FORCE_REBUILD="$$FORCE"                      \
 	    --build-arg HASH_LICENSES="$$HASH_LICENSES"              \
 	    --build-arg HASH_BINARY="$$HASH_BINARY"                  \
@@ -186,6 +207,7 @@ container: .container-$(DOTFILE_IMAGE) container-name
 	    --platform "$(OS)/$(ARCH)"                               \
 	    --build-arg HTTP_PROXY=$(HTTP_PROXY)                     \
 	    --build-arg HTTPS_PROXY=$(HTTPS_PROXY)                   \
+	    --build-arg NO_PROXY=$(NO_PROXY)                         \
 	    -t $(IMAGE):$(OS_ARCH_TAG)                               \
 	    -f .dockerfile-$(OS)_$(ARCH)                             \
 	    .
@@ -244,17 +266,18 @@ test: $(BUILD_DIRS)
 	    -v $$(pwd)/.go/cache:/.cache                           \
 	    --env HTTP_PROXY=$(HTTP_PROXY)                         \
 	    --env HTTPS_PROXY=$(HTTPS_PROXY)                       \
+	    --env NO_PROXY=$(NO_PROXY)                             \
 	    $(BUILD_IMAGE)                                         \
 	    /bin/sh -c "                                           \
 	        ./build/test.sh ./...                              \
 	    "
-	VERBOSE=1 ./test_e2e.sh
+	VERBOSE=1 ./test_e2e.sh $(LIST_OF_E2E_TESTS)
 
 TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
 .container-test_tool.%: _test_tools/% _test_tools/%/*
-	docker build -t $(REGISTRY)/test/$$(basename $<) $<
+	docker build --build-arg ALPINE_REGISTRY_PREFIX="$(ALPINE_REGISTRY_PREFIX)" -t $(REGISTRY)/test/$$(basename $<) $<
 	docker images -q $(REGISTRY)/test/$$(basename $<) > $@
 
 # Help set up multi-arch build tools.  This assumes you have the tools
@@ -262,7 +285,7 @@ test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 # this.  See https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
 # for great context.
 .buildx-initialized:
-	docker buildx create --name git-sync --node git-sync-0 >/dev/null
+	if [ -z "$(BUILDX_BUILDER_SKIP_CREATION)" ]; then docker buildx create --name "$(BUILDX_BUILDER_NAME)" --node git-sync-0 >/dev/null; fi
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes >/dev/null
 	date > $@
 
@@ -277,19 +300,22 @@ container-clean:
 bin-clean:
 	rm -rf .go bin
 
-lint-staticcheck:
-	go run honnef.co/go/tools/cmd/staticcheck@2023.1.3
-
 lint-golangci-lint:
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0 run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run -v
 
 lint-shellcheck:
+	@img="docker.io/koalaman/shellcheck-alpine:v0.9.0"; \
+	for i in `seq 1 5`; do \
+	  docker pull "$$img" && break; \
+	  echo "shellcheck image pull failed (attempt $$i), retrying..."; \
+	  sleep $$((i * 2)); \
+	done; \
 	docker run \
 	    --rm \
 	    -v `pwd`:`pwd` \
 	    -w `pwd` \
-	    docker.io/koalaman/shellcheck-alpine:v0.9.0 \
+	    "$$img" \
 	        shellcheck \
 	        $$(git ls-files ':!:vendor' '*.sh')
 
-lint: lint-staticcheck lint-golangci-lint lint-shellcheck
+lint: lint-golangci-lint lint-shellcheck

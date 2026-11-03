@@ -34,7 +34,7 @@ condition where a symbolic name can change after `git ls-remote` but before
 ### The v4.2+ loop
 
 The v4.2 loop refines the v4 loop even further.  Instead of using ls-remote to
-see what the upstream has and then fetching it, git-sync sill just fetch it by
+see what the upstream has and then fetching it, git-sync will just fetch it by
 ref.  If the local sync already has the corresponding hash, nothing more will
 be synced.  If it did not have that hash before, then it does now and can
 update the worktree.
@@ -158,6 +158,11 @@ The new `--man` flag prints a man-page style help document and exits.
 Most flags can also be configured by environment variables.  In v3 the
 variables all start with `GIT_SYNC_`.  In v4 they all start with `GITSYNC_`,
 though the old names are still accepted for compatibility.
+
+If both an old (`GIT_SYNC_*`) name and a new (`GITSYNC_*`) name are specified,
+the behavior is:
+* v4.0.x - v4.3.x: the new name is used
+* v4.4.x and up: the old name is used
 
 ## Defaults
 

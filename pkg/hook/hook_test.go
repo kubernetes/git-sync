@@ -43,7 +43,7 @@ func TestHookData(t *testing.T) {
 	t.Run("last update wins when channel buffer is full", func(t *testing.T) {
 		hd := NewHookData()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			h := fmt.Sprintf("111111111111111111111111111111111111111%d", i)
 			hd.send(h)
 		}

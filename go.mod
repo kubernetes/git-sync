@@ -2,11 +2,11 @@ module k8s.io/git-sync
 
 require (
 	github.com/go-logr/logr v1.2.3
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/goleak v1.2.1
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.47.0
 )
 
 require (
@@ -20,4 +20,4 @@ require (
 	google.golang.org/protobuf v1.33.0 // indirect
 )
 
-go 1.22
+go 1.26.10

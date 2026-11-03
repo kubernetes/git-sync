@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cmd provides an API to run commands and log them in a consistent
+// way.
 package cmd
 
 import (
@@ -34,13 +36,13 @@ type Runner struct {
 
 // Just the logr methods we need in this package.
 type logintf interface {
-	Info(msg string, keysAndValues ...interface{})
-	Error(err error, msg string, keysAndValues ...interface{})
+	Info(msg string, keysAndValues ...any)
+	Error(err error, msg string, keysAndValues ...any)
 	V(level int) logr.Logger
 	WithCallDepth(depth int) logr.Logger
 }
 
-// NewRunner returns a new CommandRunner
+// NewRunner returns a new CommandRunner.
 func NewRunner(log logintf) Runner {
 	return Runner{log: log}
 }

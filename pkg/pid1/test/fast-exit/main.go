@@ -27,14 +27,14 @@ import (
 func main() {
 	// In case we come up as pid 1, act as init.
 	if os.Getpid() == 1 {
-		fmt.Printf("detected pid 1, running as init\n")
+		fmt.Fprintf(os.Stdout, "detected pid 1, running as init\n")
 		code, err := pid1.ReRun()
 		if err == nil {
 			os.Exit(code)
 		}
-		fmt.Printf("unhandled pid1 error: %v\n", err)
+		fmt.Fprintf(os.Stdout, "unhandled pid1 error: %v\n", err)
 		os.Exit(127)
 	}
-	fmt.Printf("main app\n")
+	fmt.Fprintf(os.Stdout, "main app\n")
 	os.Exit(42)
 }

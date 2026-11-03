@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build arm && linux
-// +build arm,linux
 
 package unix
 
@@ -45,7 +44,6 @@ func Seek(fd int, offset int64, whence int) (newoffset int64, err error) {
 
 // 64-bit file system and 32-bit uid calls
 // (16-bit uid calls are not always supported in newer kernels)
-//sys	EpollWait(epfd int, events []EpollEvent, msec int) (n int, err error)
 //sys	Fchown(fd int, uid int, gid int) (err error) = SYS_FCHOWN32
 //sys	Fstat(fd int, stat *Stat_t) (err error) = SYS_FSTAT64
 //sys	Fstatat(dirfd int, path string, stat *Stat_t, flags int) (err error) = SYS_FSTATAT64
@@ -62,10 +60,6 @@ func Seek(fd int, offset int64, whence int) (newoffset int64, err error) {
 //sys	Select(nfd int, r *FdSet, w *FdSet, e *FdSet, timeout *Timeval) (n int, err error) = SYS__NEWSELECT
 //sys	setfsgid(gid int) (prev int, err error) = SYS_SETFSGID32
 //sys	setfsuid(uid int) (prev int, err error) = SYS_SETFSUID32
-//sysnb	Setregid(rgid int, egid int) (err error) = SYS_SETREGID32
-//sysnb	Setresgid(rgid int, egid int, sgid int) (err error) = SYS_SETRESGID32
-//sysnb	Setresuid(ruid int, euid int, suid int) (err error) = SYS_SETRESUID32
-//sysnb	Setreuid(ruid int, euid int) (err error) = SYS_SETREUID32
 //sys	Shutdown(fd int, how int) (err error)
 //sys	Splice(rfd int, roff *int64, wfd int, woff *int64, len int, flags int) (n int, err error)
 //sys	Stat(path string, stat *Stat_t) (err error) = SYS_STAT64
@@ -87,6 +81,9 @@ func Time(t *Time_t) (Time_t, error) {
 }
 
 func Utime(path string, buf *Utimbuf) error {
+	if buf == nil {
+		return Utimes(path, nil)
+	}
 	tv := []Timeval{
 		{Sec: buf.Actime},
 		{Sec: buf.Modtime},
@@ -173,33 +170,6 @@ func Getrlimit(resource int, rlim *Rlimit) (err error) {
 		rlim.Max = uint64(rl.Max)
 	}
 	return
-}
-
-//sysnb	setrlimit(resource int, rlim *rlimit32) (err error) = SYS_SETRLIMIT
-
-func Setrlimit(resource int, rlim *Rlimit) (err error) {
-	err = Prlimit(0, resource, rlim, nil)
-	if err != ENOSYS {
-		return err
-	}
-
-	rl := rlimit32{}
-	if rlim.Cur == rlimInf64 {
-		rl.Cur = rlimInf32
-	} else if rlim.Cur < uint64(rlimInf32) {
-		rl.Cur = uint32(rlim.Cur)
-	} else {
-		return EINVAL
-	}
-	if rlim.Max == rlimInf64 {
-		rl.Max = rlimInf32
-	} else if rlim.Max < uint64(rlimInf32) {
-		rl.Max = uint32(rlim.Max)
-	} else {
-		return EINVAL
-	}
-
-	return setrlimit(resource, &rl)
 }
 
 func (r *PtraceRegs) PC() uint64 { return uint64(r.Uregs[15]) }
