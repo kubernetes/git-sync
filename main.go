@@ -139,6 +139,7 @@ type repoSync struct {
 	ref            string         // the ref to sync
 	depth          int            // for shallow sync
 	filter         string         // for partial clone
+	gitLFS         bool           // whether to fetch git-lfs objects
 	submodules     submodulesMode // how to handle submodules
 	gc             gcMode         // garbage collection
 	link           absPath        // absolute path to the symlink to publish
@@ -196,6 +197,9 @@ func main() {
 	flFilter := pflag.String("filter",
 		envString("", "GITSYNC_FILTER"),
 		"use partial clone with the specified filter (e.g. 'blob:none', 'tree:0')")
+	flGitLFS := pflag.Bool("git-lfs",
+		envBool(false, "GITSYNC_GIT_LFS"),
+		"enable git-lfs, so that LFS-tracked files are fetched when checked out (requires git-lfs to be installed)")
 	flSubmodules := pflag.String("submodules",
 		envString("recursive", "GITSYNC_SUBMODULES", "GIT_SYNC_SUBMODULES"),
 		"git submodule behavior: one of 'recursive', 'shallow', or 'off'")
@@ -783,6 +787,7 @@ func main() {
 		ref:          *flRef,
 		depth:        *flDepth,
 		filter:       *flFilter,
+		gitLFS:       *flGitLFS,
 		submodules:   submodulesMode(*flSubmodules),
 		gc:           gcMode(*flGitGC),
 		link:         absLink,
@@ -821,6 +826,15 @@ func main() {
 	if err := git.SetupDefaultGitConfigs(ctx); err != nil {
 		log.Error(err, "can't set default git configs")
 		os.Exit(1)
+	}
+
+	// If requested, enable the git-lfs filters in our private gitconfig, so
+	// that LFS-tracked files are downloaded whenever git checks them out.
+	if *flGitLFS {
+		if err := git.SetupGitLFS(ctx); err != nil {
+			log.Error(err, "can't set up git-lfs")
+			os.Exit(1)
+		}
 	}
 
 	// If the --repo or any submodule uses SSH, we need to know which keys.
@@ -2312,6 +2326,25 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
 			return fmt.Errorf("error configuring git %q %q: %w", kv.key, kv.val, err)
 		}
+	}
+	return nil
+}
+
+// SetupGitLFS enables the git-lfs clean/smudge filters in the (private) global
+// git config.  With the filters in place, any `git checkout`/`git reset` that
+// writes an LFS-tracked file (including inside submodules) downloads the real
+// content instead of leaving a pointer file.  This fails if git-lfs is not
+// installed, which is what we want: better to refuse to start than to quietly
+// publish pointer files.
+//
+// Note that just running `git lfs pull` is not sufficient, because it will
+// download objects but skip replacing the pointer files unless the filters are
+// already configured.
+func (git *repoSync) SetupGitLFS(ctx context.Context) error {
+	git.log.V(1).Info("enabling git-lfs")
+	// --skip-repo: only touch the global config, not hooks in any repo.
+	if _, _, err := git.Run(ctx, "", "lfs", "install", "--skip-repo"); err != nil {
+		return fmt.Errorf("error enabling git-lfs: %w", err)
 	}
 	return nil
 }

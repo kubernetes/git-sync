@@ -391,6 +391,18 @@ OPTIONS
             useful in cases where data produced by git-sync is used by a
             different UID.  This replaces the older --change-permissions flag.
 
+    --git-lfs, $GITSYNC_GIT_LFS
+            Fetch git-lfs objects for each synced revision, replacing the LFS
+            pointer files in the worktree with the real file content.  This
+            requires the git-lfs binary to be available (it is included in the
+            official container image).  The LFS endpoint is discovered by
+            git-lfs in the usual way (e.g. from the repo URL or from a
+            .lfsconfig file in the repo), and credentials supplied via
+            --username/--password or --credential are used by git for that
+            endpoint if it is on the same host as the repo.  If not specified,
+            this defaults to false, in which case LFS-tracked files are left as
+            pointer files.
+
     -?, -h, --help
             Print help text and exit.
 
