@@ -4,11 +4,13 @@ go 1.26.10
 
 require (
 	github.com/estesp/manifest-tool/v2 v2.2.0
+	github.com/git-lfs/lfs-test-server v0.4.1-0.20251217053250-d27ad23fddc1
 	github.com/google/go-licenses/v2 v2.0.0-alpha.1
 )
 
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
+	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/containerd/containerd v1.6.6 // indirect
 	github.com/containerd/containerd/v2 v2.0.4 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -26,6 +28,8 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/licenseclassifier/v2 v2.0.0 // indirect
+	github.com/gorilla/context v1.1.2 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
