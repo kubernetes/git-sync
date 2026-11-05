@@ -395,8 +395,11 @@ function lfs_server_start() {
 
 # Commit a git-lfs tracked file (big.bin) with the given content to $REPO.  The
 # first call also sets up LFS in the repo.  Unless $2 is "no-upload", upload
-# the LFS objects to the server (there is no git server involved, only the LFS
+# the LFS object to the server (there is no git server involved, only the LFS
 # server).  Note that the LFS server URL comes from .lfsconfig in the repo.
+#
+# The object is uploaded BEFORE the commit is created: a running git-sync polls
+# $REPO, and as soon as the commit exists it tries to download the object.
 function lfs_commit() {
     local content="$1"
     local upload="${2:-upload}"
@@ -409,10 +412,13 @@ function lfs_commit() {
     fi
     echo "$content" > "$REPO/big.bin"
     git -C "$REPO" add big.bin
-    git -C "$REPO" commit -qm "$content"
     if [[ "$upload" == "upload" ]]; then
-        git -C "$REPO" lfs push --all "http://localhost:$LFS_PORT/" >/dev/null
+        # The staged blob is the LFS pointer, which holds the object's ID.
+        local oid
+        oid=$(git -C "$REPO" show :big.bin | sed -n 's/^oid sha256://p')
+        git -C "$REPO" lfs push --object-id "http://localhost:$LFS_PORT/" "$oid" >/dev/null
     fi
+    git -C "$REPO" commit -qm "$content"
 }
 
 function remove_containers() {
