@@ -376,6 +376,51 @@ function GIT_SYNC() {
             "$@"
 }
 
+# git-lfs tests need a git-lfs server.  We run a minimal one (see
+# _test_tools/lfs-server) on the host network, so it is "localhost" to the host
+# (which uploads objects) and to git-sync (which downloads them).
+LFS_PORT=9377
+
+function lfs_server_start() {
+    if ! git lfs version >/dev/null 2>&1; then
+        fail "git-lfs must be installed on the host to run this test"
+    fi
+    docker_run \
+        --network=host \
+        --env LFS_LISTEN="tcp://:$LFS_PORT" \
+        --env LFS_HOST="localhost:$LFS_PORT" \
+        e2e/test/lfs-server \
+        >/dev/null
+}
+
+# Commit a git-lfs tracked file (big.bin) with the given content to $REPO.  The
+# first call also sets up LFS in the repo.  Unless $2 is "no-upload", upload
+# the LFS object to the server (there is no git server involved, only the LFS
+# server).  Note that the LFS server URL comes from .lfsconfig in the repo.
+#
+# The object is uploaded BEFORE the commit is created: a running git-sync polls
+# $REPO, and as soon as the commit exists it tries to download the object.
+function lfs_commit() {
+    local content="$1"
+    local upload="${2:-upload}"
+
+    if [[ ! -f "$REPO/.lfsconfig" ]]; then
+        git -C "$REPO" lfs install --local >/dev/null
+        git -C "$REPO" lfs track '*.bin' >/dev/null
+        printf '[lfs]\n\turl = "http://localhost:%s/"\n' "$LFS_PORT" > "$REPO/.lfsconfig"
+        git -C "$REPO" add .gitattributes .lfsconfig
+    fi
+    echo "$content" > "$REPO/big.bin"
+    git -C "$REPO" add big.bin
+    if [[ "$upload" == "upload" ]]; then
+        # The staged blob is the LFS pointer, which holds the object's ID.
+        local oid
+        oid=$(git -C "$REPO" show :big.bin | sed -n 's/^oid sha256://p')
+        git -C "$REPO" lfs push --object-id "http://localhost:$LFS_PORT/" "$oid" >/dev/null
+    fi
+    git -C "$REPO" commit -qm "$content"
+}
+
 function remove_containers() {
     sleep 2 # Let docker finish saving container metadata
     docker ps --filter label="git-sync-e2e=$RUNID" --format="{{.ID}}" \
@@ -3961,6 +4006,93 @@ function e2e::init_max_failures_exceeded() {
             --root="$ROOT" \
             --link="link"
     assert_file_absent "$ROOT/link/file"
+}
+
+##############################################
+# Test git-lfs
+##############################################
+
+# Without --git-lfs, LFS-tracked files are left as pointer files.  This also
+# shows that the other tests really depend on --git-lfs doing something.
+function e2e::git_lfs_disabled() {
+    lfs_server_start
+    lfs_commit "${FUNCNAME[0]}"
+
+    GIT_SYNC \
+        --one-time \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_contains "$ROOT/link/big.bin" "https://git-lfs.github.com/spec/v1"
+}
+
+function e2e::git_lfs() {
+    lfs_server_start
+    lfs_commit "${FUNCNAME[0]}"
+
+    GIT_SYNC \
+        --one-time \
+        --git-lfs \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/big.bin" "${FUNCNAME[0]}"
+}
+
+# LFS objects are fetched on demand for the checked-out commit, so --depth does
+# not interfere.
+function e2e::git_lfs_depth() {
+    lfs_server_start
+    lfs_commit "${FUNCNAME[0]}-1"
+    lfs_commit "${FUNCNAME[0]}-2"
+
+    GIT_SYNC \
+        --one-time \
+        --git-lfs \
+        --depth=1 \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/big.bin" "${FUNCNAME[0]}-2"
+}
+
+function e2e::git_lfs_updates() {
+    lfs_server_start
+    lfs_commit "${FUNCNAME[0]}-1"
+
+    GIT_SYNC \
+        --period=100ms \
+        --git-lfs \
+        --repo="file://$REPO" \
+        --root="$ROOT" \
+        --link="link" \
+        &
+    wait_for_sync "${MAXWAIT}"
+    assert_link_exists "$ROOT/link"
+    assert_file_eq "$ROOT/link/big.bin" "${FUNCNAME[0]}-1"
+
+    lfs_commit "${FUNCNAME[0]}-2"
+    wait_for_sync "${MAXWAIT}"
+    assert_file_eq "$ROOT/link/big.bin" "${FUNCNAME[0]}-2"
+}
+
+# If an LFS object can't be fetched, the sync must fail rather than publish a
+# pointer file.
+function e2e::git_lfs_missing_object() {
+    lfs_server_start
+    lfs_commit "${FUNCNAME[0]}" "no-upload"
+
+    assert_fail \
+        GIT_SYNC \
+            --one-time \
+            --git-lfs \
+            --repo="file://$REPO" \
+            --root="$ROOT" \
+            --link="link"
+    assert_file_absent "$ROOT/link/big.bin"
 }
 
 #

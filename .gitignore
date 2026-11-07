@@ -6,3 +6,4 @@
 /.licenses
 /.push-*
 /bin
+/_test_tools/lfs-server/lfs-test-server

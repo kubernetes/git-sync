@@ -60,6 +60,7 @@ RUN /stage_binaries.sh -o {ARG_STAGING} \
 	-p coreutils \
 	-p curl \
 	-p git \
+	-p git-lfs \
 	-p gzip \
 	-p openssh-client \
 	-p socat \

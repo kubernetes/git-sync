@@ -29,5 +29,6 @@ package tools
 
 import (
 	_ "github.com/estesp/manifest-tool/v2/cmd/manifest-tool"
+	_ "github.com/git-lfs/lfs-test-server"
 	_ "github.com/google/go-licenses/v2"
 )
