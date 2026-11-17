@@ -60,8 +60,19 @@ func (r Runner) RunWithStdin(ctx context.Context, cwd string, env []string, stdi
 	return runWithStdin(ctx, r.log.WithCallDepth(2), cwd, env, stdin, command, args...)
 }
 
+// RunRedacted is like Run, but logs and reports logArgs instead of args, for
+// commands whose arguments may carry secrets.  If the command fails, the
+// returned error mentions logArgs, not args.
+func (r Runner) RunRedacted(ctx context.Context, cwd string, env []string, command string, args, logArgs []string) (string, string, error) {
+	// call depth = 2 to erase the run frame and this one
+	return run(ctx, r.log.WithCallDepth(2), cwd, env, "", cmdForLog(command, logArgs...), command, args...)
+}
+
 func runWithStdin(ctx context.Context, log logintf, cwd string, env []string, stdin, command string, args ...string) (string, string, error) {
-	cmdStr := cmdForLog(command, args...)
+	return run(ctx, log.WithCallDepth(1), cwd, env, stdin, cmdForLog(command, args...), command, args...)
+}
+
+func run(ctx context.Context, log logintf, cwd string, env []string, stdin, cmdStr, command string, args ...string) (string, string, error) {
 	log.V(5).Info("running command", "cwd", cwd, "cmd", cmdStr)
 
 	cmd := exec.CommandContext(ctx, command, args...)

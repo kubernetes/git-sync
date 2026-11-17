@@ -357,6 +357,211 @@ func TestParseGitConfigList(t *testing.T) {
 	}
 }
 
+func TestRedactGitConfigKey(t *testing.T) {
+	cases := []struct {
+		name   string
+		key    string
+		expect string
+	}{{
+		name:   "plain",
+		key:    "core.bare",
+		expect: "core.bare",
+	}, {
+		name:   "url-with-password",
+		key:    "url.https://user:TOKEN@example.com/.insteadOf",
+		expect: "url.https://user:REDACTED@example.com/.insteadOf",
+	}, {
+		name:   "push-instead-of",
+		key:    "url.https://user:TOKEN@example.com/.pushInsteadOf",
+		expect: "url.https://user:REDACTED@example.com/.pushInsteadOf",
+	}, {
+		name:   "url-without-password",
+		key:    "url.https://example.com/.insteadOf",
+		expect: "url.https://example.com/.insteadOf",
+	}, {
+		name:   "not-a-url-key",
+		key:    "http.extraHeader",
+		expect: "http.extraHeader",
+	}, {
+		name:   "http-url-subsection",
+		key:    "http.https://user:TOKEN@example.com/.extraHeader",
+		expect: "http.https://user:REDACTED@example.com/.extraHeader",
+	}, {
+		name:   "credential-url-subsection",
+		key:    "credential.https://user:TOKEN@example.com/.helper",
+		expect: "credential.https://user:REDACTED@example.com/.helper",
+	}, {
+		name:   "malformed-url",
+		key:    "url.https://user:p%zz@example.com/.insteadOf",
+		expect: "url.https://user:REDACTED@example.com/.insteadOf",
+	}, {
+		name:   "no-subsection",
+		key:    "url.insteadOf",
+		expect: "url.insteadOf",
+	}, {
+		name:   "proxy-key",
+		key:    "remote.origin.proxy",
+		expect: "remote.origin.proxy",
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redactGitConfigKey(tc.key); got != tc.expect {
+				t.Errorf("bad result:\n\texpected: %q\n\t     got: %q", tc.expect, got)
+			}
+		})
+	}
+}
+
+func TestRedactGitConfigValue(t *testing.T) {
+	cases := []struct {
+		name   string
+		key    string
+		val    string
+		expect string
+	}{{
+		name:   "plain",
+		key:    "core.bare",
+		val:    "false",
+		expect: "false",
+	}, {
+		name:   "extra-header",
+		key:    "http.extraHeader",
+		val:    "Authorization: Basic TOKEN",
+		expect: redactedString,
+	}, {
+		name:   "per-url-extra-header",
+		key:    "http.https://example.com/.extraHeader",
+		val:    "PRIVATE-TOKEN: TOKEN",
+		expect: redactedString,
+	}, {
+		name:   "instead-of",
+		key:    "url.https://example.com/.insteadOf",
+		val:    "https://user:TOKEN@example.com/",
+		expect: "https://user:REDACTED@example.com/",
+	}, {
+		name:   "empty-extra-header",
+		key:    "http.extraHeader",
+		val:    "",
+		expect: redactedString,
+	}, {
+		name:   "proxy",
+		key:    "http.proxy",
+		val:    "http://user:TOKEN@proxy.example.com:8080",
+		expect: "http://user:REDACTED@proxy.example.com:8080",
+	}, {
+		name:   "remote-proxy",
+		key:    "remote.origin.proxy",
+		val:    "https://user:TOKEN@proxy.example.com/",
+		expect: "https://user:REDACTED@proxy.example.com/",
+	}, {
+		name:   "malformed-instead-of",
+		key:    "url.https://example.com/.insteadOf",
+		val:    "https://user:p%zz@example.com/",
+		expect: "https://user:REDACTED@example.com/",
+	}, {
+		name:   "credential-helper-inline",
+		key:    "credential.helper",
+		val:    "!f() { echo password=TOKEN; }; f",
+		expect: redactedString,
+	}, {
+		name:   "credential-helper-command",
+		key:    "credential.helper",
+		val:    "cache --timeout 3600",
+		expect: "cache --timeout 3600",
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redactGitConfigValue(tc.key, tc.val); got != tc.expect {
+				t.Errorf("bad result:\n\texpected: %q\n\t     got: %q", tc.expect, got)
+			}
+		})
+	}
+}
+
+func TestRedactGitConfigList(t *testing.T) {
+	in := funcr.PseudoStruct{
+		"http.extraHeader", "Authorization: Basic TOKEN",
+		"core.bare", "false",
+		"demo.bare", nil,
+		"url.https://user:TOKEN@example.com/.insteadOf", "https://example.com/",
+	}
+	expect := funcr.PseudoStruct{
+		"http.extraHeader", redactedString,
+		"core.bare", "false",
+		"demo.bare", nil,
+		"url.https://user:REDACTED@example.com/.insteadOf", "https://example.com/",
+	}
+	if got := redactGitConfigList(in); !reflect.DeepEqual(got, expect) {
+		t.Errorf("bad result:\n\texpected: %#v\n\t     got: %#v", expect, got)
+	}
+}
+
+func TestRedactGitConfigsFlag(t *testing.T) {
+	cases := []struct {
+		name   string
+		in     string
+		expect string
+	}{{
+		name:   "unparsable",
+		in:     "key-without-value",
+		expect: redactedString,
+	}, {
+		name:   "keep-plain",
+		in:     `core.askPass:""`,
+		expect: `core.askPass:""`,
+	}, {
+		name:   "quote-special-chars",
+		in:     `"core.x":"a\"b\\c"`,
+		expect: `core.x:"a\"b\\c"`,
+	}, {
+		name:   "redact-inline-credential-helper",
+		in:     `credential.helper:"!echo TOKEN"`,
+		expect: "credential.helper:REDACTED",
+	}, {
+		name:   "redact-extra-header",
+		in:     `http.extraHeader:Authorization: Basic TOKEN,core.bare:false`,
+		expect: "http.extraHeader:REDACTED,core.bare:false",
+	}, {
+		name:   "redact-url-key",
+		in:     `"url.https://user:TOKEN@example.com/.insteadOf":"https://example.com/"`,
+		expect: `"url.https://user:REDACTED@example.com/.insteadOf":"https://example.com/"`,
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redactGitConfigsFlag(tc.in); got != tc.expect {
+				t.Errorf("bad result:\n\texpected: %q\n\t     got: %q", tc.expect, got)
+			}
+		})
+	}
+}
+
+func TestLogSafeFlagsRedactsGitConfig(t *testing.T) {
+	fs := pflag.NewFlagSet("git-sync", pflag.ContinueOnError)
+	fs.String("git-config", "", "additional git config")
+	fs.StringArray("git-config-add", nil, "one additional git config")
+	fs.String("repo", "", "the repo")
+
+	err := fs.Parse([]string{
+		"--git-config=http.extraHeader:Authorization: Basic TOKEN",
+		"--git-config-add=core.bare:false",
+		`--git-config-add="url.https://user:TOKEN@example.com/.insteadOf":"https://example.com/"`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expect := []string{
+		"--git-config=http.extraHeader:" + redactedString,
+		`--git-config-add=[core.bare:false,"url.https://user:REDACTED@example.com/.insteadOf":"https://example.com/"]`,
+	}
+	if got := logSafeFlags(fs, 5); !reflect.DeepEqual(got, expect) {
+		t.Errorf("bad result:\n\texpected: %#v\n\t     got: %#v", expect, got)
+	}
+}
+
 func TestDirIsEmpty(t *testing.T) {
 	root := absPath(t.TempDir())
 
