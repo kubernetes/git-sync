@@ -361,6 +361,20 @@ OPTIONS
             - off: Disable explicit git garbage collection, which may be a good
               fit when also using --one-time.
 
+    --git-lfs, $GITSYNC_GIT_LFS
+            Enable git-lfs, so that LFS-tracked files are downloaded when git
+            checks them out (including in submodules) instead of being left as
+            pointer files.  This requires the git-lfs binary to be available
+            (it is included in the official container image); git-sync exits
+            at startup if it cannot run git-lfs.  The LFS endpoint is
+            discovered by git-lfs in the usual way (e.g. from the repo URL or
+            from a .lfsconfig file in the repo).  If an LFS object cannot be
+            fetched, the sync fails and the previously published revision is
+            kept.  Credentials supplied via --username/--password or
+            --credential are passed to git, so they also apply to an LFS
+            endpoint on the same host as the repo.  If not specified, this
+            defaults to false.
+
     --github-base-url <string>, $GITSYNC_GITHUB_BASE_URL
             The GitHub base URL to use in GitHub requests when GitHub app
             authentication is used. If not specified, defaults to

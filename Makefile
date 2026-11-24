@@ -276,6 +276,16 @@ test: $(BUILD_DIRS)
 TEST_TOOLS := $(shell find _test_tools/* -type d -printf "%f ")
 test-tools: $(foreach tool, $(TEST_TOOLS), .container-test_tool.$(tool))
 
+# The git-lfs test server is built from the version pinned in tools/go.mod (so
+# it is checksum-verified via tools/go.sum), and then copied into an otherwise
+# empty image.  It is a static binary, so CGO is off and GOOS is always linux.
+_test_tools/lfs-server/lfs-test-server: tools/go.mod tools/go.sum
+	pushd tools >/dev/null;                                        \
+	    export GOOS=linux GOARCH=$(ARCH) CGO_ENABLED=0;            \
+	    go build -o ../$@ github.com/git-lfs/lfs-test-server;      \
+	    popd >/dev/null
+.container-test_tool.lfs-server: _test_tools/lfs-server/lfs-test-server
+
 .container-test_tool.%: _test_tools/% _test_tools/%/*
 	docker build --build-arg ALPINE_REGISTRY_PREFIX="$(ALPINE_REGISTRY_PREFIX)" -t $(REGISTRY)/test/$$(basename $<) $<
 	docker images -q $(REGISTRY)/test/$$(basename $<) > $@
