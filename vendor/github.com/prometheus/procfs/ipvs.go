@@ -1,4 +1,4 @@
-// Copyright 2018 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/util"
+	"github.com/prometheus/procfs/internal/parsers"
 )
 
 // IPVSStats holds IPVS statistics, as exposed by the kernel in `/proc/net/ip_vs_stats`.
@@ -66,7 +66,7 @@ type IPVSBackendStatus struct {
 
 // IPVSStats reads the IPVS statistics from the specified `proc` filesystem.
 func (fs FS) IPVSStats() (IPVSStats, error) {
-	data, err := util.ReadFileNoStat(fs.proc.Path("net/ip_vs_stats"))
+	data, err := parsers.ReadFileNoStat(fs.proc.Path("net/ip_vs_stats"))
 	if err != nil {
 		return IPVSStats{}, err
 	}
@@ -149,6 +149,9 @@ func parseIPVSBackendStatus(file io.Reader) ([]IPVSBackendStatus, error) {
 		if len(fields) == 0 {
 			continue
 		}
+		if len(fields) < 2 {
+			return nil, fmt.Errorf("%w: Malformed line %q", ErrFileParse, scanner.Text())
+		}
 		switch {
 		case fields[0] == "IP" || fields[0] == "Prot" || fields[1] == "RemoteAddress:Port":
 			continue
@@ -221,15 +224,16 @@ func parseIPPort(s string) (net.IP, uint16, error) {
 	case 46:
 		ip = net.ParseIP(s[1:40])
 		if ip == nil {
-			return nil, 0, fmt.Errorf("invalid IPv6 address: %s", s[1:40])
+			return nil, 0, fmt.Errorf("%w: Invalid IPv6 addr %s: %w", ErrFileParse, s[1:40], err)
 		}
 	default:
-		return nil, 0, fmt.Errorf("unexpected IP:Port: %s", s)
+		return nil, 0, fmt.Errorf("%w: Unexpected IP:Port %s: %w", ErrFileParse, s, err)
 	}
 
 	portString := s[len(s)-4:]
 	if len(portString) != 4 {
-		return nil, 0, fmt.Errorf("unexpected port string format: %s", portString)
+		return nil, 0,
+			fmt.Errorf("%w: Unexpected port string format %s: %w", ErrFileParse, portString, err)
 	}
 	port, err := strconv.ParseUint(portString, 16, 16)
 	if err != nil {

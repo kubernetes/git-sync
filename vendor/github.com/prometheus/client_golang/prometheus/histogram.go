@@ -14,6 +14,7 @@
 package prometheus
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
@@ -22,10 +23,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	//nolint:staticcheck // Ignore SA1019. Need to keep deprecated package for compatibility.
-	"github.com/golang/protobuf/proto"
-
 	dto "github.com/prometheus/client_model/go"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	nativeHistogramSchemaMaximum = 8
+	nativeHistogramSchemaMinimum = -4
 )
 
 // nativeHistogramBounds for the frac of observed values. Only relevant for
@@ -330,11 +336,11 @@ func ExponentialBuckets(start, factor float64, count int) []float64 {
 // used for the Buckets field of HistogramOpts.
 //
 // The function panics if 'count' is 0 or negative, if 'min' is 0 or negative.
-func ExponentialBucketsRange(min, max float64, count int) []float64 {
+func ExponentialBucketsRange(minBucket, maxBucket float64, count int) []float64 {
 	if count < 1 {
 		panic("ExponentialBucketsRange count needs a positive count")
 	}
-	if min <= 0 {
+	if minBucket <= 0 {
 		panic("ExponentialBucketsRange min needs to be greater than 0")
 	}
 
@@ -342,12 +348,12 @@ func ExponentialBucketsRange(min, max float64, count int) []float64 {
 	// max = min*growthFactor^(bucketCount-1)
 
 	// We know max/min and highest bucket. Solve for growthFactor.
-	growthFactor := math.Pow(max/min, 1.0/float64(count-1))
+	growthFactor := math.Pow(maxBucket/minBucket, 1.0/float64(count-1))
 
 	// Now that we know growthFactor, solve for each bucket.
 	buckets := make([]float64, count)
 	for i := 1; i <= count; i++ {
-		buckets[i-1] = min * math.Pow(growthFactor, float64(i-1))
+		buckets[i-1] = minBucket * math.Pow(growthFactor, float64(i-1))
 	}
 	return buckets
 }
@@ -372,6 +378,9 @@ type HistogramOpts struct {
 	// string.
 	Help string
 
+	// Unit provides the unit of this Histogram.
+	Unit string
+
 	// ConstLabels are used to attach fixed labels to this metric. Metrics
 	// with the same fully-qualified name must have the same label names in
 	// their ConstLabels.
@@ -392,7 +401,7 @@ type HistogramOpts struct {
 	// zero, it is replaced by default buckets. The default buckets are
 	// DefBuckets if no buckets for a native histogram (see below) are used,
 	// otherwise the default is no buckets. (In other words, if you want to
-	// use both reguler buckets and buckets for a native histogram, you have
+	// use both regular buckets and buckets for a native histogram, you have
 	// to define the regular buckets here explicitly.)
 	Buckets []float64
 
@@ -402,7 +411,7 @@ type HistogramOpts struct {
 	// Histogram by a Prometheus server with that feature enabled (requires
 	// Prometheus v2.40+). Sparse buckets are exponential buckets covering
 	// the whole float64 range (with the exception of the “zero” bucket, see
-	// SparseBucketsZeroThreshold below). From any one bucket to the next,
+	// NativeHistogramZeroThreshold below). From any one bucket to the next,
 	// the width of the bucket grows by a constant
 	// factor. NativeHistogramBucketFactor provides an upper bound for this
 	// factor (exception see below). The smaller
@@ -414,8 +423,8 @@ type HistogramOpts struct {
 	// and 2, same as between 2 and 4, and 4 and 8, etc.).
 	//
 	// Details about the actually used factor: The factor is calculated as
-	// 2^(2^n), where n is an integer number between (and including) -8 and
-	// 4. n is chosen so that the resulting factor is the largest that is
+	// 2^(2^-n), where n is an integer number between (and including) -4 and
+	// 8. n is chosen so that the resulting factor is the largest that is
 	// still smaller or equal to NativeHistogramBucketFactor. Note that the
 	// smallest possible factor is therefore approx. 1.00271 (i.e. 2^(2^-8)
 	// ). If NativeHistogramBucketFactor is greater than 1 but smaller than
@@ -429,44 +438,83 @@ type HistogramOpts struct {
 	// a major version bump.
 	NativeHistogramBucketFactor float64
 	// All observations with an absolute value of less or equal
-	// NativeHistogramZeroThreshold are accumulated into a “zero”
-	// bucket. For best results, this should be close to a bucket
-	// boundary. This is usually the case if picking a power of two. If
+	// NativeHistogramZeroThreshold are accumulated into a “zero” bucket.
+	// For best results, this should be close to a bucket boundary. This is
+	// usually the case if picking a power of two. If
 	// NativeHistogramZeroThreshold is left at zero,
-	// DefSparseBucketsZeroThreshold is used as the threshold. To configure
-	// a zero bucket with an actual threshold of zero (i.e. only
+	// DefNativeHistogramZeroThreshold is used as the threshold. To
+	// configure a zero bucket with an actual threshold of zero (i.e. only
 	// observations of precisely zero will go into the zero bucket), set
 	// NativeHistogramZeroThreshold to the NativeHistogramZeroThresholdZero
 	// constant (or any negative float value).
 	NativeHistogramZeroThreshold float64
 
-	// The remaining fields define a strategy to limit the number of
+	// The next three fields define a strategy to limit the number of
 	// populated sparse buckets. If NativeHistogramMaxBucketNumber is left
 	// at zero, the number of buckets is not limited. (Note that this might
 	// lead to unbounded memory consumption if the values observed by the
 	// Histogram are sufficiently wide-spread. In particular, this could be
 	// used as a DoS attack vector. Where the observed values depend on
 	// external inputs, it is highly recommended to set a
-	// NativeHistogramMaxBucketNumber.)  Once the set
+	// NativeHistogramMaxBucketNumber.) Once the set
 	// NativeHistogramMaxBucketNumber is exceeded, the following strategy is
-	// enacted: First, if the last reset (or the creation) of the histogram
-	// is at least NativeHistogramMinResetDuration ago, then the whole
-	// histogram is reset to its initial state (including regular
-	// buckets). If less time has passed, or if
-	// NativeHistogramMinResetDuration is zero, no reset is
-	// performed. Instead, the zero threshold is increased sufficiently to
-	// reduce the number of buckets to or below
-	// NativeHistogramMaxBucketNumber, but not to more than
-	// NativeHistogramMaxZeroThreshold. Thus, if
-	// NativeHistogramMaxZeroThreshold is already at or below the current
-	// zero threshold, nothing happens at this step. After that, if the
-	// number of buckets still exceeds NativeHistogramMaxBucketNumber, the
-	// resolution of the histogram is reduced by doubling the width of the
-	// sparse buckets (up to a growth factor between one bucket to the next
-	// of 2^(2^4) = 65536, see above).
+	// enacted:
+	//  - First, if the last reset (or the creation) of the histogram is at
+	//    least NativeHistogramMinResetDuration ago, then the whole
+	//    histogram is reset to its initial state (including regular
+	//    buckets).
+	//  - If less time has passed, or if NativeHistogramMinResetDuration is
+	//    zero, no reset is performed. Instead, the zero threshold is
+	//    increased sufficiently to reduce the number of buckets to or below
+	//    NativeHistogramMaxBucketNumber, but not to more than
+	//    NativeHistogramMaxZeroThreshold. Thus, if
+	//    NativeHistogramMaxZeroThreshold is already at or below the current
+	//    zero threshold, nothing happens at this step.
+	//  - After that, if the number of buckets still exceeds
+	//    NativeHistogramMaxBucketNumber, the resolution of the histogram is
+	//    reduced by doubling the width of the sparse buckets (up to a
+	//    growth factor between one bucket to the next of 2^(2^4) = 65536,
+	//    see above).
+	//  - Any increased zero threshold or reduced resolution is reset back
+	//    to their original values once NativeHistogramMinResetDuration has
+	//    passed (since the last reset or the creation of the histogram).
 	NativeHistogramMaxBucketNumber  uint32
 	NativeHistogramMinResetDuration time.Duration
 	NativeHistogramMaxZeroThreshold float64
+
+	// NativeHistogramMaxExemplars limits the number of exemplars
+	// that are kept in memory for each native histogram. If you leave it at
+	// zero, a default value of 10 is used. If no exemplars should be kept specifically
+	// for native histograms, set it to a negative value. (Scrapers can
+	// still use the exemplars exposed for classic buckets, which are managed
+	// independently.)
+	NativeHistogramMaxExemplars int
+	// NativeHistogramExemplarTTL is only checked once
+	// NativeHistogramMaxExemplars is exceeded. In that case, the
+	// oldest exemplar is removed if it is older than NativeHistogramExemplarTTL.
+	// Otherwise, the older exemplar in the pair of exemplars that are closest
+	// together (on an exponential scale) is removed.
+	// If NativeHistogramExemplarTTL is left at its zero value, a default value of
+	// 5m is used. To always delete the oldest exemplar, set it to a negative value.
+	NativeHistogramExemplarTTL time.Duration
+
+	// now is for testing purposes, by default it's time.Now.
+	now func() time.Time
+
+	// afterFunc is for testing purposes, by default it's time.AfterFunc.
+	afterFunc func(time.Duration, func()) *time.Timer
+}
+
+// HistogramVecOpts bundles the options to create a HistogramVec metric.
+// It is mandatory to set HistogramOpts, see there for mandatory fields. VariableLabels
+// is optional and can safely be left to its default value.
+type HistogramVecOpts struct {
+	HistogramOpts
+
+	// VariableLabels are used to partition the metric vector by the given set
+	// of labels. Each label value will be constrained with the optional Constraint
+	// function, if provided.
+	VariableLabels ConstrainableLabels
 }
 
 // NewHistogram creates a new Histogram based on the provided HistogramOpts. It
@@ -477,22 +525,23 @@ type HistogramOpts struct {
 // for each bucket.
 func NewHistogram(opts HistogramOpts) Histogram {
 	return newHistogram(
-		NewDesc(
+		V2.NewDesc(
 			BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
 			opts.Help,
-			nil,
+			UnconstrainedLabels(nil),
 			opts.ConstLabels,
+			WithUnit(opts.Unit),
 		),
 		opts,
 	)
 }
 
 func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogram {
-	if len(desc.variableLabels) != len(labelValues) {
-		panic(makeInconsistentCardinalityError(desc.fqName, desc.variableLabels, labelValues))
+	if len(desc.variableLabels.names) != len(labelValues) {
+		panic(makeInconsistentCardinalityError(desc.fqName, desc.variableLabels.names, labelValues))
 	}
 
-	for _, n := range desc.variableLabels {
+	for _, n := range desc.variableLabels.names {
 		if n == bucketLabel {
 			panic(errBucketLabelNotAllowed)
 		}
@@ -503,6 +552,13 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 		}
 	}
 
+	if opts.now == nil {
+		opts.now = time.Now
+	}
+	if opts.afterFunc == nil {
+		opts.afterFunc = time.AfterFunc
+	}
+
 	h := &histogram{
 		desc:                            desc,
 		upperBounds:                     opts.Buckets,
@@ -510,8 +566,9 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 		nativeHistogramMaxBuckets:       opts.NativeHistogramMaxBucketNumber,
 		nativeHistogramMaxZeroThreshold: opts.NativeHistogramMaxZeroThreshold,
 		nativeHistogramMinResetDuration: opts.NativeHistogramMinResetDuration,
-		lastResetTime:                   time.Now(),
-		now:                             time.Now,
+		lastResetTime:                   opts.now(),
+		now:                             opts.now,
+		afterFunc:                       opts.afterFunc,
 	}
 	if len(h.upperBounds) == 0 && opts.NativeHistogramBucketFactor <= 1 {
 		h.upperBounds = DefBuckets
@@ -526,6 +583,7 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 			h.nativeHistogramZeroThreshold = DefNativeHistogramZeroThreshold
 		} // Leave h.nativeHistogramZeroThreshold at 0 otherwise.
 		h.nativeHistogramSchema = pickSchema(opts.NativeHistogramBucketFactor)
+		h.nativeExemplars = makeNativeExemplars(opts.NativeHistogramExemplarTTL, opts.NativeHistogramMaxExemplars)
 	}
 	for i, upperBound := range h.upperBounds {
 		if i < len(h.upperBounds)-1 {
@@ -544,16 +602,12 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 	}
 	// Finally we know the final length of h.upperBounds and can make buckets
 	// for both counts as well as exemplars:
-	h.counts[0] = &histogramCounts{
-		buckets:                          make([]uint64, len(h.upperBounds)),
-		nativeHistogramZeroThresholdBits: math.Float64bits(h.nativeHistogramZeroThreshold),
-		nativeHistogramSchema:            h.nativeHistogramSchema,
-	}
-	h.counts[1] = &histogramCounts{
-		buckets:                          make([]uint64, len(h.upperBounds)),
-		nativeHistogramZeroThresholdBits: math.Float64bits(h.nativeHistogramZeroThreshold),
-		nativeHistogramSchema:            h.nativeHistogramSchema,
-	}
+	h.counts[0] = &histogramCounts{buckets: make([]uint64, len(h.upperBounds))}
+	atomic.StoreUint64(&h.counts[0].nativeHistogramZeroThresholdBits, math.Float64bits(h.nativeHistogramZeroThreshold))
+	atomic.StoreInt32(&h.counts[0].nativeHistogramSchema, h.nativeHistogramSchema)
+	h.counts[1] = &histogramCounts{buckets: make([]uint64, len(h.upperBounds))}
+	atomic.StoreUint64(&h.counts[1].nativeHistogramZeroThresholdBits, math.Float64bits(h.nativeHistogramZeroThreshold))
+	atomic.StoreInt32(&h.counts[1].nativeHistogramSchema, h.nativeHistogramSchema)
 	h.exemplars = make([]atomic.Value, len(h.upperBounds)+1)
 
 	h.init(h) // Init self-collection.
@@ -632,8 +686,8 @@ func (hc *histogramCounts) observe(v float64, bucket int, doSparse bool) {
 			if frac == 0.5 {
 				key--
 			}
-			div := 1 << -schema
-			key = (key + div - 1) / div
+			offset := (1 << -schema) - 1
+			key = (key + offset) >> -schema
 		}
 		if isInf {
 			key++
@@ -694,9 +748,19 @@ type histogram struct {
 	nativeHistogramMaxZeroThreshold float64
 	nativeHistogramMaxBuckets       uint32
 	nativeHistogramMinResetDuration time.Duration
-	lastResetTime                   time.Time // Protected by mtx.
+	// lastResetTime is protected by mtx. It is also used as created timestamp.
+	lastResetTime time.Time
+	// resetScheduled is protected by mtx. It is true if a reset is
+	// scheduled for a later time (when nativeHistogramMinResetDuration has
+	// passed).
+	resetScheduled  bool
+	nativeExemplars nativeExemplars
 
-	now func() time.Time // To mock out time.Now() for testing.
+	// now is for testing purposes, by default it's time.Now.
+	now func() time.Time
+
+	// afterFunc is for testing purposes, by default it's time.AfterFunc.
+	afterFunc func(time.Duration, func()) *time.Timer
 }
 
 func (h *histogram) Desc() *Desc {
@@ -707,6 +771,9 @@ func (h *histogram) Observe(v float64) {
 	h.observe(v, h.findBucket(v))
 }
 
+// ObserveWithExemplar should not be called in a high-frequency setting
+// for a native histogram with configured exemplars. For this case,
+// the implementation isn't lock-free and might suffer from lock contention.
 func (h *histogram) ObserveWithExemplar(v float64, e Labels) {
 	i := h.findBucket(v)
 	h.observe(v, i)
@@ -735,9 +802,10 @@ func (h *histogram) Write(out *dto.Metric) error {
 	waitForCooldown(count, coldCounts)
 
 	his := &dto.Histogram{
-		Bucket:      make([]*dto.Bucket, len(h.upperBounds)),
-		SampleCount: proto.Uint64(count),
-		SampleSum:   proto.Float64(math.Float64frombits(atomic.LoadUint64(&coldCounts.sumBits))),
+		Bucket:           make([]*dto.Bucket, len(h.upperBounds)),
+		SampleCount:      new(count),
+		SampleSum:        new(math.Float64frombits(atomic.LoadUint64(&coldCounts.sumBits))),
+		CreatedTimestamp: timestamppb.New(h.lastResetTime),
 	}
 	out.Histogram = his
 	out.Label = h.labelPairs
@@ -746,8 +814,8 @@ func (h *histogram) Write(out *dto.Metric) error {
 	for i, upperBound := range h.upperBounds {
 		cumCount += atomic.LoadUint64(&coldCounts.buckets[i])
 		his.Bucket[i] = &dto.Bucket{
-			CumulativeCount: proto.Uint64(cumCount),
-			UpperBound:      proto.Float64(upperBound),
+			CumulativeCount: new(cumCount),
+			UpperBound:      new(upperBound),
 		}
 		if e := h.exemplars[i].Load(); e != nil {
 			his.Bucket[i].Exemplar = e.(*dto.Exemplar)
@@ -756,15 +824,15 @@ func (h *histogram) Write(out *dto.Metric) error {
 	// If there is an exemplar for the +Inf bucket, we have to add that bucket explicitly.
 	if e := h.exemplars[len(h.upperBounds)].Load(); e != nil {
 		b := &dto.Bucket{
-			CumulativeCount: proto.Uint64(count),
-			UpperBound:      proto.Float64(math.Inf(1)),
+			CumulativeCount: new(count),
+			UpperBound:      new(math.Inf(1)),
 			Exemplar:        e.(*dto.Exemplar),
 		}
 		his.Bucket = append(his.Bucket, b)
 	}
 	if h.nativeHistogramSchema > math.MinInt32 {
-		his.ZeroThreshold = proto.Float64(math.Float64frombits(atomic.LoadUint64(&coldCounts.nativeHistogramZeroThresholdBits)))
-		his.Schema = proto.Int32(atomic.LoadInt32(&coldCounts.nativeHistogramSchema))
+		his.ZeroThreshold = new(math.Float64frombits(atomic.LoadUint64(&coldCounts.nativeHistogramZeroThresholdBits)))
+		his.Schema = new(atomic.LoadInt32(&coldCounts.nativeHistogramSchema))
 		zeroBucket := atomic.LoadUint64(&coldCounts.nativeHistogramZeroBucket)
 
 		defer func() {
@@ -772,9 +840,26 @@ func (h *histogram) Write(out *dto.Metric) error {
 			coldCounts.nativeHistogramBucketsNegative.Range(addAndReset(&hotCounts.nativeHistogramBucketsNegative, &hotCounts.nativeHistogramBucketsNumber))
 		}()
 
-		his.ZeroCount = proto.Uint64(zeroBucket)
+		his.ZeroCount = new(zeroBucket)
 		his.NegativeSpan, his.NegativeDelta = makeBuckets(&coldCounts.nativeHistogramBucketsNegative)
 		his.PositiveSpan, his.PositiveDelta = makeBuckets(&coldCounts.nativeHistogramBucketsPositive)
+
+		// Add a no-op span to a histogram without observations and with
+		// a zero threshold of zero. Otherwise, a native histogram would
+		// look like a classic histogram to scrapers.
+		if *his.ZeroThreshold == 0 && *his.ZeroCount == 0 && len(his.PositiveSpan) == 0 && len(his.NegativeSpan) == 0 {
+			his.PositiveSpan = []*dto.BucketSpan{{
+				Offset: proto.Int32(0),
+				Length: proto.Uint32(0),
+			}}
+		}
+
+		if h.nativeExemplars.isEnabled() {
+			h.nativeExemplars.Lock()
+			his.Exemplars = append(his.Exemplars, h.nativeExemplars.exemplars...)
+			h.nativeExemplars.Unlock()
+		}
+
 	}
 	addAndResetCounts(hotCounts, coldCounts)
 	return nil
@@ -783,15 +868,35 @@ func (h *histogram) Write(out *dto.Metric) error {
 // findBucket returns the index of the bucket for the provided value, or
 // len(h.upperBounds) for the +Inf bucket.
 func (h *histogram) findBucket(v float64) int {
-	// TODO(beorn7): For small numbers of buckets (<30), a linear search is
-	// slightly faster than the binary search. If we really care, we could
-	// switch from one search strategy to the other depending on the number
-	// of buckets.
-	//
-	// Microbenchmarks (BenchmarkHistogramNoLabels):
-	// 11 buckets: 38.3 ns/op linear - binary 48.7 ns/op
-	// 100 buckets: 78.1 ns/op linear - binary 54.9 ns/op
-	// 300 buckets: 154 ns/op linear - binary 61.6 ns/op
+	n := len(h.upperBounds)
+	if n == 0 {
+		return 0
+	}
+
+	// Early exit: if v is less than or equal to the first upper bound, return 0
+	if v <= h.upperBounds[0] {
+		return 0
+	}
+
+	// Early exit: if v is greater than the last upper bound, return len(h.upperBounds)
+	if v > h.upperBounds[n-1] {
+		return n
+	}
+
+	// For small arrays, use simple linear search
+	// "magic number" 35 is result of tests on couple different (AWS and baremetal) servers
+	// see more details here: https://github.com/prometheus/client_golang/pull/1662
+	if n < 35 {
+		for i, bound := range h.upperBounds {
+			if v <= bound {
+				return i
+			}
+		}
+		// If v is greater than all upper bounds, return len(h.upperBounds)
+		return n
+	}
+
+	// For larger arrays, use stdlib's binary search
 	return sort.SearchFloat64s(h.upperBounds, v)
 }
 
@@ -810,7 +915,7 @@ func (h *histogram) observe(v float64, bucket int) {
 	}
 }
 
-// limitSparsebuckets applies a strategy to limit the number of populated sparse
+// limitBuckets applies a strategy to limit the number of populated sparse
 // buckets. It's generally best effort, and there are situations where the
 // number can go higher (if even the lowest resolution isn't enough to reduce
 // the number sufficiently, or if the provided counts aren't fully updated yet
@@ -841,26 +946,39 @@ func (h *histogram) limitBuckets(counts *histogramCounts, value float64, bucket 
 	if h.maybeReset(hotCounts, coldCounts, coldIdx, value, bucket) {
 		return
 	}
+	// One of the other strategies will happen. To undo what they will do as
+	// soon as enough time has passed to satisfy
+	// h.nativeHistogramMinResetDuration, schedule a reset at the right time
+	// if we haven't done so already.
+	if h.nativeHistogramMinResetDuration > 0 && !h.resetScheduled {
+		h.resetScheduled = true
+		h.afterFunc(h.nativeHistogramMinResetDuration-h.now().Sub(h.lastResetTime), h.reset)
+	}
+
 	if h.maybeWidenZeroBucket(hotCounts, coldCounts) {
 		return
 	}
 	h.doubleBucketWidth(hotCounts, coldCounts)
 }
 
-// maybeReset resests the whole histogram if at least h.nativeHistogramMinResetDuration
-// has been passed. It returns true if the histogram has been reset. The caller
-// must have locked h.mtx.
-func (h *histogram) maybeReset(hot, cold *histogramCounts, coldIdx uint64, value float64, bucket int) bool {
+// maybeReset resets the whole histogram if at least
+// h.nativeHistogramMinResetDuration has been passed. It returns true if the
+// histogram has been reset. The caller must have locked h.mtx.
+func (h *histogram) maybeReset(
+	hot, cold *histogramCounts, coldIdx uint64, value float64, bucket int,
+) bool {
 	// We are using the possibly mocked h.now() rather than
 	// time.Since(h.lastResetTime) to enable testing.
-	if h.nativeHistogramMinResetDuration == 0 || h.now().Sub(h.lastResetTime) < h.nativeHistogramMinResetDuration {
+	if h.nativeHistogramMinResetDuration == 0 || // No reset configured.
+		h.resetScheduled || // Do not interfere if a reset is already scheduled.
+		h.now().Sub(h.lastResetTime) < h.nativeHistogramMinResetDuration {
 		return false
 	}
 	// Completely reset coldCounts.
 	h.resetCounts(cold)
 	// Repeat the latest observation to not lose it completely.
 	cold.observe(value, bucket, true)
-	// Make coldCounts the new hot counts while ressetting countAndHotIdx.
+	// Make coldCounts the new hot counts while resetting countAndHotIdx.
 	n := atomic.SwapUint64(&h.countAndHotIdx, (coldIdx<<63)+1)
 	count := n & ((1 << 63) - 1)
 	waitForCooldown(count, hot)
@@ -868,6 +986,29 @@ func (h *histogram) maybeReset(hot, cold *histogramCounts, coldIdx uint64, value
 	h.resetCounts(hot)
 	h.lastResetTime = h.now()
 	return true
+}
+
+// reset resets the whole histogram. It locks h.mtx itself, i.e. it has to be
+// called without having locked h.mtx.
+func (h *histogram) reset() {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
+	n := atomic.LoadUint64(&h.countAndHotIdx)
+	hotIdx := n >> 63
+	coldIdx := (^n) >> 63
+	hot := h.counts[hotIdx]
+	cold := h.counts[coldIdx]
+	// Completely reset coldCounts.
+	h.resetCounts(cold)
+	// Make coldCounts the new hot counts while resetting countAndHotIdx.
+	n = atomic.SwapUint64(&h.countAndHotIdx, coldIdx<<63)
+	count := n & ((1 << 63) - 1)
+	waitForCooldown(count, hot)
+	// Finally, reset the formerly hot counts, too.
+	h.resetCounts(hot)
+	h.lastResetTime = h.now()
+	h.resetScheduled = false
 }
 
 // maybeWidenZeroBucket widens the zero bucket until it includes the existing
@@ -916,8 +1057,8 @@ func (h *histogram) maybeWidenZeroBucket(hot, cold *histogramCounts) bool {
 	atomic.StoreUint64(&cold.nativeHistogramZeroThresholdBits, math.Float64bits(newZeroThreshold))
 	// ...and then merge the newly deleted buckets into the wider zero
 	// bucket.
-	mergeAndDeleteOrAddAndReset := func(hotBuckets, coldBuckets *sync.Map) func(k, v interface{}) bool {
-		return func(k, v interface{}) bool {
+	mergeAndDeleteOrAddAndReset := func(hotBuckets, coldBuckets *sync.Map) func(k, v any) bool {
+		return func(k, v any) bool {
 			key := k.(int)
 			bucket := v.(*int64)
 			if key == smallestKey {
@@ -970,8 +1111,8 @@ func (h *histogram) doubleBucketWidth(hot, cold *histogramCounts) {
 	// ...adjust the schema in the cold counts, too...
 	atomic.StoreInt32(&cold.nativeHistogramSchema, coldSchema)
 	// ...and then merge the cold buckets into the wider hot buckets.
-	merge := func(hotBuckets *sync.Map) func(k, v interface{}) bool {
-		return func(k, v interface{}) bool {
+	merge := func(hotBuckets *sync.Map) func(k, v any) bool {
+		return func(k, v any) bool {
 			key := k.(int)
 			bucket := v.(*int64)
 			// Adjust key to match the bucket to merge into.
@@ -1009,8 +1150,10 @@ func (h *histogram) resetCounts(counts *histogramCounts) {
 	deleteSyncMap(&counts.nativeHistogramBucketsPositive)
 }
 
-// updateExemplar replaces the exemplar for the provided bucket. With empty
-// labels, it's a no-op. It panics if any of the labels is invalid.
+// updateExemplar replaces the exemplar for the provided classic bucket.
+// With empty labels, it's a no-op. It panics if any of the labels is invalid.
+// If histogram is native, the exemplar will be cached into nativeExemplars,
+// which has a limit, and will remove one exemplar when limit is reached.
 func (h *histogram) updateExemplar(v float64, bucket int, l Labels) {
 	if l == nil {
 		return
@@ -1020,6 +1163,10 @@ func (h *histogram) updateExemplar(v float64, bucket int, l Labels) {
 		panic(err)
 	}
 	h.exemplars[bucket].Store(e)
+	doSparse := h.nativeHistogramSchema > math.MinInt32 && !math.IsNaN(v)
+	if doSparse {
+		h.nativeExemplars.addExemplar(e)
+	}
 }
 
 // HistogramVec is a Collector that bundles a set of Histograms that all share the
@@ -1034,15 +1181,24 @@ type HistogramVec struct {
 // NewHistogramVec creates a new HistogramVec based on the provided HistogramOpts and
 // partitioned by the given label names.
 func NewHistogramVec(opts HistogramOpts, labelNames []string) *HistogramVec {
-	desc := NewDesc(
+	return V2.NewHistogramVec(HistogramVecOpts{
+		HistogramOpts:  opts,
+		VariableLabels: UnconstrainedLabels(labelNames),
+	})
+}
+
+// NewHistogramVec creates a new HistogramVec based on the provided HistogramVecOpts.
+func (v2) NewHistogramVec(opts HistogramVecOpts) *HistogramVec {
+	desc := V2.NewDesc(
 		BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
 		opts.Help,
-		labelNames,
+		opts.VariableLabels,
 		opts.ConstLabels,
+		WithUnit(opts.Unit),
 	)
 	return &HistogramVec{
 		MetricVec: NewMetricVec(desc, func(lvs ...string) Metric {
-			return newHistogram(desc, opts, lvs...)
+			return newHistogram(desc, opts.HistogramOpts, lvs...)
 		}),
 	}
 }
@@ -1161,6 +1317,7 @@ type constHistogram struct {
 	sum        float64
 	buckets    map[float64]uint64
 	labelPairs []*dto.LabelPair
+	createdTs  *timestamppb.Timestamp
 }
 
 func (h *constHistogram) Desc() *Desc {
@@ -1168,16 +1325,18 @@ func (h *constHistogram) Desc() *Desc {
 }
 
 func (h *constHistogram) Write(out *dto.Metric) error {
-	his := &dto.Histogram{}
+	his := &dto.Histogram{
+		CreatedTimestamp: h.createdTs,
+	}
 
 	buckets := make([]*dto.Bucket, 0, len(h.buckets))
 
-	his.SampleCount = proto.Uint64(h.count)
-	his.SampleSum = proto.Float64(h.sum)
+	his.SampleCount = new(h.count)
+	his.SampleSum = new(h.sum)
 	for upperBound, count := range h.buckets {
 		buckets = append(buckets, &dto.Bucket{
-			CumulativeCount: proto.Uint64(count),
-			UpperBound:      proto.Float64(upperBound),
+			CumulativeCount: new(count),
+			UpperBound:      new(upperBound),
 		})
 	}
 
@@ -1215,7 +1374,7 @@ func NewConstHistogram(
 	if desc.err != nil {
 		return nil, desc.err
 	}
-	if err := validateLabelValues(labelValues, len(desc.variableLabels)); err != nil {
+	if err := validateLabelValues(labelValues, len(desc.variableLabels.names)); err != nil {
 		return nil, err
 	}
 	return &constHistogram{
@@ -1237,6 +1396,48 @@ func MustNewConstHistogram(
 	labelValues ...string,
 ) Metric {
 	m, err := NewConstHistogram(desc, count, sum, buckets, labelValues...)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// NewConstHistogramWithCreatedTimestamp does the same thing as NewConstHistogram but sets the created timestamp.
+func NewConstHistogramWithCreatedTimestamp(
+	desc *Desc,
+	count uint64,
+	sum float64,
+	buckets map[float64]uint64,
+	ct time.Time,
+	labelValues ...string,
+) (Metric, error) {
+	if desc.err != nil {
+		return nil, desc.err
+	}
+	if err := validateLabelValues(labelValues, len(desc.variableLabels.names)); err != nil {
+		return nil, err
+	}
+	return &constHistogram{
+		desc:       desc,
+		count:      count,
+		sum:        sum,
+		buckets:    buckets,
+		labelPairs: MakeLabelPairs(desc, labelValues),
+		createdTs:  timestamppb.New(ct),
+	}, nil
+}
+
+// MustNewConstHistogramWithCreatedTimestamp is a version of NewConstHistogramWithCreatedTimestamp that panics where
+// NewConstHistogramWithCreatedTimestamp would have returned an error.
+func MustNewConstHistogramWithCreatedTimestamp(
+	desc *Desc,
+	count uint64,
+	sum float64,
+	buckets map[float64]uint64,
+	ct time.Time,
+	labelValues ...string,
+) Metric {
+	m, err := NewConstHistogramWithCreatedTimestamp(desc, count, sum, buckets, ct, labelValues...)
 	if err != nil {
 		panic(err)
 	}
@@ -1270,9 +1471,9 @@ func pickSchema(bucketFactor float64) int32 {
 	floor := math.Floor(math.Log2(math.Log2(bucketFactor)))
 	switch {
 	case floor <= -8:
-		return 8
+		return nativeHistogramSchemaMaximum
 	case floor >= 4:
-		return -4
+		return nativeHistogramSchemaMinimum
 	default:
 		return -int32(floor)
 	}
@@ -1280,7 +1481,7 @@ func pickSchema(bucketFactor float64) int32 {
 
 func makeBuckets(buckets *sync.Map) ([]*dto.BucketSpan, []int64) {
 	var ii []int
-	buckets.Range(func(k, v interface{}) bool {
+	buckets.Range(func(k, _ any) bool {
 		ii = append(ii, k.(int))
 		return true
 	})
@@ -1309,7 +1510,7 @@ func makeBuckets(buckets *sync.Map) ([]*dto.BucketSpan, []int64) {
 		// Multiple spans with only small gaps in between are probably
 		// encoded more efficiently as one larger span with a few empty
 		// buckets. Needs some research to find the sweet spot. For now,
-		// we assume that gaps of one ore two buckets should not create
+		// we assume that gaps of one or two buckets should not create
 		// a new span.
 		iDelta := int32(i - nextI)
 		if n == 0 || iDelta > 2 {
@@ -1317,13 +1518,13 @@ func makeBuckets(buckets *sync.Map) ([]*dto.BucketSpan, []int64) {
 			// at the very beginning, or because we have found a gap
 			// of more than two buckets.
 			spans = append(spans, &dto.BucketSpan{
-				Offset: proto.Int32(iDelta),
+				Offset: new(iDelta),
 				Length: proto.Uint32(0),
 			})
 		} else {
 			// We have found a small gap (or no gap at all).
 			// Insert empty buckets as needed.
-			for j := int32(0); j < iDelta; j++ {
+			for range iDelta {
 				appendDelta(0)
 			}
 		}
@@ -1357,8 +1558,8 @@ func addToBucket(buckets *sync.Map, key int, increment int64) bool {
 // according to the buckets ranged through. It then resets all buckets ranged
 // through to 0 (but leaves them in place so that they don't need to get
 // recreated on the next scrape).
-func addAndReset(hotBuckets *sync.Map, bucketNumber *uint32) func(k, v interface{}) bool {
-	return func(k, v interface{}) bool {
+func addAndReset(hotBuckets *sync.Map, bucketNumber *uint32) func(k, v any) bool {
+	return func(k, v any) bool {
 		bucket := v.(*int64)
 		if addToBucket(hotBuckets, k.(int), atomic.LoadInt64(bucket)) {
 			atomic.AddUint32(bucketNumber, 1)
@@ -1369,7 +1570,7 @@ func addAndReset(hotBuckets *sync.Map, bucketNumber *uint32) func(k, v interface
 }
 
 func deleteSyncMap(m *sync.Map) {
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, _ any) bool {
 		m.Delete(k)
 		return true
 	})
@@ -1377,7 +1578,7 @@ func deleteSyncMap(m *sync.Map) {
 
 func findSmallestKey(m *sync.Map) int {
 	result := math.MaxInt32
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, _ any) bool {
 		key := k.(int)
 		if key < result {
 			result = key
@@ -1481,4 +1682,380 @@ func addAndResetCounts(hot, cold *histogramCounts) {
 	}
 	atomic.AddUint64(&hot.nativeHistogramZeroBucket, atomic.LoadUint64(&cold.nativeHistogramZeroBucket))
 	atomic.StoreUint64(&cold.nativeHistogramZeroBucket, 0)
+}
+
+type nativeExemplars struct {
+	sync.Mutex
+
+	// Time-to-live for exemplars, it is set to -1 if exemplars are disabled, that is NativeHistogramMaxExemplars is below 0.
+	// The ttl is used on insertion to remove an exemplar that is older than ttl, if present.
+	ttl time.Duration
+
+	exemplars []*dto.Exemplar
+}
+
+func (n *nativeExemplars) isEnabled() bool {
+	return n.ttl != -1
+}
+
+func makeNativeExemplars(ttl time.Duration, maxCount int) nativeExemplars {
+	if ttl == 0 {
+		ttl = 5 * time.Minute
+	}
+
+	if maxCount == 0 {
+		maxCount = 10
+	}
+
+	if maxCount < 0 {
+		maxCount = 0
+		ttl = -1
+	}
+
+	return nativeExemplars{
+		ttl:       ttl,
+		exemplars: make([]*dto.Exemplar, 0, maxCount),
+	}
+}
+
+func (n *nativeExemplars) addExemplar(e *dto.Exemplar) {
+	if !n.isEnabled() {
+		return
+	}
+
+	n.Lock()
+	defer n.Unlock()
+
+	// When the number of exemplars has not yet exceeded or
+	// is equal to cap(n.exemplars), then
+	// insert the new exemplar directly.
+	if len(n.exemplars) < cap(n.exemplars) {
+		var nIdx int
+		for nIdx = 0; nIdx < len(n.exemplars); nIdx++ {
+			if *e.Value < *n.exemplars[nIdx].Value {
+				break
+			}
+		}
+		n.exemplars = append(n.exemplars[:nIdx], append([]*dto.Exemplar{e}, n.exemplars[nIdx:]...)...)
+		return
+	}
+
+	if len(n.exemplars) == 1 {
+		// When the number of exemplars is 1, then
+		// replace the existing exemplar with the new exemplar.
+		n.exemplars[0] = e
+		return
+	}
+	// From this point on, the number of exemplars is greater than 1.
+
+	// When the number of exemplars exceeds the limit, remove one exemplar.
+	var (
+		ot    = time.Time{} // Oldest timestamp seen. Initial value doesn't matter as we replace it due to otIdx == -1 in the loop.
+		otIdx = -1          // Index of the exemplar with the oldest timestamp.
+
+		md = -1.0 // Logarithm of the delta of the closest pair of exemplars.
+
+		// The insertion point of the new exemplar in the exemplars slice after insertion.
+		// This is calculated purely based on the order of the exemplars by value.
+		// nIdx == len(n.exemplars) means the new exemplar is to be inserted after the end.
+		nIdx = -1
+
+		// rIdx is ultimately the index for the exemplar that we are replacing with the new exemplar.
+		// The aim is to keep a good spread of exemplars by value and not let them bunch up too much.
+		// It is calculated in 3 steps:
+		//   1. First we set rIdx to the index of the older exemplar within the closest pair by value.
+		//      That is the following will be true (on log scale):
+		//      either the exemplar pair on index (rIdx-1, rIdx) or (rIdx, rIdx+1) will have
+		//      the closest values to each other from all pairs.
+		//      For example, suppose the values are distributed like this:
+		//        |-----------x-------------x----------------x----x-----|
+		//                                                   ^--rIdx as this is older.
+		//      Or like this:
+		//        |-----------x-------------x----------------x----x-----|
+		//                                                        ^--rIdx as this is older.
+		//   2. If there is an exemplar that expired, then we simple reset rIdx to that index.
+		//   3. We check if by inserting the new exemplar we would create a closer pair at
+		//      (nIdx-1, nIdx) or (nIdx, nIdx+1) and set rIdx to nIdx-1 or nIdx accordingly to
+		//      keep the spread of exemplars by value; otherwise we keep rIdx as it is.
+		rIdx = -1
+		cLog float64 // Logarithm of the current exemplar.
+		pLog float64 // Logarithm of the previous exemplar.
+	)
+
+	for i, exemplar := range n.exemplars {
+		// Find the exemplar with the oldest timestamp.
+		if otIdx == -1 || exemplar.Timestamp.AsTime().Before(ot) {
+			ot = exemplar.Timestamp.AsTime()
+			otIdx = i
+		}
+
+		// Find the index at which to insert new the exemplar.
+		if nIdx == -1 && *e.Value <= *exemplar.Value {
+			nIdx = i
+		}
+
+		// Find the two closest exemplars and pick the one the with older timestamp.
+		pLog = cLog
+		cLog = math.Log(exemplar.GetValue())
+		if i == 0 {
+			continue
+		}
+		diff := math.Abs(cLog - pLog)
+		if md == -1 || diff < md {
+			// The closest exemplar pair is at index: i-1, i.
+			// Choose the exemplar with the older timestamp for replacement.
+			md = diff
+			if n.exemplars[i].Timestamp.AsTime().Before(n.exemplars[i-1].Timestamp.AsTime()) {
+				rIdx = i
+			} else {
+				rIdx = i - 1
+			}
+		}
+
+	}
+
+	// If all existing exemplar are smaller than new exemplar,
+	// then the exemplar should be inserted at the end.
+	if nIdx == -1 {
+		nIdx = len(n.exemplars)
+	}
+	// Here, we have the following relationships:
+	// n.exemplars[nIdx-1].Value < e.Value (if nIdx > 0)
+	// e.Value <= n.exemplars[nIdx].Value (if nIdx < len(n.exemplars))
+
+	if otIdx != -1 && e.Timestamp.AsTime().Sub(ot) > n.ttl {
+		// If the oldest exemplar has expired, then replace it with the new exemplar.
+		rIdx = otIdx
+	} else {
+		// In the previous for loop, when calculating the closest pair of exemplars,
+		// we did not take into account the newly inserted exemplar.
+		// So we need to calculate with the newly inserted exemplar again.
+		elog := math.Log(e.GetValue())
+		if nIdx > 0 {
+			diff := math.Abs(elog - math.Log(n.exemplars[nIdx-1].GetValue()))
+			if diff < md {
+				// The value we are about to insert is closer to the previous exemplar at the insertion point than what we calculated before in rIdx.
+				//                                            v--rIdx
+				// |-----------x-n-----------x----------------x----x-----|
+				//     nIdx-1--^ ^--new exemplar value
+				// Do not make the spread worse, replace nIdx-1 and not rIdx.
+				md = diff
+				rIdx = nIdx - 1
+			}
+		}
+		if nIdx < len(n.exemplars) {
+			diff := math.Abs(math.Log(n.exemplars[nIdx].GetValue()) - elog)
+			if diff < md {
+				// The value we are about to insert is closer to the next exemplar at the insertion point than what we calculated before in rIdx.
+				//                                            v--rIdx
+				// |-----------x-----------n-x----------------x----x-----|
+				//     new exemplar value--^ ^--nIdx
+				// Do not make the spread worse, replace nIdx-1 and not rIdx.
+				rIdx = nIdx
+			}
+		}
+	}
+
+	// Adjust the slice according to rIdx and nIdx.
+	switch {
+	case rIdx == nIdx:
+		n.exemplars[nIdx] = e
+	case rIdx < nIdx:
+		n.exemplars = append(n.exemplars[:rIdx], append(n.exemplars[rIdx+1:nIdx], append([]*dto.Exemplar{e}, n.exemplars[nIdx:]...)...)...)
+	case rIdx > nIdx:
+		n.exemplars = append(n.exemplars[:nIdx], append([]*dto.Exemplar{e}, append(n.exemplars[nIdx:rIdx], n.exemplars[rIdx+1:]...)...)...)
+	}
+}
+
+type constNativeHistogram struct {
+	desc *Desc
+	dto.Histogram
+	labelPairs []*dto.LabelPair
+}
+
+func validateCount(sum float64, count uint64, negativeBuckets, positiveBuckets map[int]int64, zeroBucket uint64) error {
+	var bucketPopulationSum int64
+	for _, v := range positiveBuckets {
+		bucketPopulationSum += v
+	}
+	for _, v := range negativeBuckets {
+		bucketPopulationSum += v
+	}
+	bucketPopulationSum += int64(zeroBucket)
+
+	// If the sum of observations is NaN, the number of observations must be greater or equal to the sum of all bucket counts.
+	// Otherwise, the number of observations must be equal to the sum of all bucket counts .
+
+	if math.IsNaN(sum) && bucketPopulationSum > int64(count) ||
+		!math.IsNaN(sum) && bucketPopulationSum != int64(count) {
+		return errors.New("the sum of all bucket populations exceeds the count of observations")
+	}
+	return nil
+}
+
+// NewConstNativeHistogram returns a metric representing a Prometheus native histogram with
+// fixed values for the count, sum, and positive/negative/zero bucket counts. As those parameters
+// cannot be changed, the returned value does not implement the Histogram
+// interface (but only the Metric interface). Users of this package will not
+// have much use for it in regular operations. However, when implementing custom
+// OpenTelemetry Collectors, it is useful as a throw-away metric that is generated on the fly
+// to send it to Prometheus in the Collect method.
+//
+// zeroBucket counts all (positive and negative)
+// observations in the zero bucket (with an absolute value less or equal
+// the current threshold).
+// positiveBuckets and negativeBuckets are separate maps for negative and positive
+// observations. The map's value is an int64, counting observations in
+// that bucket. The map's key is the
+// index of the bucket according to the used
+// Schema. Index 0 is for an upper bound of 1 in positive buckets and for a lower bound of -1 in negative buckets.
+// NewConstNativeHistogram returns an error if
+//   - the length of labelValues is not consistent with the variable labels in Desc or if Desc is invalid.
+//   - the schema passed is not between 8 and -4
+//   - the sum of counts in all buckets including the zero bucket does not equal the count if sum is not NaN (or exceeds the count if sum is NaN)
+//
+// See https://opentelemetry.io/docs/specs/otel/compatibility/prometheus_and_openmetrics/#exponential-histograms for more details about the conversion from OTel to Prometheus.
+func NewConstNativeHistogram(
+	desc *Desc,
+	count uint64,
+	sum float64,
+	positiveBuckets, negativeBuckets map[int]int64,
+	zeroBucket uint64,
+	schema int32,
+	zeroThreshold float64,
+	createdTimestamp time.Time,
+	labelValues ...string,
+) (Metric, error) {
+	if desc.err != nil {
+		return nil, desc.err
+	}
+	if err := validateLabelValues(labelValues, len(desc.variableLabels.names)); err != nil {
+		return nil, err
+	}
+	if schema > nativeHistogramSchemaMaximum || schema < nativeHistogramSchemaMinimum {
+		return nil, errors.New("invalid native histogram schema")
+	}
+	if err := validateCount(sum, count, negativeBuckets, positiveBuckets, zeroBucket); err != nil {
+		return nil, err
+	}
+
+	NegativeSpan, NegativeDelta := makeBucketsFromMap(negativeBuckets)
+	PositiveSpan, PositiveDelta := makeBucketsFromMap(positiveBuckets)
+	ret := &constNativeHistogram{
+		desc: desc,
+		Histogram: dto.Histogram{
+			CreatedTimestamp: timestamppb.New(createdTimestamp),
+			Schema:           &schema,
+			ZeroThreshold:    &zeroThreshold,
+			SampleCount:      &count,
+			SampleSum:        &sum,
+
+			NegativeSpan:  NegativeSpan,
+			NegativeDelta: NegativeDelta,
+
+			PositiveSpan:  PositiveSpan,
+			PositiveDelta: PositiveDelta,
+
+			ZeroCount: new(zeroBucket),
+		},
+		labelPairs: MakeLabelPairs(desc, labelValues),
+	}
+	if *ret.ZeroThreshold == 0 && *ret.ZeroCount == 0 && len(ret.PositiveSpan) == 0 && len(ret.NegativeSpan) == 0 {
+		ret.PositiveSpan = []*dto.BucketSpan{{
+			Offset: proto.Int32(0),
+			Length: proto.Uint32(0),
+		}}
+	}
+	return ret, nil
+}
+
+// MustNewConstNativeHistogram is a version of NewConstNativeHistogram that panics where
+// NewConstNativeHistogram would have returned an error.
+func MustNewConstNativeHistogram(
+	desc *Desc,
+	count uint64,
+	sum float64,
+	positiveBuckets, negativeBuckets map[int]int64,
+	zeroBucket uint64,
+	nativeHistogramSchema int32,
+	nativeHistogramZeroThreshold float64,
+	createdTimestamp time.Time,
+	labelValues ...string,
+) Metric {
+	nativehistogram, err := NewConstNativeHistogram(desc,
+		count,
+		sum,
+		positiveBuckets,
+		negativeBuckets,
+		zeroBucket,
+		nativeHistogramSchema,
+		nativeHistogramZeroThreshold,
+		createdTimestamp,
+		labelValues...)
+	if err != nil {
+		panic(err)
+	}
+	return nativehistogram
+}
+
+func (h *constNativeHistogram) Desc() *Desc {
+	return h.desc
+}
+
+func (h *constNativeHistogram) Write(out *dto.Metric) error {
+	out.Histogram = &h.Histogram
+	out.Label = h.labelPairs
+	return nil
+}
+
+func makeBucketsFromMap(buckets map[int]int64) ([]*dto.BucketSpan, []int64) {
+	if len(buckets) == 0 {
+		return nil, nil
+	}
+	var ii []int
+	for k := range buckets {
+		ii = append(ii, k)
+	}
+	sort.Ints(ii)
+
+	var (
+		spans     []*dto.BucketSpan
+		deltas    []int64
+		prevCount int64
+		nextI     int
+	)
+
+	appendDelta := func(count int64) {
+		*spans[len(spans)-1].Length++
+		deltas = append(deltas, count-prevCount)
+		prevCount = count
+	}
+
+	for n, i := range ii {
+		count := buckets[i]
+		// Multiple spans with only small gaps in between are probably
+		// encoded more efficiently as one larger span with a few empty
+		// buckets. Needs some research to find the sweet spot. For now,
+		// we assume that gaps of one or two buckets should not create
+		// a new span.
+		iDelta := int32(i - nextI)
+		if n == 0 || iDelta > 2 {
+			// We have to create a new span, either because we are
+			// at the very beginning, or because we have found a gap
+			// of more than two buckets.
+			spans = append(spans, &dto.BucketSpan{
+				Offset: new(iDelta),
+				Length: proto.Uint32(0),
+			})
+		} else {
+			// We have found a small gap (or no gap at all).
+			// Insert empty buckets as needed.
+			for range iDelta {
+				appendDelta(0)
+			}
+		}
+		appendDelta(count)
+		nextI = i + 1
+	}
+	return spans, deltas
 }

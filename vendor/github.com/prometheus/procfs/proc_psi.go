@@ -1,4 +1,4 @@
-// Copyright 2019 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -30,7 +30,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/util"
+	"github.com/prometheus/procfs/internal/parsers"
 )
 
 const lineFormat = "avg10=%f avg60=%f avg300=%f total=%d"
@@ -59,33 +59,33 @@ type PSIStats struct {
 // resource from /proc/pressure/<resource>. At time of writing this can be
 // either "cpu", "memory" or "io".
 func (fs FS) PSIStatsForResource(resource string) (PSIStats, error) {
-	data, err := util.ReadFileNoStat(fs.proc.Path(fmt.Sprintf("%s/%s", "pressure", resource)))
+	data, err := parsers.ReadFileNoStat(fs.proc.Path(fmt.Sprintf("%s/%s", "pressure", resource)))
 	if err != nil {
-		return PSIStats{}, fmt.Errorf("psi_stats: unavailable for %q: %w", resource, err)
+		return PSIStats{}, fmt.Errorf("%w: psi_stats: unavailable for %q: %w", ErrFileRead, resource, err)
 	}
 
-	return parsePSIStats(resource, bytes.NewReader(data))
+	return parsePSIStats(bytes.NewReader(data))
 }
 
 // parsePSIStats parses the specified file for pressure stall information.
-func parsePSIStats(resource string, r io.Reader) (PSIStats, error) {
+func parsePSIStats(r io.Reader) (PSIStats, error) {
 	psiStats := PSIStats{}
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		l := scanner.Text()
-		prefix := strings.Split(l, " ")[0]
+		prefix, _, _ := strings.Cut(l, " ")
 		switch prefix {
 		case "some":
 			psi := PSILine{}
-			_, err := fmt.Sscanf(l, fmt.Sprintf("some %s", lineFormat), &psi.Avg10, &psi.Avg60, &psi.Avg300, &psi.Total)
+			_, err := fmt.Sscanf(l, "some "+lineFormat, &psi.Avg10, &psi.Avg60, &psi.Avg300, &psi.Total)
 			if err != nil {
 				return PSIStats{}, err
 			}
 			psiStats.Some = &psi
 		case "full":
 			psi := PSILine{}
-			_, err := fmt.Sscanf(l, fmt.Sprintf("full %s", lineFormat), &psi.Avg10, &psi.Avg60, &psi.Avg300, &psi.Total)
+			_, err := fmt.Sscanf(l, "full "+lineFormat, &psi.Avg10, &psi.Avg60, &psi.Avg300, &psi.Total)
 			if err != nil {
 				return PSIStats{}, err
 			}

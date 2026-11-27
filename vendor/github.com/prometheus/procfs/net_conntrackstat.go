@@ -1,4 +1,4 @@
-// Copyright 2020 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,19 +18,22 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/util"
+	"github.com/prometheus/procfs/internal/parsers"
 )
 
 // A ConntrackStatEntry represents one line from net/stat/nf_conntrack
 // and contains netfilter conntrack statistics at one CPU core.
 type ConntrackStatEntry struct {
 	Entries       uint64
+	Searched      uint64
 	Found         uint64
+	New           uint64
 	Invalid       uint64
 	Ignore        uint64
+	Delete        uint64
+	DeleteList    uint64
 	Insert        uint64
 	InsertFailed  uint64
 	Drop          uint64
@@ -46,7 +49,7 @@ func (fs FS) ConntrackStat() ([]ConntrackStatEntry, error) {
 // Parses a slice of ConntrackStatEntries from the given filepath.
 func readConntrackStat(path string) ([]ConntrackStatEntry, error) {
 	// This file is small and can be read with one syscall.
-	b, err := util.ReadFileNoStat(path)
+	b, err := parsers.ReadFileNoStat(path)
 	if err != nil {
 		// Do not wrap this error so the caller can detect os.IsNotExist and
 		// similar conditions.
@@ -55,7 +58,7 @@ func readConntrackStat(path string) ([]ConntrackStatEntry, error) {
 
 	stat, err := parseConntrackStat(bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read conntrack stats from %q: %w", path, err)
+		return nil, fmt.Errorf("%w: Cannot read file: %v: %w", ErrFileRead, path, err)
 	}
 
 	return stat, nil
@@ -81,73 +84,35 @@ func parseConntrackStat(r io.Reader) ([]ConntrackStatEntry, error) {
 
 // Parses a ConntrackStatEntry from given array of fields.
 func parseConntrackStatEntry(fields []string) (*ConntrackStatEntry, error) {
-	if len(fields) != 17 {
-		return nil, fmt.Errorf("invalid conntrackstat entry, missing fields")
-	}
-	entry := &ConntrackStatEntry{}
-
-	entries, err := parseConntrackStatField(fields[0])
+	entries, err := parsers.ParseHexUint64s(fields)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: Cannot parse entry: %d: %w", ErrFileParse, entries, err)
 	}
-	entry.Entries = entries
-
-	found, err := parseConntrackStatField(fields[2])
-	if err != nil {
-		return nil, err
+	numEntries := len(entries)
+	if numEntries < 16 || numEntries > 17 {
+		return nil,
+			fmt.Errorf("%w: invalid conntrackstat entry, invalid number of fields: %d", ErrFileParse, numEntries)
 	}
-	entry.Found = found
 
-	invalid, err := parseConntrackStatField(fields[4])
-	if err != nil {
-		return nil, err
+	stats := &ConntrackStatEntry{
+		Entries:      *entries[0],
+		Searched:     *entries[1],
+		Found:        *entries[2],
+		New:          *entries[3],
+		Invalid:      *entries[4],
+		Ignore:       *entries[5],
+		Delete:       *entries[6],
+		DeleteList:   *entries[7],
+		Insert:       *entries[8],
+		InsertFailed: *entries[9],
+		Drop:         *entries[10],
+		EarlyDrop:    *entries[11],
 	}
-	entry.Invalid = invalid
 
-	ignore, err := parseConntrackStatField(fields[5])
-	if err != nil {
-		return nil, err
+	// Ignore missing search_restart on Linux < 2.6.35.
+	if numEntries == 17 {
+		stats.SearchRestart = *entries[16]
 	}
-	entry.Ignore = ignore
 
-	insert, err := parseConntrackStatField(fields[8])
-	if err != nil {
-		return nil, err
-	}
-	entry.Insert = insert
-
-	insertFailed, err := parseConntrackStatField(fields[9])
-	if err != nil {
-		return nil, err
-	}
-	entry.InsertFailed = insertFailed
-
-	drop, err := parseConntrackStatField(fields[10])
-	if err != nil {
-		return nil, err
-	}
-	entry.Drop = drop
-
-	earlyDrop, err := parseConntrackStatField(fields[11])
-	if err != nil {
-		return nil, err
-	}
-	entry.EarlyDrop = earlyDrop
-
-	searchRestart, err := parseConntrackStatField(fields[16])
-	if err != nil {
-		return nil, err
-	}
-	entry.SearchRestart = searchRestart
-
-	return entry, nil
-}
-
-// Parses a uint64 from given hex in string.
-func parseConntrackStatField(field string) (uint64, error) {
-	val, err := strconv.ParseUint(field, 16, 64)
-	if err != nil {
-		return 0, fmt.Errorf("couldn't parse %q field: %w", field, err)
-	}
-	return val, err
+	return stats, nil
 }

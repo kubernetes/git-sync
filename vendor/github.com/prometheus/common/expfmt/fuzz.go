@@ -13,22 +13,24 @@
 
 // Build only when actually fuzzing
 //go:build gofuzz
-// +build gofuzz
 
 package expfmt
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/prometheus/common/model"
+)
 
 // Fuzz text metric parser with with github.com/dvyukov/go-fuzz:
 //
-//     go-fuzz-build github.com/prometheus/common/expfmt
-//     go-fuzz -bin expfmt-fuzz.zip -workdir fuzz
+//	go-fuzz-build github.com/prometheus/common/expfmt
+//	go-fuzz -bin expfmt-fuzz.zip -workdir fuzz
 //
 // Further input samples should go in the folder fuzz/corpus.
 func Fuzz(in []byte) int {
-	parser := TextParser{}
+	parser := NewTextParser(model.UTF8Validation)
 	_, err := parser.TextToMetricFamilies(bytes.NewReader(in))
-
 	if err != nil {
 		return 0
 	}
