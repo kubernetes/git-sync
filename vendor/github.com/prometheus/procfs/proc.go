@@ -1,4 +1,4 @@
-// Copyright 2018 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,14 +15,14 @@ package procfs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/fs"
-	"github.com/prometheus/procfs/internal/util"
+	"github.com/prometheus/procfs/internal/parsers"
 )
 
 // Proc provides information about a running process.
@@ -30,11 +30,17 @@ type Proc struct {
 	// The process ID.
 	PID int
 
-	fs fs.FS
+	fs FS
 }
 
 // Procs represents a list of Proc structs.
 type Procs []Proc
+
+var (
+	ErrFileParse  = errors.New("error parsing file")
+	ErrFileRead   = errors.New("error reading file")
+	ErrMountPoint = errors.New("error accessing mount point")
+)
 
 func (p Procs) Len() int           { return len(p) }
 func (p Procs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -43,7 +49,7 @@ func (p Procs) Less(i, j int) bool { return p[i].PID < p[j].PID }
 // Self returns a process for the current process read via /proc/self.
 func Self() (Proc, error) {
 	fs, err := NewFS(DefaultMountPoint)
-	if err != nil {
+	if err != nil || errors.Is(err, ErrMountPoint) {
 		return Proc{}, err
 	}
 	return fs.Self()
@@ -73,7 +79,7 @@ func (fs FS) Self() (Proc, error) {
 	if err != nil {
 		return Proc{}, err
 	}
-	pid, err := strconv.Atoi(strings.Replace(p, string(fs.proc), "", -1))
+	pid, err := strconv.Atoi(strings.ReplaceAll(p, string(fs.proc), ""))
 	if err != nil {
 		return Proc{}, err
 	}
@@ -92,7 +98,7 @@ func (fs FS) Proc(pid int) (Proc, error) {
 	if _, err := os.Stat(fs.proc.Path(strconv.Itoa(pid))); err != nil {
 		return Proc{}, err
 	}
-	return Proc{PID: pid, fs: fs.proc}, nil
+	return Proc{PID: pid, fs: fs}, nil
 }
 
 // AllProcs returns a list of all currently available processes.
@@ -105,7 +111,7 @@ func (fs FS) AllProcs() (Procs, error) {
 
 	names, err := d.Readdirnames(-1)
 	if err != nil {
-		return Procs{}, fmt.Errorf("could not read %q: %w", d.Name(), err)
+		return Procs{}, fmt.Errorf("%w: Cannot read file: %v: %w", ErrFileRead, names, err)
 	}
 
 	p := Procs{}
@@ -114,7 +120,7 @@ func (fs FS) AllProcs() (Procs, error) {
 		if err != nil {
 			continue
 		}
-		p = append(p, Proc{PID: int(pid), fs: fs.proc})
+		p = append(p, Proc{PID: int(pid), fs: fs})
 	}
 
 	return p, nil
@@ -122,7 +128,7 @@ func (fs FS) AllProcs() (Procs, error) {
 
 // CmdLine returns the command line of a process.
 func (p Proc) CmdLine() ([]string, error) {
-	data, err := util.ReadFileNoStat(p.path("cmdline"))
+	data, err := parsers.ReadFileNoStat(p.path("cmdline"))
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +137,7 @@ func (p Proc) CmdLine() ([]string, error) {
 		return []string{}, nil
 	}
 
-	return strings.Split(string(bytes.TrimRight(data, string("\x00"))), string(byte(0))), nil
+	return strings.Split(string(bytes.TrimRight(data, "\x00")), "\x00"), nil
 }
 
 // Wchan returns the wchan (wait channel) of a process.
@@ -157,7 +163,7 @@ func (p Proc) Wchan() (string, error) {
 
 // Comm returns the command name of a process.
 func (p Proc) Comm() (string, error) {
-	data, err := util.ReadFileNoStat(p.path("comm"))
+	data, err := parsers.ReadFileNoStat(p.path("comm"))
 	if err != nil {
 		return "", err
 	}
@@ -206,7 +212,7 @@ func (p Proc) FileDescriptors() ([]uintptr, error) {
 	for i, n := range names {
 		fd, err := strconv.ParseInt(n, 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("could not parse fd %q: %w", n, err)
+			return nil, fmt.Errorf("%w: Cannot parse line: %v: %w", ErrFileParse, i, err)
 		}
 		fds[i] = uintptr(fd)
 	}
@@ -237,6 +243,19 @@ func (p Proc) FileDescriptorTargets() ([]string, error) {
 // FileDescriptorsLen returns the number of currently open file descriptors of
 // a process.
 func (p Proc) FileDescriptorsLen() (int, error) {
+	// Use fast path if available (Linux v6.2): https://github.com/torvalds/linux/commit/f1f1f2569901
+	if p.fs.isReal {
+		stat, err := os.Stat(p.path("fd"))
+		if err != nil {
+			return 0, err
+		}
+
+		size := stat.Size()
+		if size > 0 {
+			return int(size), nil
+		}
+	}
+
 	fds, err := p.fileDescriptors()
 	if err != nil {
 		return 0, err
@@ -262,7 +281,7 @@ func (p Proc) MountStats() ([]*Mount, error) {
 // It supplies information missing in `/proc/self/mounts` and
 // fixes various other problems with that file too.
 func (p Proc) MountInfo() ([]*MountInfo, error) {
-	data, err := util.ReadFileNoStat(p.path("mountinfo"))
+	data, err := parsers.ReadFileNoStat(p.path("mountinfo"))
 	if err != nil {
 		return nil, err
 	}
@@ -278,14 +297,14 @@ func (p Proc) fileDescriptors() ([]string, error) {
 
 	names, err := d.Readdirnames(-1)
 	if err != nil {
-		return nil, fmt.Errorf("could not read %q: %w", d.Name(), err)
+		return nil, fmt.Errorf("%w: Cannot read file: %v: %w", ErrFileRead, names, err)
 	}
 
 	return names, nil
 }
 
 func (p Proc) path(pa ...string) string {
-	return p.fs.Path(append([]string{strconv.Itoa(p.PID)}, pa...)...)
+	return p.fs.proc.Path(append([]string{strconv.Itoa(p.PID)}, pa...)...)
 }
 
 // FileDescriptorsInfo retrieves information about all file descriptors of

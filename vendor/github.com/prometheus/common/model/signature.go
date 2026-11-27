@@ -14,7 +14,7 @@
 package model
 
 import (
-	"sort"
+	"slices"
 )
 
 // SeparatorByte is a byte that cannot occur in valid UTF-8 sequences and is
@@ -22,10 +22,8 @@ import (
 // when calculating their combined hash value (aka signature aka fingerprint).
 const SeparatorByte byte = 255
 
-var (
-	// cache the signature of an empty label set.
-	emptyLabelSignature = hashNew()
-)
+// cache the signature of an empty label set.
+var emptyLabelSignature = hashNew()
 
 // LabelsToSignature returns a quasi-unique signature (i.e., fingerprint) for a
 // given label set. (Collisions are possible but unlikely if the number of label
@@ -39,7 +37,7 @@ func LabelsToSignature(labels map[string]string) uint64 {
 	for labelName := range labels {
 		labelNames = append(labelNames, labelName)
 	}
-	sort.Strings(labelNames)
+	slices.Sort(labelNames)
 
 	sum := hashNew()
 	for _, labelName := range labelNames {
@@ -62,7 +60,7 @@ func labelSetToFingerprint(ls LabelSet) Fingerprint {
 	for labelName := range ls {
 		labelNames = append(labelNames, labelName)
 	}
-	sort.Sort(labelNames)
+	slices.Sort(labelNames)
 
 	sum := hashNew()
 	for _, labelName := range labelNames {
@@ -102,7 +100,7 @@ func SignatureForLabels(m Metric, labels ...LabelName) uint64 {
 		return emptyLabelSignature
 	}
 
-	sort.Sort(LabelNames(labels))
+	slices.Sort(labels)
 
 	sum := hashNew()
 	for _, label := range labels {
@@ -131,7 +129,7 @@ func SignatureWithoutLabels(m Metric, labels map[LabelName]struct{}) uint64 {
 	if len(labelNames) == 0 {
 		return emptyLabelSignature
 	}
-	sort.Sort(labelNames)
+	slices.Sort(labelNames)
 
 	sum := hashNew()
 	for _, labelName := range labelNames {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,20 +17,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/util"
+	"github.com/prometheus/procfs/internal/parsers"
 )
 
 func sysctlToPath(sysctl string) string {
-	return strings.Replace(sysctl, ".", "/", -1)
+	return strings.ReplaceAll(sysctl, ".", "/")
 }
 
 func (fs FS) SysctlStrings(sysctl string) ([]string, error) {
-	value, err := util.SysReadFile(fs.proc.Path("sys", sysctlToPath(sysctl)))
+	value, err := parsers.SysReadFile(fs.proc.Path("sys", sysctlToPath(sysctl)))
 	if err != nil {
 		return nil, err
 	}
 	return strings.Fields(value), nil
-
 }
 
 func (fs FS) SysctlInts(sysctl string) ([]int, error) {
@@ -41,10 +40,10 @@ func (fs FS) SysctlInts(sysctl string) ([]int, error) {
 
 	values := make([]int, len(fields))
 	for i, f := range fields {
-		vp := util.NewValueParser(f)
+		vp := parsers.NewValueParser(f)
 		values[i] = vp.Int()
 		if err := vp.Err(); err != nil {
-			return nil, fmt.Errorf("field %d in sysctl %s is not a valid int: %w", i, sysctl, err)
+			return nil, fmt.Errorf("%w: field %d in sysctl %s is not a valid int: %w", ErrFileParse, i, sysctl, err)
 		}
 	}
 	return values, nil
