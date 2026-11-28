@@ -702,7 +702,7 @@ func main() {
 		"uid", os.Getuid(),
 		"gid", os.Getgid(),
 		"home", os.Getenv("HOME"),
-		"flags", logSafeFlags(*flVerbose))
+		"flags", logSafeFlags(pflag.CommandLine, *flVerbose))
 
 	if _, err := exec.LookPath(*flGitCmd); err != nil {
 		log.Error(err, "FATAL: git executable not found", "git", *flGitCmd)
@@ -839,14 +839,14 @@ func main() {
 	// This needs to be after all other git-related config flags.
 	if *flGitConfigString != "" {
 		if err := git.SetupExtraGitConfigs(ctx, *flGitConfigString, "--git-config"); err != nil {
-			log.Error(err, "can't set additional git configs", "configs", *flGitConfigString)
+			log.Error(err, "can't set additional git configs", "configs", redactGitConfigsFlag(*flGitConfigString))
 			os.Exit(1)
 		}
 	}
 	if len(*flGitConfigList) > 0 {
 		str := strings.Join(*flGitConfigList, ",")
 		if err := git.SetupExtraGitConfigs(ctx, str, "--git-config-add"); err != nil {
-			log.Error(err, "can't set additional git configs", "configs", str)
+			log.Error(err, "can't set additional git configs", "configs", redactGitConfigsFlag(str))
 			os.Exit(1)
 		}
 	}
@@ -861,7 +861,7 @@ func main() {
 		log.V(0).Info("unexpected stderr reading git config", "stdout", stdout, "stderr", stderr)
 		os.Exit(1)
 	} else {
-		log.V(0).Info("git config", "configs", parseGitConfigList(stdout))
+		log.V(0).Info("git config", "configs", redactGitConfigList(parseGitConfigList(stdout)))
 	}
 
 	// The scope of the initialization context ends here, so we call cancel to release resources associated with it.
@@ -1228,12 +1228,153 @@ func redactURL(urlstr string) string {
 	return u.String()
 }
 
+// redactURLStrict is like redactURL, but if the URL can't be parsed it still
+// redacts anything that looks like a password in the userinfo, rather than
+// returning the input unchanged.
+func redactURLStrict(s string) string {
+	if _, err := url.Parse(s); err == nil {
+		return redactURL(s)
+	}
+	start := 0
+	if i := strings.Index(s, "://"); i >= 0 {
+		start = i + len("://")
+	}
+	hostEnd := len(s)
+	if i := strings.Index(s[start:], "/"); i >= 0 {
+		hostEnd = start + i
+	}
+	if at := strings.LastIndex(s[start:hostEnd], "@"); at >= 0 {
+		at += start
+		if user, _, found := strings.Cut(s[start:at], ":"); found {
+			return s[:start] + user + ":" + redactedString + s[at:]
+		}
+	}
+	return s
+}
+
+// redactGitConfigKey redacts credentials embedded in a git config key.  For
+// the url, http, and credential sections, the subsection (everything between
+// the first and last dot) is a URL which may carry a password, e.g.
+// url.<base>.insteadOf or http.<url>.extraHeader.
+func redactGitConfigKey(key string) string {
+	first := strings.Index(key, ".")
+	last := strings.LastIndex(key, ".")
+	if first < 0 || last <= first+1 {
+		return key // no subsection
+	}
+	switch strings.ToLower(key[:first]) {
+	case "url", "http", "credential":
+		return key[:first+1] + redactURLStrict(key[first+1:last]) + key[last:]
+	}
+	return key
+}
+
+// redactGitConfigValue redacts values which may carry credentials.  git config
+// can hold arbitrary secrets, but these are the common ones.
+func redactGitConfigValue(key, val string) string {
+	k := strings.ToLower(key)
+	switch {
+	case strings.HasSuffix(k, ".extraheader"):
+		return redactedString
+	case strings.HasSuffix(k, ".insteadof"), strings.HasSuffix(k, ".pushinsteadof"),
+		strings.HasSuffix(k, ".proxy"):
+		return redactURLStrict(val)
+	case strings.HasPrefix(k, "credential.") && strings.HasSuffix(k, ".helper") &&
+		strings.HasPrefix(strings.TrimSpace(val), "!"):
+		// Inline shell helpers can embed secrets.
+		return redactedString
+	}
+	return val
+}
+
+// redactGitConfigs returns a copy of kvs with sensitive keys and values
+// redacted, for logging.
+func redactGitConfigs(kvs []keyVal) []keyVal {
+	ret := make([]keyVal, 0, len(kvs))
+	for _, kv := range kvs {
+		ret = append(ret, keyVal{
+			key: redactGitConfigKey(kv.key),
+			val: redactGitConfigValue(kv.key, kv.val),
+		})
+	}
+	return ret
+}
+
+// redactGitConfigList returns a copy of kvs with sensitive keys and values
+// redacted, for logging.
+func redactGitConfigList(kvs funcr.PseudoStruct) funcr.PseudoStruct {
+	ret := make(funcr.PseudoStruct, 0, len(kvs))
+	for i := 0; i+1 < len(kvs); i += 2 {
+		key, _ := kvs[i].(string) //nolint:forcetypeassert
+		ret = append(ret, redactGitConfigKey(key))
+		if val, ok := kvs[i+1].(string); ok {
+			ret = append(ret, redactGitConfigValue(key, val))
+		} else {
+			ret = append(ret, kvs[i+1])
+		}
+	}
+	return ret
+}
+
+// quoteGitConfig quotes s using only the escapes that parseGitConfigs
+// understands (strconv.Quote can emit \x, \u, \r, etc. which it rejects).
+func quoteGitConfig(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// formatGitConfigs renders key/value pairs the way --git-config accepts them,
+// for logging.
+func formatGitConfigs(kvs []keyVal) string {
+	needsQuote := func(s string) bool {
+		return s == "" || strings.ContainsAny(s, ":,\"\\\n\t")
+	}
+	parts := make([]string, 0, len(kvs))
+	for _, kv := range kvs {
+		key, val := kv.key, kv.val
+		if needsQuote(key) {
+			key = quoteGitConfig(key)
+		}
+		if needsQuote(val) {
+			val = quoteGitConfig(val)
+		}
+		parts = append(parts, key+":"+val)
+	}
+	return strings.Join(parts, ",")
+}
+
+// redactGitConfigsFlag redacts a --git-config or --git-config-add value.  If
+// the value cannot be parsed, we cannot tell which parts are sensitive, so we
+// redact all of it.
+func redactGitConfigsFlag(val string) string {
+	kvs, err := parseGitConfigs(val)
+	if err != nil {
+		return redactedString
+	}
+	return formatGitConfigs(redactGitConfigs(kvs))
+}
+
 // logSafeFlags makes sure any sensitive args (e.g. passwords) are redacted
 // before logging.  This returns a slice rather than a map so it is always
 // sorted.
-func logSafeFlags(v int) []string {
+func logSafeFlags(fs *pflag.FlagSet, v int) []string {
 	ret := []string{}
-	pflag.VisitAll(func(fl *pflag.Flag) {
+	fs.VisitAll(func(fl *pflag.Flag) {
 		// Don't log hidden flags
 		if fl.Hidden {
 			return
@@ -1272,6 +1413,21 @@ func logSafeFlags(v int) []string {
 			tmp := *orig // make a copy
 			tmp.value = sl
 			val = tmp.String()
+		}
+		// Handle --git-config and --git-config-add
+		if arg == "git-config" {
+			val = redactGitConfigsFlag(val)
+		}
+		if arg == "git-config-add" {
+			if vals, err := fs.GetStringArray(arg); err != nil {
+				val = redactedString
+			} else {
+				redacted := make([]string, 0, len(vals))
+				for _, s := range vals {
+					redacted = append(redacted, redactGitConfigsFlag(s))
+				}
+				val = "[" + strings.Join(redacted, ",") + "]"
+			}
 		}
 
 		ret = append(ret, "--"+arg+"="+val)
@@ -2321,12 +2477,15 @@ func (git *repoSync) SetupDefaultGitConfigs(ctx context.Context) error {
 func (git *repoSync) SetupExtraGitConfigs(ctx context.Context, configsFlag string, flagName string) error {
 	configs, err := parseGitConfigs(configsFlag)
 	if err != nil {
-		return fmt.Errorf("can't parse %s flag: %w", flagName, err)
+		return fmt.Errorf("can't parse %s flag (details withheld, may contain secrets)", flagName)
 	}
-	git.log.V(1).Info("setting additional git configs", "configs", configs)
+	git.log.V(1).Info("setting additional git configs", "configs", redactGitConfigs(configs))
 	for _, kv := range configs {
-		if _, _, err := git.Run(ctx, "", "config", "--global", kv.key, kv.val); err != nil {
-			return fmt.Errorf("error configuring additional git configs %q %q: %w", kv.key, kv.val, err)
+		logKey, logVal := redactGitConfigKey(kv.key), redactGitConfigValue(kv.key, kv.val)
+		args := []string{"config", "--global", kv.key, kv.val}
+		logArgs := []string{"config", "--global", logKey, logVal}
+		if _, _, err := git.run.WithCallDepth(1).RunRedacted(ctx, "", nil, git.cmd, args, logArgs); err != nil {
+			return fmt.Errorf("error configuring additional git configs %q %q: %w", logKey, logVal, err)
 		}
 	}
 
